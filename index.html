@@ -33,10 +33,13 @@
     }
   </script>
   
+  <!-- Sample Lessons Data (Loaded Early in Head for Instant Access) -->
+  <script src="sample_data.js"></script>
+  
   <!-- D3.js and Markmap for Interactive Mindmap -->
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
-  <script src="https://cdn.jsdelivr.net/npm/markmap-view@0.15.4"></script>
-  <script src="https://cdn.jsdelivr.net/npm/markmap-lib@0.15.4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/markmap-lib/dist/browser/index.iife.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/markmap-view"></script>
   
   <!-- Canvas Confetti for Quiz Celebrations -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -47,7 +50,8 @@
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
 
   <script>
-    tailwind.config = {
+    window.tailwind = window.tailwind || {};
+    window.tailwind.config = {
       theme: {
         extend: {
           colors: {
@@ -61,13 +65,19 @@
           }
         }
       }
+    };
+  </script>
+  <script>
+    if ('scrollRestoration' in history) {
+      history.scrollRestoration = 'manual';
     }
+    window.scrollTo(0, 0);
   </script>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased">
 
   <!-- ================= TOP NAVIGATION ================= -->
-  <header class="bg-white/95 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200 shadow-xs no-print w-full max-w-full overflow-hidden">
+  <header class="bg-white/95 backdrop-blur-md sticky top-0 z-50 border-b border-slate-200 shadow-sm no-print w-full max-w-full">
     <div class="max-w-[1440px] w-full mx-auto px-3 sm:px-4 lg:px-6 py-2 lg:py-0 lg:h-16 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2 overflow-hidden">
       
       <!-- Top Row on Mobile & Tablet (< lg): Logo on left, QR & Kho Key on right -->
@@ -87,6 +97,10 @@
 
         <!-- Action Buttons for Mobile & Tablet (< lg) -->
         <div class="flex items-center gap-1.5 lg:hidden shrink-0">
+          <button id="btn-install-pwa-mobile" class="hidden px-2 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Cài ứng dụng SmartEdu lên màn hình chính điện thoại">
+            <i class="fa-solid fa-mobile-screen-button text-indigo-600 text-xs"></i>
+            <span class="text-[11px]">Cài App</span>
+          </button>
           <button id="btn-share-qr-mobile" class="px-2 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg flex items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Mã QR chia sẻ & quét trải nghiệm trên điện thoại">
             <i class="fa-solid fa-qrcode text-indigo-600 text-xs"></i>
             <span class="text-[11px]"><span class="hidden sm:inline">Mã </span>QR</span>
@@ -126,6 +140,12 @@
             <span>Mẫu KHTN 7</span>
           </button>
         </div>
+
+        <!-- PWA Install Button (Mobile & Desktop) -->
+        <button id="btn-install-pwa" class="hidden px-2 sm:px-2.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg flex items-center gap-1 transition-all shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Cài đặt SmartEdu lên màn hình chính điện thoại hoặc máy tính">
+          <i class="fa-solid fa-mobile-screen-button text-indigo-600 text-xs"></i>
+          <span>Cài ứng dụng</span>
+        </button>
 
         <!-- Desktop-only Share QR Code Button (>= lg) -->
         <button id="btn-share-qr" class="hidden lg:flex px-2.5 sm:px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg items-center gap-1.5 transition-all shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Mã QR chia sẻ & quét trải nghiệm trên điện thoại">
@@ -252,6 +272,12 @@
             <span>Xem văn bản</span>
           </button>
 
+          <!-- Listen to Document Text Directly -->
+          <button id="btn-read-doc" class="px-2.5 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-all flex items-center gap-1 active:scale-95 cursor-pointer" title="Nghe đọc toàn bộ nội dung tài liệu này">
+            <i class="fa-solid fa-volume-high text-xs"></i>
+            <span>Nghe đọc</span>
+          </button>
+
           <!-- Clear file -->
           <button id="btn-clear-doc" class="px-2 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 rounded-lg transition-all" title="Xóa tài liệu">
             <i class="fa-solid fa-trash-can text-xs"></i>
@@ -261,7 +287,7 @@
     </section>
 
     <!-- ================= 4 MAIN TABS NAVIGATION ================= -->
-    <nav class="flex items-center border-b border-slate-200 space-x-1 sm:space-x-3 tab-buttons-container overflow-x-auto pb-1 no-print">
+    <nav class="sticky top-12 lg:top-16 z-30 bg-slate-50/95 backdrop-blur-md pt-2 pb-1.5 flex items-center border-b border-slate-200 space-x-1 sm:space-x-3 tab-buttons-container overflow-x-auto no-print">
       
       <!-- Tab 1: Sơ đồ tư duy -->
       <button class="tab-btn active px-4 py-2.5 text-xs sm:text-sm font-bold rounded-t-xl transition-all border-b-2 flex items-center gap-2 whitespace-nowrap text-indigo-600 border-indigo-600 bg-white shadow-xs" data-tab="tab-mindmap">
@@ -297,7 +323,7 @@
         <!-- Mindmap Control Toolbar -->
         <div class="bg-white p-2.5 sm:p-3.5 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 no-print">
           <div class="flex items-center justify-between sm:justify-start gap-2">
-            <button id="generate-mindmap-btn" class="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 shadow-sm transition-all">
+            <button id="generate-mindmap-btn" class="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 shadow-sm transition-all whitespace-nowrap">
               <i class="fa-solid fa-wand-magic-sparkles"></i>
               <span>Tạo / Làm mới Sơ đồ AI</span>
             </button>
@@ -323,15 +349,23 @@
             </div>
 
             <div class="flex items-center gap-1.5 flex-1 sm:flex-initial justify-end">
-              <button id="btn-fullscreen-mindmap" class="px-2.5 sm:px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all" title="Phóng to toàn màn hình (PC & Điện thoại)">
+              <button id="btn-save-mindmap" class="px-2.5 sm:px-3 py-1.5 text-xs bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95" title="Lưu sơ đồ này vào Thư viện cá nhân để xem lại bất cứ lúc nào">
+                <i class="fa-solid fa-bookmark"></i>
+                <span>Lưu sơ đồ</span>
+              </button>
+              <button id="btn-open-mindmap-library" class="px-2.5 sm:px-3 py-1.5 text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95" title="Mở thư viện sơ đồ tư duy đã lưu">
+                <i class="fa-solid fa-folder-open text-amber-600"></i>
+                <span>Thư viện (<span id="saved-mindmaps-count">0</span>)</span>
+              </button>
+              <button id="btn-fullscreen-mindmap" class="px-2.5 sm:px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95" title="Phóng to toàn màn hình (PC & Điện thoại)">
                 <i class="fa-solid fa-expand"></i>
                 <span class="hidden sm:inline">Toàn màn hình</span>
               </button>
-              <button id="btn-download-png" class="flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all" title="Xuất file ảnh PNG chất lượng cao (300 DPI Siêu Nét)">
+              <button id="btn-download-png" class="flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95" title="Xuất file ảnh PNG chất lượng cao (300 DPI Siêu Nét)">
                 <i class="fa-solid fa-file-image"></i>
                 <span>Ảnh PNG HD</span>
               </button>
-              <button id="btn-download-svg" class="px-2.5 py-1.5 text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg font-medium flex items-center justify-center gap-1" title="Tải ảnh vector SVG">
+              <button id="btn-download-svg" class="px-2.5 py-1.5 text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg font-medium flex items-center justify-center gap-1 cursor-pointer" title="Tải ảnh vector SVG">
                 <i class="fa-solid fa-download"></i>
                 <span class="hidden sm:inline">SVG</span>
               </button>
@@ -361,17 +395,17 @@
               </button>
             </div>
 
-            <div id="mindmap-empty-state" class="absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-6 text-center bg-white/95 z-10">
+            <div id="mindmap-empty-state" class="absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-6 text-center bg-white/95 z-10 hidden">
               <div class="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-3xl mb-3 shadow-inner">
                 <i class="fa-solid fa-sitemap"></i>
               </div>
               <h3 class="text-base font-bold text-slate-800">Chưa tạo sơ đồ tư duy</h3>
               <p class="text-xs text-slate-500 max-w-md mt-1">Hãy chọn một bài mẫu cấp 2 dưới đây hoặc tải tài liệu của bạn lên để xem sơ đồ tư duy tương tác:</p>
               <div class="flex flex-wrap items-center justify-center gap-2 mt-3">
-                <button onclick="window.loadSpecificLessonById && window.loadSpecificLessonById('toan9')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer">
+                <button onclick="window.loadSpecificLessonById && window.loadSpecificLessonById('toan9')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer active:scale-95">
                   <i class="fa-solid fa-square-root-variable mr-1"></i> Xem Mẫu Toán 9
                 </button>
-                <button onclick="window.loadSpecificLessonById && window.loadSpecificLessonById('khtn9')" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer">
+                <button onclick="window.loadSpecificLessonById && window.loadSpecificLessonById('khtn9')" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer active:scale-95">
                   <i class="fa-solid fa-bolt mr-1"></i> Xem Mẫu KHTN 9
                 </button>
               </div>
@@ -756,6 +790,10 @@
               <i class="fa-solid fa-volume-xmark text-rose-600"></i>
               <span>Tắt âm thanh</span>
             </button>
+            <button id="btn-export-beams-pdf" class="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer" title="Tải toàn bộ bộ thẻ học tập dưới dạng file PDF hoặc in giấy cắt rời ôn thi">
+              <i class="fa-solid fa-file-pdf text-rose-600"></i>
+              <span>Tải PDF / In thẻ</span>
+            </button>
           </div>
 
           <!-- Progress & Mastery Stats -->
@@ -791,6 +829,26 @@
         <!-- CARDS CONTAINER (GRID VIEW) -->
         <div id="beam-cards-grid" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           <!-- Dynamically Populated Cards -->
+        </div>
+
+        <!-- PRINTABLE FLASHCARDS CONTAINER (BẢN IN PDF / GIẤY ÔN THI TRỰC TIẾP TRÊN TRANG, KHÔNG MỞ TAB MỚI) -->
+        <div id="printable-beams-container" class="hidden bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+          <!-- Print Header -->
+          <div class="border-b-2 border-indigo-600 pb-3 mb-4 flex justify-between items-start">
+            <div>
+              <p class="text-[10px] uppercase font-extrabold text-indigo-600 tracking-wider">SMARTEDU THCS • BỘ THẺ HỌC TẬP THÔNG MINH (FLASHCARDS)</p>
+              <h2 id="print-beams-title" class="text-base font-bold text-slate-900 mt-0.5">Thẻ Học Tập Cốt Lõi</h2>
+              <p class="text-[11px] text-slate-500 mt-0.5">Tối ưu cho in giấy A4 & cắt rời thành thẻ bỏ túi • Hỗ trợ học tập lặp lại ngắt quãng</p>
+            </div>
+            <div class="text-[11px] text-right border border-slate-200 p-2 rounded-lg min-w-[170px] bg-slate-50">
+              <p class="font-bold text-slate-800">Trần Lê Long Phụng</p>
+              <p class="text-slate-500 mt-0.5">Lớp 9A13 • THCS Long Cang</p>
+            </div>
+          </div>
+          <!-- Cards Grid for Printing -->
+          <div id="printable-beams-grid" class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            <!-- Populated via JS -->
+          </div>
         </div>
 
         <!-- FOCUS MODE CAROUSEL VIEW (FULLSCREEN MODAL / CAROUSEL) -->
@@ -907,8 +965,8 @@
           <p class="text-[11px] text-slate-500">Được tối ưu cho trích xuất hình ảnh, sơ đồ tư duy & tạo đề</p>
         </div>
         <select id="select-gemini-model" class="bg-white border border-slate-300 rounded-lg p-2 font-semibold text-slate-800 text-xs shadow-xs">
-          <option value="gemini-flash-lite-latest" selected>🔥 Gemini Flash Lite (Siêu Tốc 1-2s, Hoạt Động 100% - Khuyên Dùng)</option>
-          <option value="gemini-3.5-flash-lite">💎 Gemini 3.5 Flash Lite (Dự Phòng Ổn Định 100%)</option>
+          <option value="gemini-3.5-flash-lite" selected>⚡ Gemini 3.5 Flash Lite (Tạo Đề Nhanh Nhất, Chuẩn Xác - Khuyên Dùng)</option>
+          <option value="gemini-flash-lite-latest">🔥 Gemini Flash Lite (Dự Phòng Ổn Định 100%)</option>
         </select>
       </div>
 
@@ -1095,6 +1153,46 @@
     </div>
   </div>
 
+  <!-- ================= MINDMAP LIBRARY MODAL ================= -->
+  <div id="modal-mindmap-library" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-2xl p-4 sm:p-6 max-w-xl w-full max-h-[90vh] flex flex-col gap-4 shadow-2xl border border-slate-200">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center text-base font-bold shadow-xs">
+            <i class="fa-solid fa-folder-open"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-sm sm:text-base text-slate-900">Thư Viện Sơ Đồ Tư Duy Cá Nhân</h3>
+            <p class="text-[11px] sm:text-xs text-slate-500">Lưu trữ trên thiết bị • Xem lại & ôn thi mọi lúc mọi nơi</p>
+          </div>
+        </div>
+        <button id="btn-close-mindmap-library" class="text-slate-400 hover:text-slate-600 p-2 rounded-lg text-sm cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Mindmap List Container -->
+      <div class="flex-1 overflow-y-auto border border-slate-200 rounded-xl max-h-72 sm:max-h-96 divide-y divide-slate-100">
+        <div id="mindmap-library-list" class="divide-y divide-slate-100">
+          <!-- Dynamic mindmap cards inserted by JS -->
+        </div>
+        <div id="mindmap-library-empty" class="p-8 text-center text-slate-400 text-xs">
+          <i class="fa-solid fa-diagram-project text-3xl mb-2 text-slate-300"></i>
+          <p class="font-semibold text-slate-600">Chưa có sơ đồ nào được lưu trong thư viện</p>
+          <p class="text-[11px] text-slate-400 mt-1">Khi xem hoặc tạo xong sơ đồ tư duy, hãy bấm nút <strong>"Lưu sơ đồ"</strong> để lưu vào đây nhé!</p>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+        <span class="text-slate-500 text-[11px]" id="mindmap-library-status">Đã lưu 0 sơ đồ</span>
+        <button id="btn-done-mindmap-library" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-semibold transition-all shadow-xs cursor-pointer">
+          Đóng
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ================= LOADING OVERLAY ================= -->
   <div id="loading-overlay" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl border border-slate-200 flex flex-col items-center gap-3">
@@ -1106,6 +1204,58 @@
       </div>
       <button id="btn-cancel-loading" type="button" class="mt-1 px-4 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer">
         <i class="fa-solid fa-xmark"></i> Hủy bỏ thao tác
+      </button>
+    </div>
+  </div>
+
+  <!-- Floating Mobile PWA Installation Banner -->
+  <div id="pwa-install-banner" class="hidden fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:w-96 z-50 bg-indigo-900 text-white p-3.5 rounded-2xl shadow-2xl border border-indigo-700 flex items-center justify-between gap-3 no-print">
+    <div class="flex items-center gap-2.5 min-w-0">
+      <div class="w-10 h-10 rounded-xl bg-white text-indigo-600 flex items-center justify-center text-xl shrink-0 shadow-xs">
+        <i class="fa-solid fa-graduation-cap"></i>
+      </div>
+      <div class="min-w-0">
+        <h4 class="text-xs font-bold text-white truncate">Cài đặt SmartEdu THCS</h4>
+        <p class="text-[11px] text-indigo-200 truncate">Thêm vào màn hình chính để mở nhanh</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-1.5 shrink-0">
+      <button id="btn-pwa-banner-install" class="px-3 py-1.5 bg-white text-indigo-900 hover:bg-indigo-50 rounded-lg text-xs font-bold shadow-xs active:scale-95 cursor-pointer">
+        Cài đặt
+      </button>
+      <button id="btn-pwa-banner-dismiss" class="p-1.5 text-indigo-300 hover:text-white rounded-lg cursor-pointer" title="Đóng">
+        <i class="fa-solid fa-xmark text-xs"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- iOS / Safari PWA Install Instruction Modal -->
+  <div id="ios-install-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-4 no-print">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 space-y-3.5 shadow-2xl border border-slate-200 text-slate-800">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+        <h3 class="text-sm font-bold text-indigo-950 flex items-center gap-2">
+          <i class="fa-brands fa-apple text-lg"></i> Cài đặt lên màn hình chính iOS
+        </h3>
+        <button id="btn-close-ios-modal" class="p-1 text-slate-400 hover:text-slate-700">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="space-y-2.5 text-xs leading-relaxed text-slate-600">
+        <div class="flex items-start gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-100">
+          <span class="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-[10px] shrink-0">1</span>
+          <p>Bấm biểu tượng <strong>Chia sẻ (Share) <i class="fa-solid fa-arrow-up-from-bracket text-indigo-600"></i></strong> ở thanh công cụ Safari.</p>
+        </div>
+        <div class="flex items-start gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-100">
+          <span class="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-[10px] shrink-0">2</span>
+          <p>Cuộn xuống và chọn <strong>"Thêm vào MH chính" (Add to Home Screen <i class="fa-regular fa-square-plus text-indigo-600"></i>)</strong>.</p>
+        </div>
+        <div class="flex items-start gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-100">
+          <span class="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-[10px] shrink-0">3</span>
+          <p>Bấm <strong>"Thêm" (Add)</strong> ở góc trên bên phải để hoàn tất!</p>
+        </div>
+      </div>
+      <button onclick="document.getElementById('ios-install-modal').classList.add('hidden')" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs">
+        Đã hiểu
       </button>
     </div>
   </div>
@@ -1132,8 +1282,7 @@
     </div>
   </footer>
 
-  <!-- Sample Data & Main App Scripts -->
-  <script src="sample_data.js"></script>
+  <!-- Main App Script -->
   <script src="app.js"></script>
 </body>
 </html>

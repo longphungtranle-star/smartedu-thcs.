@@ -16,6 +16,43 @@ try {
         if ([string]::IsNullOrWhiteSpace($urlPath)) { 
             $urlPath = "index.html" 
         }
+
+        if ($urlPath -eq "api/key") {
+            $keyJson = [System.Text.Encoding]::UTF8.GetBytes('{"key":""}')
+            $response.ContentType = "application/json; charset=utf-8"
+            $response.ContentLength64 = $keyJson.Length
+            $response.AddHeader("Cache-Control", "no-cache")
+            $response.OutputStream.Write($keyJson, 0, $keyJson.Length)
+            $response.Close()
+            continue
+        }
+
+        if ($urlPath.StartsWith("api/tts")) {
+            $text = $request.QueryString["text"]
+            $lang = $request.QueryString["lang"]
+            if ([string]::IsNullOrWhiteSpace($lang)) { $lang = "vi" }
+            if (![string]::IsNullOrWhiteSpace($text)) {
+                $clean = $text.Substring(0, [System.Math]::Min(200, $text.Length))
+                $googleUrl = "https://translate.google.com/translate_tts?ie=UTF-8&tl=$lang&client=tw-ob&q=" + [System.Uri]::EscapeDataString($clean)
+                try {
+                    $wc = New-Object System.Net.WebClient
+                    $wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                    $audioData = $wc.DownloadData($googleUrl)
+                    $response.ContentType = "audio/mpeg"
+                    $response.ContentLength64 = $audioData.Length
+                    $response.AddHeader("Access-Control-Allow-Origin", "*")
+                    $response.AddHeader("Cache-Control", "public, max-age=86400")
+                    $response.OutputStream.Write($audioData, 0, $audioData.Length)
+                } catch {
+                    $response.StatusCode = 500
+                }
+            } else {
+                $response.StatusCode = 400
+            }
+            $response.Close()
+            continue
+        }
+
         $filePath = Join-Path $baseDir $urlPath
 
         if (Test-Path $filePath -PathType Leaf) {
