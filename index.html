@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartEdu THCS - Nền Tảng Học Tập & Khảo Thí Thông Minh Dành Cho Cấp 2</title>
+  
+  <!-- PWA & Mobile Capabilities -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#4f46e5">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Font Awesome Icons CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
+  
+  <!-- Mammoth.js for Word (.docx) Parsing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  
+  <!-- PDF.js for PDF Parsing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
+  
+  <!-- D3.js and Markmap for Interactive Mindmap -->
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <script src="https://cdn.jsdelivr.net/npm/markmap-view@0.15.4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/markmap-lib@0.15.4"></script>
+  
+  <!-- Canvas Confetti for Quiz Celebrations -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+  <!-- KaTeX for Beautiful Mathematical & Scientific Formulas Rendering -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased">
+
+  <!-- ================= TOP NAVIGATION ================= -->
+  <header class="bg-white/95 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200 shadow-xs no-print w-full max-w-full overflow-hidden">
+    <div class="max-w-[1440px] w-full mx-auto px-3 sm:px-4 lg:px-6 py-2 lg:py-0 lg:h-16 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2 overflow-hidden">
+      
+      <!-- Top Row on Mobile & Tablet (< lg): Logo on left, QR & Kho Key on right -->
+      <div class="flex items-center justify-between gap-2 w-full lg:w-auto shrink-0 min-w-0">
+        <div class="flex items-center gap-2 sm:gap-2.5 min-w-0">
+          <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center text-white shadow-md shadow-indigo-200 shrink-0">
+            <i class="fa-solid fa-graduation-cap text-sm sm:text-lg"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5 sm:gap-2">
+              <h1 class="font-extrabold text-sm sm:text-lg lg:text-xl tracking-tight text-slate-900 whitespace-nowrap">SmartEdu <span class="text-indigo-600">THCS</span></h1>
+              <span class="hidden sm:inline-flex text-[9px] sm:text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-full shrink-0">Cấp 2</span>
+            </div>
+            <p class="text-[10px] sm:text-xs text-slate-500 hidden xl:block truncate">Sơ đồ tư duy • Tóm tắt • Đề thi • Thẻ học tập</p>
+          </div>
+        </div>
+
+        <!-- Action Buttons for Mobile & Tablet (< lg) -->
+        <div class="flex items-center gap-1.5 lg:hidden shrink-0">
+          <button id="btn-share-qr-mobile" class="px-2 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg flex items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Mã QR chia sẻ & quét trải nghiệm trên điện thoại">
+            <i class="fa-solid fa-qrcode text-indigo-600 text-xs"></i>
+            <span class="text-[11px]"><span class="hidden sm:inline">Mã </span>QR</span>
+          </button>
+          <button id="open-key-modal-btn" onclick="window.openKeyModal && window.openKeyModal()" class="px-2 py-1 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg flex items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Mở quản lý kho API Key">
+            <span class="relative flex h-2 w-2">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span class="text-[11px] font-bold text-slate-800"><span class="hidden sm:inline">Kho </span>Key</span>
+            <i class="fa-solid fa-rotate text-slate-400 text-[9px]"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Sample Lessons Row (and Desktop Actions) -->
+      <div class="flex items-center justify-start lg:justify-end gap-1.5 sm:gap-2 w-full lg:w-auto overflow-x-auto no-scrollbar py-0.5 touch-scroll-x">
+        <!-- Sample Lessons Buttons for Cấp 2 -->
+        <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          <button id="load-sample-toan9-btn" onclick="window.loadSpecificLessonById && window.loadSpecificLessonById('toan9')" class="shrink-0 px-2 sm:px-2.5 py-1.5 text-xs font-bold text-indigo-900 bg-indigo-100 hover:bg-indigo-200 border border-indigo-300 rounded-lg flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap" title="Nạp bài mẫu Toán 9: Hệ hai phương trình bậc nhất hai ẩn">
+            <i class="fa-solid fa-square-root-variable text-indigo-700 text-xs"></i>
+            <span>Mẫu Toán 9</span>
+          </button>
+
+          <button id="load-sample-khtn9-btn" onclick="window.loadSpecificLessonById && window.loadSpecificLessonById('khtn9')" class="shrink-0 px-2 sm:px-2.5 py-1.5 text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap" title="Nạp bài mẫu KHTN 9: Định luật Ôm & Điện năng">
+            <i class="fa-solid fa-bolt text-amber-600 text-xs"></i>
+            <span>Mẫu KHTN 9</span>
+          </button>
+          
+          <button id="load-sample-khtn8-btn" onclick="window.loadSpecificLessonById && window.loadSpecificLessonById('khtn8')" class="shrink-0 px-2 sm:px-2.5 py-1.5 text-xs font-semibold text-purple-800 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap" title="Nạp bài học mẫu cấp 2: KHTN 8 - Phản ứng Hóa học">
+            <i class="fa-solid fa-flask-vial text-purple-600 text-xs"></i>
+            <span>Mẫu KHTN 8</span>
+          </button>
+
+          <button id="load-sample-khtn7-btn" onclick="window.loadSpecificLessonById && window.loadSpecificLessonById('khtn7')" class="shrink-0 px-2 sm:px-2.5 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap" title="Nạp bài học mẫu cấp 2: KHTN 7 - Quang hợp ở thực vật">
+            <i class="fa-solid fa-seedling text-emerald-600 text-xs"></i>
+            <span>Mẫu KHTN 7</span>
+          </button>
+        </div>
+
+        <!-- Desktop-only Share QR Code Button (>= lg) -->
+        <button id="btn-share-qr" class="hidden lg:flex px-2.5 sm:px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg items-center gap-1.5 transition-all shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Mã QR chia sẻ & quét trải nghiệm trên điện thoại">
+          <i class="fa-solid fa-qrcode text-indigo-600 text-xs sm:text-sm"></i>
+          <span>Mã QR</span>
+        </button>
+
+        <!-- Desktop-only API Key Rotation Button (>= lg) -->
+        <button id="open-key-modal-btn-desktop" onclick="window.openKeyModal && window.openKeyModal()" class="hidden lg:flex px-2.5 sm:px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg items-center gap-1.5 sm:gap-2 transition-all shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Mở quản lý kho API Key">
+          <span class="relative flex h-2 w-2 sm:h-2.5 sm:w-2.5">
+            <span id="key-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span id="key-dot" class="relative inline-flex rounded-full h-2 w-2 sm:h-2.5 sm:w-2.5 bg-emerald-500"></span>
+          </span>
+          <span id="key-summary-text" class="font-semibold text-slate-800">Kho Key: 0 Khả dụng</span>
+          <i class="fa-solid fa-rotate text-slate-400 text-xs"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= MAIN CONTAINER ================= -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full flex flex-col gap-6">
+
+    <!-- UPLOAD & CONTENT INPUT SECTION -->
+    <section id="upload-section" class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm transition-all no-print">
+      <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+        <div>
+          <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-cloud-arrow-up text-indigo-600"></i>
+            Tải lên tài liệu học tập
+          </h2>
+          <p class="text-xs text-slate-500 mt-0.5">
+            Hỗ trợ file <strong>Word (.docx)</strong>, <strong>PDF</strong>, hoặc <strong>Ảnh chụp bài học</strong> (từ máy tính hoặc camera điện thoại) & dán trực tiếp.
+          </p>
+        </div>
+
+        <!-- Quick Switch for Input Mode -->
+        <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl self-start md:self-auto text-xs font-medium">
+          <button id="btn-mode-file" class="px-3 py-1.5 rounded-lg bg-white text-indigo-700 shadow-xs font-semibold flex items-center gap-1.5 transition-all">
+            <i class="fa-solid fa-file-lines"></i>
+            Tải File / Ảnh
+          </button>
+          <button id="btn-mode-text" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition-all">
+            <i class="fa-solid fa-pen-to-square"></i>
+            Nhập Văn Bản
+          </button>
+        </div>
+      </div>
+
+      <!-- Mode 1: File & Image Upload Area -->
+      <div id="drop-zone-container" class="mt-4">
+        <div id="drop-zone" class="border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/30 hover:bg-indigo-50/60 rounded-xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-3">
+          <input type="file" id="file-input" class="hidden" accept=".docx,.doc,.pdf,image/*">
+          
+          <div class="w-14 h-14 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-2xl shadow-inner">
+            <i class="fa-solid fa-file-circle-plus"></i>
+          </div>
+
+          <div>
+            <p class="text-xs sm:text-sm font-semibold text-slate-800">
+              Kéo thả file vào đây hoặc <span class="text-indigo-600 hover:underline">chọn từ thiết bị</span>
+            </p>
+            <p class="text-xs text-slate-500 mt-1 flex flex-wrap items-center justify-center gap-1.5">
+              <span class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200 text-[11px]"><i class="fa-solid fa-file-word"></i> Word</span>
+              <span class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-50 text-red-700 rounded border border-red-200 text-[11px]"><i class="fa-solid fa-file-pdf"></i> PDF</span>
+              <span class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded border border-emerald-200 text-[11px]"><i class="fa-solid fa-camera"></i> Ảnh / Camera</span>
+            </p>
+          </div>
+
+          <!-- Mobile Camera Quick Action -->
+          <div class="pt-2 flex items-center gap-2">
+            <label for="camera-input" class="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95">
+              <i class="fa-solid fa-camera text-indigo-600"></i>
+              <span>Chụp ảnh bài học ngay</span>
+            </label>
+            <input type="file" id="camera-input" class="hidden" accept="image/*" capture="environment">
+          </div>
+        </div>
+      </div>
+
+      <!-- Mode 2: Direct Text Area (Hidden by default) -->
+      <div id="text-input-container" class="mt-4 hidden">
+        <label for="raw-text-input" class="block text-xs font-medium text-slate-700 mb-1">Dán nội dung bài học hoặc ghi chú bài giảng vào đây:</label>
+        <textarea id="raw-text-input" rows="5" class="w-full text-sm p-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50/50" placeholder="Ví dụ: Dán nội dung chương sách, văn bản ôn tập, tài liệu ôn thi..."></textarea>
+        <div class="flex justify-end mt-2">
+          <button id="apply-text-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
+            <i class="fa-solid fa-check"></i>
+            Áp dụng nội dung này
+          </button>
+        </div>
+      </div>
+
+      <!-- ACTIVE DOCUMENT PREVIEW BANNER -->
+      <div id="doc-preview-card" class="mt-4 hidden p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 min-w-0">
+        <div class="flex items-center gap-2.5 min-w-0 flex-1">
+          <div id="doc-icon-badge" class="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-base font-bold shrink-0">
+            <i class="fa-solid fa-file-lines"></i>
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1.5">
+              <h3 id="doc-title" class="text-xs sm:text-sm font-bold text-slate-900 truncate">Chưa tải tài liệu</h3>
+              <span id="doc-badge-type" class="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-200 text-indigo-800 shrink-0">TEXT</span>
+            </div>
+            <p id="doc-stats" class="text-[11px] text-slate-500 mt-0.5 truncate">0 từ • Sẵn sàng tạo Sơ đồ tư duy, Đề thi, Tóm tắt</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1.5 self-end sm:self-auto shrink-0 flex-wrap">
+          <!-- Enter / Scroll to Lesson -->
+          <button id="btn-enter-lesson" class="px-2.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-all flex items-center gap-1 shadow-xs active:scale-95 cursor-pointer" title="Cuộn xuống xem nội dung bài học">
+            <i class="fa-solid fa-graduation-cap text-xs"></i>
+            <span>Vào học</span>
+          </button>
+
+          <!-- Image OCR Trigger if image -->
+          <button id="btn-ocr-image" class="hidden px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 rounded-lg transition-all flex items-center gap-1">
+            <i class="fa-solid fa-eye text-xs"></i>
+            Nhận diện OCR
+          </button>
+          
+          <!-- View raw text modal trigger -->
+          <button id="btn-view-extracted" class="px-2 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg transition-all flex items-center gap-1">
+            <i class="fa-solid fa-align-left text-xs"></i>
+            <span>Xem văn bản</span>
+          </button>
+
+          <!-- Clear file -->
+          <button id="btn-clear-doc" class="px-2 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 rounded-lg transition-all" title="Xóa tài liệu">
+            <i class="fa-solid fa-trash-can text-xs"></i>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 4 MAIN TABS NAVIGATION ================= -->
+    <nav class="flex items-center border-b border-slate-200 space-x-1 sm:space-x-3 tab-buttons-container overflow-x-auto pb-1 no-print">
+      
+      <!-- Tab 1: Sơ đồ tư duy -->
+      <button class="tab-btn active px-4 py-2.5 text-xs sm:text-sm font-bold rounded-t-xl transition-all border-b-2 flex items-center gap-2 whitespace-nowrap text-indigo-600 border-indigo-600 bg-white shadow-xs" data-tab="tab-mindmap">
+        <i class="fa-solid fa-diagram-project text-base"></i>
+        <span>Sơ đồ tư duy (Mindmap)</span>
+      </button>
+
+      <!-- Tab 2: Tóm tắt & Gợi ý học tập -->
+      <button class="tab-btn px-4 py-2.5 text-xs sm:text-sm font-bold rounded-t-xl transition-all border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100 flex items-center gap-2 whitespace-nowrap" data-tab="tab-summary">
+        <i class="fa-solid fa-list-check text-base"></i>
+        <span>Tóm tắt & Gợi ý học tập</span>
+      </button>
+
+      <!-- Tab 3: Tạo đề thi 3 mức độ -->
+      <button class="tab-btn px-4 py-2.5 text-xs sm:text-sm font-bold rounded-t-xl transition-all border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100 flex items-center gap-2 whitespace-nowrap" data-tab="tab-quiz">
+        <i class="fa-solid fa-file-circle-question text-base"></i>
+        <span>Tạo đề thi (Dễ - TB - Khó)</span>
+      </button>
+
+      <!-- Tab 4: Thẻ học tập -->
+      <button class="tab-btn px-4 py-2.5 text-xs sm:text-sm font-bold rounded-t-xl transition-all border-b-2 border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100 flex items-center gap-2 whitespace-nowrap" data-tab="tab-beam">
+        <i class="fa-solid fa-layer-group text-amber-500 text-base"></i>
+        <span>Thẻ học tập (Flashcards)</span>
+      </button>
+
+    </nav>
+
+    <!-- ================= TAB CONTENT PANELS ================= -->
+    <div class="flex-1 w-full flex flex-col">
+
+      <!-- ================= TAB 1: SƠ ĐỒ TƯ DUY (MINDMAP) ================= -->
+      <section id="tab-mindmap" class="tab-pane flex-1 flex flex-col gap-4">
+        <!-- Mindmap Control Toolbar -->
+        <div class="bg-white p-2.5 sm:p-3.5 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 no-print">
+          <div class="flex items-center justify-between sm:justify-start gap-2">
+            <button id="generate-mindmap-btn" class="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-2 shadow-sm transition-all">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+              <span>Tạo / Làm mới Sơ đồ AI</span>
+            </button>
+            <span class="text-xs text-slate-400 hidden md:inline">|</span>
+            <span class="text-xs text-slate-500 hidden md:inline">Chạm vào nút để đóng/mở nhánh</span>
+          </div>
+
+          <div class="flex items-center justify-between sm:justify-end gap-1.5 flex-wrap">
+            <div class="flex items-center gap-1">
+              <button id="btn-zoom-in" class="p-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg" title="Phóng to">
+                <i class="fa-solid fa-magnifying-glass-plus"></i>
+              </button>
+              <button id="btn-zoom-out" class="p-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg" title="Thu nhỏ">
+                <i class="fa-solid fa-magnifying-glass-minus"></i>
+              </button>
+              <button id="btn-zoom-fit" class="p-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg" title="Khung hình vừa vặn">
+                <i class="fa-solid fa-arrows-to-eye"></i>
+              </button>
+              <button id="btn-toggle-editor" class="px-2 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium flex items-center gap-1" title="Chỉnh sửa mã Markdown">
+                <i class="fa-solid fa-code"></i>
+                <span class="hidden sm:inline">Mã</span>
+              </button>
+            </div>
+
+            <div class="flex items-center gap-1.5 flex-1 sm:flex-initial justify-end">
+              <button id="btn-fullscreen-mindmap" class="px-2.5 sm:px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all" title="Phóng to toàn màn hình (PC & Điện thoại)">
+                <i class="fa-solid fa-expand"></i>
+                <span class="hidden sm:inline">Toàn màn hình</span>
+              </button>
+              <button id="btn-download-png" class="flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all" title="Xuất file ảnh PNG chất lượng cao (300 DPI Siêu Nét)">
+                <i class="fa-solid fa-file-image"></i>
+                <span>Ảnh PNG HD</span>
+              </button>
+              <button id="btn-download-svg" class="px-2.5 py-1.5 text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg font-medium flex items-center justify-center gap-1" title="Tải ảnh vector SVG">
+                <i class="fa-solid fa-download"></i>
+                <span class="hidden sm:inline">SVG</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mindmap Display Area & Collapsible Markdown Editor -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 flex-1 min-h-[380px] sm:min-h-[560px]">
+          
+          <!-- Interactive SVG Canvas (Left / Full) -->
+          <div id="mindmap-wrapper" class="lg:col-span-12 bg-white rounded-2xl border border-slate-200 shadow-sm p-1 sm:p-2 flex flex-col relative overflow-hidden transition-all">
+            <!-- Floating control bar when Fullscreen is active -->
+            <div id="mindmap-fullscreen-bar" class="hidden absolute top-3 right-3 z-30 flex items-center gap-1.5 bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-200 shadow-lg">
+              <button id="btn-fs-fit" class="px-2 py-1 text-xs text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg font-medium flex items-center gap-1" title="Căn vừa vặn">
+                <i class="fa-solid fa-arrows-to-eye"></i> <span class="hidden sm:inline">Vừa vặn</span>
+              </button>
+              <button id="btn-fs-zoom-in" class="p-1.5 text-xs text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Phóng to">
+                <i class="fa-solid fa-magnifying-glass-plus"></i>
+              </button>
+              <button id="btn-fs-zoom-out" class="p-1.5 text-xs text-slate-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Thu nhỏ">
+                <i class="fa-solid fa-magnifying-glass-minus"></i>
+              </button>
+              <div class="h-4 w-px bg-slate-200"></div>
+              <button id="btn-exit-fullscreen" class="px-2.5 py-1 text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg flex items-center gap-1 transition-all" title="Thu nhỏ lại (hoặc nhấn ESC)">
+                <i class="fa-solid fa-compress"></i> <span>Thu nhỏ</span>
+              </button>
+            </div>
+
+            <div id="mindmap-empty-state" class="absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-6 text-center bg-white/95 z-10">
+              <div class="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-3xl mb-3 shadow-inner">
+                <i class="fa-solid fa-sitemap"></i>
+              </div>
+              <h3 class="text-base font-bold text-slate-800">Chưa tạo sơ đồ tư duy</h3>
+              <p class="text-xs text-slate-500 max-w-md mt-1">Hãy chọn một bài mẫu cấp 2 dưới đây hoặc tải tài liệu của bạn lên để xem sơ đồ tư duy tương tác:</p>
+              <div class="flex flex-wrap items-center justify-center gap-2 mt-3">
+                <button onclick="window.loadSpecificLessonById && window.loadSpecificLessonById('toan9')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer">
+                  <i class="fa-solid fa-square-root-variable mr-1"></i> Xem Mẫu Toán 9
+                </button>
+                <button onclick="window.loadSpecificLessonById && window.loadSpecificLessonById('khtn9')" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer">
+                  <i class="fa-solid fa-bolt mr-1"></i> Xem Mẫu KHTN 9
+                </button>
+              </div>
+            </div>
+            
+            <svg id="markmap-svg" class="w-full h-full min-h-[540px]"></svg>
+          </div>
+
+          <!-- Markdown Editor Sidebar (Hidden by default, toggled via button) -->
+          <div id="mindmap-editor-sidebar" class="hidden lg:col-span-4 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col gap-2">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h4 class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <i class="fa-brands fa-markdown text-indigo-600"></i>
+                Mã nguồn Sơ đồ (Markdown)
+              </h4>
+              <button id="apply-markdown-btn" class="px-2.5 py-1 bg-indigo-600 text-white rounded text-xs font-semibold hover:bg-indigo-700">
+                Cập nhật cây
+              </button>
+            </div>
+            <textarea id="markdown-input" class="flex-1 w-full text-xs font-mono p-3 border border-slate-200 rounded-lg resize-none bg-slate-50 focus:bg-white" placeholder="# Chủ đề chính&#10;## Nhánh cấp 1&#10;### Nhánh cấp 2&#10;- Chi tiết"></textarea>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ================= TAB 2: TÓM TẮT & GỢI Ý HỌC TẬP ================= -->
+      <section id="tab-summary" class="tab-pane hidden flex-1 flex flex-col gap-5">
+        
+        <!-- Summary Action Bar -->
+        <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3 no-print">
+          <div class="flex items-center gap-2">
+            <button id="generate-summary-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center gap-2 shadow-sm transition-all">
+              <i class="fa-solid fa-brain"></i>
+              <span>Tạo Tóm tắt & Gợi ý AI</span>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2 flex-wrap">
+            <button id="btn-voice-speed" class="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer" title="Bấm để đổi phong cách & tốc độ giọng đọc">
+              <i class="fa-solid fa-gauge-high text-amber-500"></i>
+              <span id="voice-speed-label">Hoạt bát (1.16x)</span>
+            </button>
+            <button id="btn-tts-summary" class="px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg flex items-center gap-1.5 shadow-xs" title="Đọc bài tóm tắt bằng giọng đọc chuẩn tiếng Việt">
+              <i class="fa-solid fa-volume-high text-indigo-600"></i>
+              <span>Nghe đọc tóm tắt</span>
+            </button>
+            <button id="btn-stop-tts-summary" class="hidden px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-300 rounded-lg flex items-center gap-1 shadow-xs">
+              <i class="fa-solid fa-stop"></i>
+              <span>Dừng</span>
+            </button>
+            <button id="btn-copy-summary" class="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg flex items-center gap-1.5 shadow-xs">
+              <i class="fa-regular fa-copy"></i>
+              Sao chép
+            </button>
+            <button id="btn-print-summary" class="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg flex items-center gap-1.5 shadow-xs">
+              <i class="fa-solid fa-print"></i>
+              In / Xuất PDF
+            </button>
+          </div>
+        </div>
+
+        <!-- Summary Display Content -->
+        <div id="summary-content-area" class="space-y-6">
+          
+          <div id="summary-empty-state" class="bg-white rounded-2xl border border-slate-200 p-12 text-center flex flex-col items-center justify-center">
+            <div class="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-3xl mb-3 shadow-inner">
+              <i class="fa-solid fa-book-open-reader"></i>
+            </div>
+            <h3 class="text-base font-bold text-slate-800">Chưa có tóm tắt bài học</h3>
+            <p class="text-xs text-slate-500 max-w-md mt-1">Bấm "Tạo Tóm tắt & Gợi ý AI" để phân tích nội dung, trích xuất điểm cốt lõi, từ khóa then chốt và chiến lược học nhanh (kỹ thuật Feynman, mẹo ghi nhớ).</p>
+          </div>
+
+          <!-- SECTION 1: CỐT LÕI BÀI HỌC (KEY TAKEAWAYS) -->
+          <div id="section-takeaways" class="hidden bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+            <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2 mb-3">
+              <span class="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center text-xs">
+                <i class="fa-solid fa-key"></i>
+              </span>
+              Điểm Cốt Lõi Cần Nắm Vững (Key Takeaways)
+            </h3>
+            <ul id="list-takeaways" class="space-y-2.5 text-sm text-slate-700">
+              <!-- Dynamically Populated -->
+            </ul>
+          </div>
+
+          <!-- SECTION 2: BẢNG KHÁI NIỆM & THUẬT NGỮ QUAN TRỌNG -->
+          <div id="section-terms" class="hidden bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+            <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2 mb-3">
+              <span class="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs">
+                <i class="fa-solid fa-spell-check"></i>
+              </span>
+              Bảng Thuật Ngữ & Khái Niệm Quan Trọng
+            </h3>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs sm:text-sm">
+                <thead>
+                  <tr class="bg-slate-50 text-slate-700 border-b border-slate-200">
+                    <th class="py-2.5 px-4 font-bold w-1/3">Thuật ngữ / Khái niệm</th>
+                    <th class="py-2.5 px-4 font-bold w-2/3">Định nghĩa & Ứng dụng</th>
+                  </tr>
+                </thead>
+                <tbody id="table-terms-body" class="divide-y divide-slate-100 text-slate-700">
+                  <!-- Dynamically Populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- SECTION 3: CHIẾN LƯỢC HỌC THÔNG MINH -->
+          <div id="section-strategies" class="hidden grid grid-cols-1 md:grid-cols-3 gap-4">
+            
+            <!-- Feynman Technique -->
+            <div class="bg-gradient-to-br from-indigo-50/70 to-white rounded-2xl border border-indigo-200/80 p-5 shadow-sm flex flex-col justify-between">
+              <div>
+                <div class="flex items-center gap-2 text-indigo-800 font-bold text-xs uppercase tracking-wider mb-2">
+                  <i class="fa-solid fa-lightbulb"></i> Kỹ thuật Feynman
+                </div>
+                <h4 class="text-sm font-bold text-slate-900 mb-1.5">Giải thích siêu đơn giản:</h4>
+                <p id="feynman-text" class="text-xs leading-relaxed text-slate-600">...</p>
+              </div>
+              <div class="mt-4 pt-3 border-t border-indigo-100 text-[11px] text-indigo-700 font-medium">
+                💡 Nói lại bài học theo cách đứa trẻ 10 tuổi cũng hiểu.
+              </div>
+            </div>
+
+            <!-- Mnemonics / Memory Hooks -->
+            <div class="bg-gradient-to-br from-amber-50/70 to-white rounded-2xl border border-amber-200/80 p-5 shadow-sm flex flex-col justify-between">
+              <div>
+                <div class="flex items-center gap-2 text-amber-800 font-bold text-xs uppercase tracking-wider mb-2">
+                  <i class="fa-solid fa-bolt"></i> Mẹo ghi nhớ (Mnemonic)
+                </div>
+                <h4 class="text-sm font-bold text-slate-900 mb-1.5">Câu vè & Liên tưởng:</h4>
+                <p id="mnemonics-text" class="text-xs leading-relaxed text-slate-600">...</p>
+              </div>
+              <div class="mt-4 pt-3 border-t border-amber-100 text-[11px] text-amber-700 font-medium">
+                ⚡ Giúp gắn thông tin mới vào trí nhớ dài hạn.
+              </div>
+            </div>
+
+            <!-- Spaced Repetition Checklist -->
+            <div class="bg-gradient-to-br from-emerald-50/70 to-white rounded-2xl border border-emerald-200/80 p-5 shadow-sm flex flex-col justify-between">
+              <div>
+                <div class="flex items-center gap-2 text-emerald-800 font-bold text-xs uppercase tracking-wider mb-2">
+                  <i class="fa-solid fa-calendar-check"></i> Lộ trình Lặp lại ngắt quãng
+                </div>
+                <h4 class="text-sm font-bold text-slate-900 mb-2">Checklist ôn thi chuẩn khoa học:</h4>
+                <div id="spaced-list" class="space-y-2 text-xs text-slate-700">
+                  <!-- Dynamically Populated -->
+                </div>
+              </div>
+              <div class="mt-4 pt-3 border-t border-emerald-100 text-[11px] text-emerald-700 font-medium">
+                📈 Ngăn chặn đường cong lãng quên Ebbinghaus.
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </section>
+
+
+      <!-- ================= TAB 3: TẠO ĐỀ THI 3 MỨC ĐỘ ================= -->
+      <section id="tab-quiz" class="tab-pane hidden flex-1 flex flex-col gap-5">
+        
+        <!-- Quiz Control & Generator Settings Bar -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 no-print">
+          
+          <div class="flex flex-wrap items-center gap-3">
+            <button id="generate-quiz-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center gap-2 shadow-sm transition-all">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+              <span>Tạo Bộ Đề Thi Mới</span>
+            </button>
+
+            <!-- Question Count Select -->
+            <div class="flex items-center gap-1.5 text-xs text-slate-600">
+              <label for="quiz-count-select" class="font-medium">Số lượng câu:</label>
+              <select id="quiz-count-select" class="bg-slate-50 border border-slate-300 rounded-lg p-1.5 text-xs font-semibold text-slate-800">
+                <option value="6">6 câu (Nhanh: 2 Dễ - 2 TB - 2 Khó)</option>
+                <option value="10">10 câu (Chuẩn: 4 Dễ - 4 TB - 2 Khó)</option>
+                <option value="15">15 câu (Chi tiết: 6 Dễ - 6 TB - 3 Khó)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Mode Toggle: Interactive Test vs Print View -->
+          <div class="flex items-center gap-2 self-start md:self-auto">
+            <div class="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-medium">
+              <button id="btn-view-interactive" class="px-3 py-1.5 rounded-lg bg-white text-indigo-700 shadow-xs font-semibold flex items-center gap-1.5">
+                <i class="fa-solid fa-laptop-code"></i>
+                Luyện Thi Trực Tuyến
+              </button>
+              <button id="btn-view-print" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5">
+                <i class="fa-solid fa-file-pdf"></i>
+                Đề In & Đáp Án
+              </button>
+            </div>
+
+            <button id="btn-print-exam" class="p-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg" title="In đề thi">
+              <i class="fa-solid fa-print"></i>
+            </button>
+
+            <!-- Quiz History & Progress Button -->
+            <button id="btn-quiz-history" class="px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95" title="Xem tiến độ và lịch sử làm bài thi">
+              <i class="fa-solid fa-chart-line text-emerald-600"></i>
+              <span class="hidden sm:inline">Tiến độ & Lịch sử</span>
+              <span class="sm:hidden">Lịch sử</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 3 Tier Legend / Explanation -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs no-print">
+          <div class="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center gap-2.5">
+            <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+            <div>
+              <span class="font-bold">Mức 1: Dễ (Nhận biết)</span>
+              <p class="text-[11px] text-emerald-700">Định nghĩa, sự kiện, công thức cơ bản</p>
+            </div>
+          </div>
+          <div class="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center gap-2.5">
+            <span class="w-3 h-3 rounded-full bg-amber-500"></span>
+            <div>
+              <span class="font-bold">Mức 2: Trung bình (Thông hiểu & Vận dụng)</span>
+              <p class="text-[11px] text-amber-700">So sánh, giải thích hiện tượng, bài tập mẫu</p>
+            </div>
+          </div>
+          <div class="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 flex items-center gap-2.5">
+            <span class="w-3 h-3 rounded-full bg-rose-500"></span>
+            <div>
+              <span class="font-bold">Mức 3: Khó (Vận dụng cao)</span>
+              <p class="text-[11px] text-rose-700">Tư duy phản biện, câu hỏi bẫy, tổng hợp sâu</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- EMPTY STATE -->
+        <div id="quiz-empty-state" class="bg-white rounded-2xl border border-slate-200 p-12 text-center flex flex-col items-center justify-center">
+          <div class="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-3xl mb-3 shadow-inner">
+            <i class="fa-solid fa-file-circle-question"></i>
+          </div>
+          <h3 class="text-base font-bold text-slate-800">Chưa có đề thi được tạo</h3>
+          <p class="text-xs text-slate-500 max-w-md mt-1">Bấm "Tạo Bộ Đề Thi Mới" từ tài liệu của bạn, hoặc chọn một bài mẫu cấp 2 dưới đây để luyện thi ngay:</p>
+          <div class="flex flex-wrap items-center justify-center gap-2 mt-3">
+            <button onclick="window.loadSpecificLessonById && window.loadSpecificLessonById('toan9')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer">
+              <i class="fa-solid fa-square-root-variable mr-1"></i> Làm đề Toán 9 (Hệ phương trình)
+            </button>
+            <button onclick="window.loadSpecificLessonById && window.loadSpecificLessonById('khtn9')" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer">
+              <i class="fa-solid fa-bolt mr-1"></i> Làm đề KHTN 9 (Định luật Ôm)
+            </button>
+          </div>
+        </div>
+
+        <!-- MODE A: INTERACTIVE TEST CONTAINER -->
+        <div id="interactive-quiz-container" class="hidden space-y-4">
+          
+          <!-- Test Header: Progress bar & Time -->
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="text-xs font-bold text-slate-600">Tiến độ làm bài:</span>
+              <div class="w-32 sm:w-48 bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                <div id="quiz-progress-bar" class="bg-indigo-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+              </div>
+              <span id="quiz-progress-text" class="text-xs font-bold text-indigo-700">0/0 câu</span>
+            </div>
+
+            <!-- Quiz Timer -->
+            <div class="flex items-center gap-2 text-xs font-bold text-slate-700 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+              <i class="fa-regular fa-clock text-indigo-600"></i>
+              <span id="quiz-timer-display">15:00</span>
+            </div>
+          </div>
+
+          <!-- Quiz Question Cards List -->
+          <div id="quiz-questions-list" class="space-y-4">
+            <!-- Dynamically Populated Cards -->
+          </div>
+
+          <!-- Bottom Actions: Submit Test -->
+          <div id="quiz-submit-bar" class="p-4 bg-white rounded-xl border border-slate-200 flex items-center justify-between">
+            <p class="text-xs text-slate-500">Hãy kiểm tra kỹ các câu trả lời trước khi nộp bài.</p>
+            <button id="btn-submit-quiz" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md transition-all">
+              <i class="fa-solid fa-paper-plane"></i>
+              Nộp Bài & Chấm Điểm
+            </button>
+          </div>
+
+          <!-- Quiz Results Modal / Card (Shown after submit) -->
+          <div id="quiz-result-card" class="hidden p-6 bg-white rounded-2xl border-2 border-indigo-200 shadow-lg text-center space-y-4">
+            <div id="quiz-result-badge" class="w-16 h-16 mx-auto rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-3xl">
+              <i class="fa-solid fa-trophy"></i>
+            </div>
+            <div>
+              <h3 id="quiz-result-title" class="text-xl font-extrabold text-slate-900">Kết Quả Bài Thi</h3>
+              <p id="quiz-result-score" class="text-3xl font-extrabold text-indigo-600 mt-1">10 / 10 Điểm</p>
+              <p id="quiz-result-summary" class="text-xs text-slate-500 mt-1">Làm đúng 6/6 câu hỏi (100%)</p>
+            </div>
+
+            <!-- Tier Breakdown -->
+            <div class="grid grid-cols-3 gap-2 max-w-md mx-auto text-xs py-2">
+              <div class="p-2 rounded-lg bg-emerald-50 text-emerald-800">
+                <span class="block font-bold">Mức Dễ</span>
+                <span id="score-easy" class="text-sm font-extrabold">2/2</span>
+              </div>
+              <div class="p-2 rounded-lg bg-amber-50 text-amber-800">
+                <span class="block font-bold">Trung Bình</span>
+                <span id="score-medium" class="text-sm font-extrabold">2/2</span>
+              </div>
+              <div class="p-2 rounded-lg bg-rose-50 text-rose-800">
+                <span class="block font-bold">Mức Khó</span>
+                <span id="score-hard" class="text-sm font-extrabold">2/2</span>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-center gap-3 pt-2">
+              <button id="btn-retry-quiz" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold">
+                Làm lại đề này
+              </button>
+              <button id="btn-new-quiz" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold">
+                Tạo đề mới khác
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- MODE B: PRINT / TEACHER EXAM SHEET -->
+        <div id="printable-exam-container" class="hidden bg-white p-8 rounded-2xl border border-slate-200 shadow-sm exam-print-container">
+          
+          <!-- Exam Header -->
+          <div class="border-b-2 border-slate-800 pb-4 mb-6 flex justify-between items-start">
+            <div>
+              <p class="text-xs uppercase font-bold text-slate-500 tracking-wider">BÀI KIỂM TRA ĐÁNH GIÁ NĂNG LỰC HỌC TẬP</p>
+              <h2 id="print-exam-title" class="text-lg font-bold text-slate-900 mt-1">Đề Thi Ôn Tập Bài Học</h2>
+              <p class="text-xs text-slate-600 mt-1">Thời gian làm bài: 45 phút • Đề thi phân hóa 3 mức độ</p>
+            </div>
+            <div class="text-xs text-right border border-slate-300 p-2.5 rounded-lg min-w-[200px]">
+              <p>Họ và tên: ...........................................</p>
+              <p class="mt-2">Lớp / Trường: .......................................</p>
+              <p class="mt-2">Điểm số: .............. / 10</p>
+            </div>
+          </div>
+
+          <!-- Questions List for Print -->
+          <div id="print-questions-area" class="space-y-6 text-sm text-slate-800">
+            <!-- Dynamically Populated for Print -->
+          </div>
+
+          <!-- Answer Key & Explanations (Page Break) -->
+          <div class="mt-12 pt-6 border-t-2 border-dashed border-slate-300 page-break">
+            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-900 mb-4 bg-slate-100 p-2 rounded">
+              ĐÁP ÁN & LỜI GIẢI CHI TIẾT (DÀNH CHO GIÁO VIÊN / TỰ ĐỐI CHIẾU)
+            </h3>
+            <div id="print-answers-area" class="space-y-4 text-xs text-slate-700">
+              <!-- Dynamically Populated -->
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+
+      <!-- ================= TAB 4: THẺ HỌC TẬP (FLASHCARDS) ================= -->
+      <section id="tab-beam" class="tab-pane hidden flex-1 flex flex-col gap-5">
+        
+        <!-- Header Controls -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 no-print">
+          <div class="flex items-center gap-3">
+            <button id="generate-beams-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center gap-2 shadow-sm transition-all">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+              <span>Tạo Bộ Thẻ Học Tập AI</span>
+            </button>
+
+            <!-- TTS Audio toggle & Mute/Stop -->
+            <button id="btn-voice-speed-tab4" class="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer" title="Bấm để đổi phong cách & tốc độ giọng đọc">
+              <i class="fa-solid fa-gauge-high text-amber-500"></i>
+              <span id="voice-speed-label-tab4">Hoạt bát (1.16x)</span>
+            </button>
+            <button id="btn-toggle-tts" class="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer" title="Đọc toàn bộ thẻ học tập bằng giọng chuẩn tiếng Việt">
+              <i class="fa-solid fa-volume-high text-indigo-600"></i>
+              <span>Nghe đọc toàn bộ</span>
+            </button>
+            <button id="btn-stop-tts" class="px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer" title="Tắt âm thanh & dừng đọc ngay lập tức">
+              <i class="fa-solid fa-volume-xmark text-rose-600"></i>
+              <span>Tắt âm thanh</span>
+            </button>
+          </div>
+
+          <!-- Progress & Mastery Stats -->
+          <div class="flex items-center gap-3">
+            <div class="text-right">
+              <span class="text-xs font-bold text-slate-700 block">Đã ghi nhớ: <span id="beam-mastery-count" class="text-indigo-600">0/0</span> thẻ</span>
+              <div class="w-32 bg-slate-100 rounded-full h-2 mt-1 overflow-hidden">
+                <div id="beam-mastery-bar" class="bg-emerald-500 h-2 rounded-full transition-all" style="width: 0%"></div>
+              </div>
+            </div>
+
+            <!-- View Mode Switch: Grid vs Carousel -->
+            <div class="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-medium">
+              <button id="btn-beam-grid" class="p-1.5 px-2.5 rounded-lg bg-white text-indigo-700 shadow-xs font-semibold" title="Xem dạng lưới">
+                <i class="fa-solid fa-grip"></i>
+              </button>
+              <button id="btn-beam-focus" class="p-1.5 px-2.5 rounded-lg text-slate-600 hover:text-slate-900" title="Chế độ tập trung (Focus Carousel)">
+                <i class="fa-solid fa-expand"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- EMPTY STATE -->
+        <div id="beam-empty-state" class="bg-white rounded-2xl border border-slate-200 p-12 text-center flex flex-col items-center justify-center">
+          <div class="w-16 h-16 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center text-3xl mb-3 shadow-inner">
+            <i class="fa-solid fa-layer-group"></i>
+          </div>
+          <h3 class="text-base font-bold text-slate-800">Chưa tạo bộ thẻ học tập</h3>
+          <p class="text-xs text-slate-500 max-w-md mt-1">Thẻ học tập (Flashcards) giúp bạn tiếp thu kiến thức nhanh trong 30 giây với thẻ lật 3D tương tác, hỗ trợ âm thanh giọng đọc và lặp lại ngắt quãng.</p>
+        </div>
+
+        <!-- CARDS CONTAINER (GRID VIEW) -->
+        <div id="beam-cards-grid" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <!-- Dynamically Populated Cards -->
+        </div>
+
+        <!-- FOCUS MODE CAROUSEL VIEW (FULLSCREEN MODAL / CAROUSEL) -->
+        <div id="beam-focus-modal" class="hidden fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex flex-col items-center justify-center p-4">
+          <div class="w-full max-w-xl flex items-center justify-between text-white mb-3">
+            <span id="focus-counter" class="text-xs font-bold uppercase tracking-wider bg-white/20 px-3 py-1 rounded-full">Thẻ 1 / 5</span>
+            <button id="btn-close-focus" class="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
+          <!-- Active Focus Card -->
+          <div class="w-full max-w-xl h-[420px] perspective-1000">
+            <div id="focus-flip-inner" class="flip-card-inner cursor-pointer">
+              <!-- Front -->
+              <div class="flip-card-front bg-white p-6 rounded-2xl shadow-2xl flex flex-col justify-between border border-slate-100">
+                <div>
+                  <span id="focus-badge" class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">THẺ #1</span>
+                  <h3 id="focus-title" class="text-base font-bold text-slate-900 mt-3">Tiêu đề thẻ học tập</h3>
+                  <div class="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-200">
+                    <p id="focus-question" class="text-sm font-semibold text-slate-800">Câu hỏi lật thẻ...</p>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between text-xs text-slate-400 pt-4 border-t border-slate-100">
+                  <span>💡 Nhấp thẻ để lật đáp án</span>
+                  <i class="fa-solid fa-rotate"></i>
+                </div>
+              </div>
+
+              <!-- Back -->
+              <div class="flip-card-back bg-indigo-600 text-white p-6 rounded-2xl shadow-2xl flex flex-col justify-between">
+                <div>
+                  <span class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-white/20 text-white">ĐÁP ÁN & CỐT LÕI</span>
+                  <h4 class="text-sm font-bold text-indigo-100 mt-3">Lời giải & Điểm cốt lõi:</h4>
+                  <div class="mt-3 p-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
+                    <p id="focus-answer" class="text-sm leading-relaxed">...</p>
+                  </div>
+                  <p id="focus-action" class="text-xs text-indigo-200 mt-3 italic">Ứng dụng...</p>
+                </div>
+                <div class="flex items-center justify-between text-xs text-indigo-200 pt-4 border-t border-white/10">
+                  <span>Nhấp để quay lại mặt trước</span>
+                  <i class="fa-solid fa-rotate"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Carousel Controls -->
+          <div class="flex items-center gap-3 sm:gap-4 mt-6 flex-wrap justify-center">
+            <button id="btn-focus-prev" class="w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-lg transition-all cursor-pointer" title="Thẻ trước (Mũi tên trái)">
+              <i class="fa-solid fa-arrow-left"></i>
+            </button>
+            <button id="btn-focus-tts" class="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-full text-xs font-semibold flex items-center gap-2 shadow-lg transition-all cursor-pointer">
+              <i class="fa-solid fa-volume-high"></i> Đọc thẻ này
+            </button>
+            <button id="btn-focus-stop-tts" class="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-full text-xs font-semibold flex items-center gap-2 shadow-lg transition-all cursor-pointer" title="Tắt âm thanh ngay">
+              <i class="fa-solid fa-volume-xmark"></i> Tắt âm thanh
+            </button>
+            <button id="btn-focus-mastered" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full text-xs font-semibold flex items-center gap-2 shadow-lg transition-all cursor-pointer">
+              <i class="fa-solid fa-check"></i> Đã nhớ
+            </button>
+            <button id="btn-focus-next" class="w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-lg transition-all cursor-pointer" title="Thẻ tiếp (Mũi tên phải)">
+              <i class="fa-solid fa-arrow-right"></i>
+            </button>
+          </div>
+        </div>
+
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ================= API KEY ROTATION MANAGER MODAL ================= -->
+  <div id="key-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+      
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-key"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-900">⚙️ Cài đặt AI & Quản Lý Kho Key</h3>
+            <p class="text-xs text-slate-500">Tự động nhận diện mô hình khả dụng tốt nhất (Auto Failover 0.1s)</p>
+          </div>
+        </div>
+        <button id="btn-close-key-modal" class="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Add New Keys Textarea -->
+      <div>
+        <label class="block text-xs font-bold text-slate-700 mb-1">
+          Nhập các Gemini API Key (Mỗi dòng một key hoặc cách nhau bởi dấu phẩy):
+        </label>
+        <textarea id="input-multiple-keys" rows="3" class="w-full text-xs font-mono p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="AIzaSyA12345...&#10;AIzaSyB67890..."></textarea>
+        
+        <div class="flex flex-wrap items-center justify-between gap-2 mt-2">
+          <p class="text-[11px] text-slate-500">
+            Chưa có key? Lấy miễn phí tại <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-indigo-600 font-semibold underline">Google AI Studio</a>.
+          </p>
+          <button id="btn-add-keys" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs">
+            <i class="fa-solid fa-plus"></i>
+            Thêm vào kho
+          </button>
+        </div>
+      </div>
+
+      <!-- Model Selection -->
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+        <div>
+          <span class="font-bold text-slate-800">Mô hình AI (Gemini Model):</span>
+          <p class="text-[11px] text-slate-500">Được tối ưu cho trích xuất hình ảnh, sơ đồ tư duy & tạo đề</p>
+        </div>
+        <select id="select-gemini-model" class="bg-white border border-slate-300 rounded-lg p-2 font-semibold text-slate-800 text-xs shadow-xs">
+          <option value="gemini-flash-lite-latest" selected>🔥 Gemini Flash Lite (Siêu Tốc 1-2s, Hoạt Động 100% - Khuyên Dùng)</option>
+          <option value="gemini-3.5-flash-lite">💎 Gemini 3.5 Flash Lite (Dự Phòng Ổn Định 100%)</option>
+        </select>
+      </div>
+
+      <!-- Keys Table / List -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <h4 class="text-xs font-bold text-slate-700">Danh sách API Key trong bể xoay vòng (<span id="key-pool-count">0</span>):</h4>
+          <button id="btn-test-all-keys" class="text-xs text-indigo-600 hover:underline font-semibold flex items-center gap-1">
+            <i class="fa-solid fa-vial"></i> Kiểm tra tất cả
+          </button>
+        </div>
+
+        <div class="border border-slate-200 rounded-xl overflow-hidden">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-600">
+              <tr>
+                <th class="py-2 px-3 w-8">#</th>
+                <th class="py-2 px-3">Mã Key</th>
+                <th class="py-2 px-3">Trạng thái</th>
+                <th class="py-2 px-3 text-center">Gọi thành công</th>
+                <th class="py-2 px-3 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="keys-table-body" class="divide-y divide-slate-100">
+              <!-- Dynamically populated rows -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- How Rotation Works Info Box -->
+      <div class="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200 text-blue-900 text-xs space-y-1.5">
+        <p class="font-bold flex items-center gap-1.5 text-blue-950">
+          <i class="fa-solid fa-bolt text-indigo-600"></i>
+          Cơ chế Hoạt động 100% & Xoay vòng Key Tự động:
+        </p>
+        <p class="text-[11px] text-blue-800 leading-relaxed">
+          • <strong>2 Mô hình đã kiểm nghiệm thành công 100%:</strong> <code>gemini-flash-lite-latest</code> (Ưu tiên số 1 - Siêu tốc 1-2s) và <code>gemini-3.5-flash-lite</code> (Dự phòng).<br>
+          • <strong>Tự động Failover:</strong> Nếu một mô hình bị nghẽn mạng hoặc quá tải, hệ thống tự động chuyển sang mô hình còn lại trong 0.1 giây mà không làm gián đoạn bài học.<br>
+          • <strong>Xoay vòng Key (Round-Robin):</strong> Tự động luân chuyển giữa các key khi gặp lỗi 429 để không bao giờ bị nghẽn ngạch.
+        </p>
+      </div>
+
+      <div class="flex justify-end pt-2 border-t border-slate-100">
+        <button id="btn-save-key-modal" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm">
+          Xong & Lưu Cấu Hình
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= EXTRACTED TEXT MODAL ================= -->
+  <div id="extracted-text-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 flex flex-col gap-3 max-h-[85vh]">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+        <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-file-lines text-indigo-600"></i>
+          Nội dung văn bản bài học trích xuất
+        </h3>
+        <button id="btn-close-extracted-modal" class="text-slate-400 hover:text-slate-600">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+      <p class="text-xs text-slate-500">Bạn có thể chỉnh sửa trực tiếp nội dung dưới đây nếu cần trước khi phân tích AI:</p>
+      <textarea id="extracted-text-area" class="flex-1 w-full text-xs font-sans p-3.5 border border-slate-300 rounded-xl leading-relaxed resize-none h-80 focus:ring-2 focus:ring-indigo-500"></textarea>
+      <div class="flex justify-between items-center pt-2">
+        <span id="extracted-word-count" class="text-xs text-slate-500 font-medium">0 từ</span>
+        <button id="btn-save-extracted-text" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold">
+          Lưu nội dung
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: SHARE QR CODE ================= -->
+  <div id="modal-share-qr" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 flex flex-col gap-4 text-center">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-qrcode text-indigo-600"></i>
+          Quét Mã Trải Nghiệm Trên Điện Thoại
+        </h3>
+        <button id="btn-close-qr-modal" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-600 text-left">
+        Dùng ứng dụng <strong>Camera</strong>, <strong>Zalo</strong> hoặc <strong>Trình duyệt</strong> trên điện thoại để quét mã QR và trải nghiệm ngay:
+      </p>
+
+      <div class="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 inline-block mx-auto">
+        <img id="qr-modal-img" src="" alt="Mã QR ứng dụng SmartEdu" class="w-52 h-52 mx-auto rounded-xl shadow-xs bg-white p-1" />
+      </div>
+
+      <div class="flex items-center gap-2 bg-slate-100 p-2 rounded-xl text-xs">
+        <input id="share-qr-url-input" type="text" readonly class="flex-1 bg-transparent border-none text-slate-700 text-xs font-mono outline-hidden select-all" />
+        <button id="btn-copy-share-url" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shrink-0 flex items-center gap-1.5 transition-all shadow-xs active:scale-95">
+          <i class="fa-regular fa-copy"></i>
+          <span>Sao chép</span>
+        </button>
+      </div>
+
+      <div class="bg-indigo-50/70 border border-indigo-100 rounded-xl p-3 text-left text-xs text-indigo-900 flex items-start gap-2.5">
+        <i class="fa-solid fa-mobile-screen-button text-indigo-600 text-sm mt-0.5 shrink-0"></i>
+        <div class="text-[11px] leading-relaxed">
+          <p class="font-bold text-indigo-950">Hỗ trợ Cài đặt như Ứng dụng gốc (PWA):</p>
+          <p class="text-indigo-800 mt-0.5">Trên điện thoại, chọn <strong>"Thêm vào Màn hình chính" (Add to Home Screen)</strong> để chạy toàn màn hình và dùng offline mượt mà không cần tải từ kho ứng dụng!</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: QUIZ HISTORY & PROGRESS ================= -->
+  <div id="modal-quiz-history" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 flex flex-col gap-4 max-h-[90vh]">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm">
+            <i class="fa-solid fa-chart-line"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-900">Tiến Độ & Lịch Sử Làm Bài Khảo Thí</h3>
+            <p class="text-xs text-slate-500">Ghi nhận kết quả các lần kiểm tra trắc nghiệm trên thiết bị</p>
+          </div>
+        </div>
+        <button id="btn-close-quiz-history-modal" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Stats Overview Grid -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-center">
+          <span class="text-[11px] font-medium text-slate-500 block">Số lần thi</span>
+          <span id="quiz-stat-total-tests" class="text-xl font-bold text-slate-900">0</span>
+        </div>
+        <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
+          <span class="text-[11px] font-medium text-emerald-700 block">Điểm cao nhất</span>
+          <span id="quiz-stat-max-score" class="text-xl font-bold text-emerald-700">0.0</span>
+        </div>
+        <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-3 text-center">
+          <span class="text-[11px] font-medium text-indigo-700 block">Điểm trung bình</span>
+          <span id="quiz-stat-avg-score" class="text-xl font-bold text-indigo-700">0.0</span>
+        </div>
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
+          <span class="text-[11px] font-medium text-amber-700 block">Tổng câu đúng</span>
+          <span id="quiz-stat-total-correct" class="text-xl font-bold text-amber-700">0</span>
+        </div>
+      </div>
+
+      <!-- History Table Container -->
+      <div class="flex-1 overflow-y-auto border border-slate-200 rounded-xl max-h-64 sm:max-h-80">
+        <table class="w-full text-left text-xs text-slate-700 border-collapse">
+          <thead class="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 sticky top-0">
+            <tr>
+              <th class="p-2.5 sm:px-3">Thời gian</th>
+              <th class="p-2.5 sm:px-3">Bài học / Môn</th>
+              <th class="p-2.5 sm:px-3 text-center">Số câu đúng</th>
+              <th class="p-2.5 sm:px-3 text-right">Điểm số</th>
+            </tr>
+          </thead>
+          <tbody id="quiz-history-table-body" class="divide-y divide-slate-100">
+            <!-- Dynamic rows will be inserted here -->
+          </tbody>
+        </table>
+        <div id="quiz-history-empty" class="hidden p-8 text-center text-slate-400 text-xs">
+          <i class="fa-regular fa-clipboard text-3xl mb-2 text-slate-300"></i>
+          <p>Chưa có lịch sử làm bài nào. Hãy hoàn thành một bài trắc nghiệm ở Tab 3 để ghi nhận!</p>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+        <button id="btn-clear-quiz-history" class="px-3 py-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer">
+          <i class="fa-regular fa-trash-can"></i>
+          <span>Xóa lịch sử</span>
+        </button>
+        <button id="btn-done-quiz-history" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-semibold transition-all shadow-xs cursor-pointer">
+          Đóng
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= LOADING OVERLAY ================= -->
+  <div id="loading-overlay" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl border border-slate-200 flex flex-col items-center gap-3">
+      <div class="w-12 h-12 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin"></div>
+      <h4 id="loading-title" class="text-sm font-bold text-slate-900">Đang xử lý bằng AI...</h4>
+      <p id="loading-subtitle" class="text-xs text-slate-500">Đang xoay vòng API Key & phân tích dữ liệu bài học</p>
+      <div id="loading-timer-badge" class="hidden px-2.5 py-1 bg-indigo-50 text-indigo-700 font-mono text-[11px] rounded-full border border-indigo-100 flex items-center gap-1.5">
+        <i class="fa-regular fa-clock"></i> <span id="loading-timer-text">Thời gian: 0s</span>
+      </div>
+      <button id="btn-cancel-loading" type="button" class="mt-1 px-4 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer">
+        <i class="fa-solid fa-xmark"></i> Hủy bỏ thao tác
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= TOAST CONTAINER ================= -->
+  <div id="toast-container"></div>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="bg-white border-t border-slate-200 py-5 text-center text-xs text-slate-500 no-print mt-auto shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <div class="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs shadow-xs">
+          <i class="fa-solid fa-graduation-cap"></i>
+        </div>
+        <p class="font-medium text-slate-700">
+          © 2026 <strong>SmartEdu THCS</strong> • Thiết kế bởi <span class="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">Trần Lê Long Phụng</span> lớp <span class="font-bold text-slate-800">9A13</span> Trường THCS Long Cang
+        </p>
+      </div>
+      <div class="flex items-center gap-2 text-slate-500 text-[11px]">
+        <span>Chương trình GDPT 2018 Cấp 2</span>
+        <span>•</span>
+        <span>Bảo mật dữ liệu 100% trên thiết bị</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Sample Data & Main App Scripts -->
+  <script src="sample_data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

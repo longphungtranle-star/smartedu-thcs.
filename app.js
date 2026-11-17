@@ -1,0 +1,3151 @@
+// app.js - Nền Tảng Hỗ Trợ Học Tập Thông Minh SmartEdu AI
+
+// Fallback sớm đảm bảo không bao giờ bị lỗi 'function not defined' khi người dùng click nhanh
+window.loadSpecificLessonById = window.loadSpecificLessonById || function(key) {
+  window._pendingLessonKey = key;
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+  // ================= STATE MANAGEMENT =================
+  const state = {
+    // API Key Rotation Pool
+    apiKeys: [], // [{ key: string, status: 'ready'|'rate_limited'|'error', successCount: number }]
+    currentKeyIndex: 0,
+    selectedModel: 'gemini-1.5-flash',
+
+    // Document Data
+    currentDoc: {
+      title: '',
+      text: '',
+      type: '', // 'word' | 'pdf' | 'image' | 'text'
+      imageBase64: null,
+      wordCount: 0
+    },
+
+    // Tab Data
+    mindmapMarkdown: '',
+    markmapInstance: null,
+    
+    summaryData: null,
+    
+    quizData: [],
+    quizUserAnswers: {}, // { [questionId]: optionIndex }
+    quizSubmitted: false,
+    quizTimerInterval: null,
+    quizTimeLeft: 15 * 60, // 15 minutes in seconds
+
+    beamData: [],
+    focusBeamIndex: 0,
+
+    // Audio Speech
+    ttsEnabled: true,
+    speechSynth: window.speechSynthesis || null,
+
+    // Abort Controller & Async Process State
+    activeAbortController: null,
+    loadingTimerInterval: null,
+    userAbortedOperation: false
+  };
+
+  // ================= DOM ELEMENTS =================
+  const dom = {
+    // Top Bar (Dành riêng cho Cấp 2 - THCS)
+    loadSampleToan9Btn: document.getElementById('load-sample-toan9-btn'),
+    loadSampleKhtn9Btn: document.getElementById('load-sample-khtn9-btn'),
+    loadSampleKhtn7Btn: document.getElementById('load-sample-khtn7-btn'),
+    loadSampleKhtn8Btn: document.getElementById('load-sample-khtn8-btn'),
+    openKeyModalBtn: document.getElementById('open-key-modal-btn'),
+    openKeyModalBtnDesktop: document.getElementById('open-key-modal-btn-desktop'),
+    keySummaryText: document.getElementById('key-summary-text'),
+    keyPing: document.getElementById('key-ping'),
+    keyDot: document.getElementById('key-dot'),
+
+    // Upload & Input
+    btnModeFile: document.getElementById('btn-mode-file'),
+    btnModeText: document.getElementById('btn-mode-text'),
+    dropZoneContainer: document.getElementById('drop-zone-container'),
+    textInputContainer: document.getElementById('text-input-container'),
+    dropZone: document.getElementById('drop-zone'),
+    fileInput: document.getElementById('file-input'),
+    cameraInput: document.getElementById('camera-input'),
+    rawTextInput: document.getElementById('raw-text-input'),
+    applyTextBtn: document.getElementById('apply-text-btn'),
+    
+    // Doc Preview Card
+    docPreviewCard: document.getElementById('doc-preview-card'),
+    docIconBadge: document.getElementById('doc-icon-badge'),
+    docTitle: document.getElementById('doc-title'),
+    docBadgeType: document.getElementById('doc-badge-type'),
+    docStats: document.getElementById('doc-stats'),
+    btnEnterLesson: document.getElementById('btn-enter-lesson'),
+    btnOcrImage: document.getElementById('btn-ocr-image'),
+    btnViewExtracted: document.getElementById('btn-view-extracted'),
+    btnClearDoc: document.getElementById('btn-clear-doc'),
+
+    // Tabs
+    tabButtons: document.querySelectorAll('.tab-btn'),
+    tabPanes: document.querySelectorAll('.tab-pane'),
+
+    // Tab 1: Mindmap
+    generateMindmapBtn: document.getElementById('generate-mindmap-btn'),
+    markmapSvg: document.getElementById('markmap-svg'),
+    mindmapEmptyState: document.getElementById('mindmap-empty-state'),
+    mindmapWrapper: document.getElementById('mindmap-wrapper'),
+    mindmapEditorSidebar: document.getElementById('mindmap-editor-sidebar'),
+    btnToggleEditor: document.getElementById('btn-toggle-editor'),
+    markdownInput: document.getElementById('markdown-input'),
+    applyMarkdownBtn: document.getElementById('apply-markdown-btn'),
+    btnZoomIn: document.getElementById('btn-zoom-in'),
+    btnZoomOut: document.getElementById('btn-zoom-out'),
+    btnZoomFit: document.getElementById('btn-zoom-fit'),
+    btnFullscreenMindmap: document.getElementById('btn-fullscreen-mindmap'),
+    btnExitFullscreen: document.getElementById('btn-exit-fullscreen'),
+    mindmapFullscreenBar: document.getElementById('mindmap-fullscreen-bar'),
+    btnFsFit: document.getElementById('btn-fs-fit'),
+    btnFsZoomIn: document.getElementById('btn-fs-zoom-in'),
+    btnFsZoomOut: document.getElementById('btn-fs-zoom-out'),
+    btnDownloadPng: document.getElementById('btn-download-png'),
+    btnDownloadSvg: document.getElementById('btn-download-svg'),
+
+    // Tab 2: Summary
+    generateSummaryBtn: document.getElementById('generate-summary-btn'),
+    summaryEmptyState: document.getElementById('summary-empty-state'),
+    sectionTakeaways: document.getElementById('section-takeaways'),
+    listTakeaways: document.getElementById('list-takeaways'),
+    sectionTerms: document.getElementById('section-terms'),
+    tableTermsBody: document.getElementById('table-terms-body'),
+    sectionStrategies: document.getElementById('section-strategies'),
+    feynmanText: document.getElementById('feynman-text'),
+    mnemonicsText: document.getElementById('mnemonics-text'),
+    spacedList: document.getElementById('spaced-list'),
+    btnCopySummary: document.getElementById('btn-copy-summary'),
+    btnPrintSummary: document.getElementById('btn-print-summary'),
+    btnTtsSummary: document.getElementById('btn-tts-summary'),
+    btnStopTtsSummary: document.getElementById('btn-stop-tts-summary'),
+
+    // Tab 3: Quiz
+    generateQuizBtn: document.getElementById('generate-quiz-btn'),
+    quizCountSelect: document.getElementById('quiz-count-select'),
+    btnViewInteractive: document.getElementById('btn-view-interactive'),
+    btnViewPrint: document.getElementById('btn-view-print'),
+    btnPrintExam: document.getElementById('btn-print-exam'),
+    quizEmptyState: document.getElementById('quiz-empty-state'),
+    interactiveQuizContainer: document.getElementById('interactive-quiz-container'),
+    quizProgressBar: document.getElementById('quiz-progress-bar'),
+    quizProgressText: document.getElementById('quiz-progress-text'),
+    quizTimerDisplay: document.getElementById('quiz-timer-display'),
+    quizQuestionsList: document.getElementById('quiz-questions-list'),
+    quizSubmitBar: document.getElementById('quiz-submit-bar'),
+    btnSubmitQuiz: document.getElementById('btn-submit-quiz'),
+    quizResultCard: document.getElementById('quiz-result-card'),
+    quizResultTitle: document.getElementById('quiz-result-title'),
+    quizResultScore: document.getElementById('quiz-result-score'),
+    quizResultSummary: document.getElementById('quiz-result-summary'),
+    scoreEasy: document.getElementById('score-easy'),
+    scoreMedium: document.getElementById('score-medium'),
+    scoreHard: document.getElementById('score-hard'),
+    btnRetryQuiz: document.getElementById('btn-retry-quiz'),
+    btnNewQuiz: document.getElementById('btn-new-quiz'),
+    printableExamContainer: document.getElementById('printable-exam-container'),
+    printExamTitle: document.getElementById('print-exam-title'),
+    printQuestionsArea: document.getElementById('print-questions-area'),
+    printAnswersArea: document.getElementById('print-answers-area'),
+
+    // Tab 4: Beams
+    generateBeamsBtn: document.getElementById('generate-beams-btn'),
+    btnToggleTts: document.getElementById('btn-toggle-tts'),
+    btnStopTts: document.getElementById('btn-stop-tts'),
+    beamMasteryCount: document.getElementById('beam-mastery-count'),
+    beamMasteryBar: document.getElementById('beam-mastery-bar'),
+    btnBeamGrid: document.getElementById('btn-beam-grid'),
+    btnBeamFocus: document.getElementById('btn-beam-focus'),
+    beamEmptyState: document.getElementById('beam-empty-state'),
+    beamCardsGrid: document.getElementById('beam-cards-grid'),
+    beamFocusModal: document.getElementById('beam-focus-modal'),
+    focusCounter: document.getElementById('focus-counter'),
+    focusFlipInner: document.getElementById('focus-flip-inner'),
+    focusBadge: document.getElementById('focus-badge'),
+    focusTitle: document.getElementById('focus-title'),
+    focusQuestion: document.getElementById('focus-question'),
+    focusAnswer: document.getElementById('focus-answer'),
+    focusAction: document.getElementById('focus-action'),
+    btnCloseFocus: document.getElementById('btn-close-focus'),
+    btnFocusPrev: document.getElementById('btn-focus-prev'),
+    btnFocusNext: document.getElementById('btn-focus-next'),
+    btnFocusTts: document.getElementById('btn-focus-tts'),
+    btnFocusStopTts: document.getElementById('btn-focus-stop-tts'),
+    btnFocusMastered: document.getElementById('btn-focus-mastered'),
+
+    // Key Modal
+    keyModal: document.getElementById('key-modal'),
+    btnCloseKeyModal: document.getElementById('btn-close-key-modal'),
+    inputMultipleKeys: document.getElementById('input-multiple-keys'),
+    btnAddKeys: document.getElementById('btn-add-keys'),
+    selectGeminiModel: document.getElementById('select-gemini-model'),
+    keyPoolCount: document.getElementById('key-pool-count'),
+    keysTableBody: document.getElementById('keys-table-body'),
+    btnTestAllKeys: document.getElementById('btn-test-all-keys'),
+    btnSaveKeyModal: document.getElementById('btn-save-key-modal'),
+
+    // Extracted Text Modal
+    extractedTextModal: document.getElementById('extracted-text-modal'),
+    btnCloseExtractedModal: document.getElementById('btn-close-extracted-modal'),
+    extractedTextArea: document.getElementById('extracted-text-area'),
+    extractedWordCount: document.getElementById('extracted-word-count'),
+    btnSaveExtractedText: document.getElementById('btn-save-extracted-text'),
+
+    // Loading & Toast
+    loadingOverlay: document.getElementById('loading-overlay'),
+    loadingTitle: document.getElementById('loading-title'),
+    loadingSubtitle: document.getElementById('loading-subtitle'),
+    loadingTimerBadge: document.getElementById('loading-timer-badge'),
+    loadingTimerText: document.getElementById('loading-timer-text'),
+    btnCancelLoading: document.getElementById('btn-cancel-loading'),
+    toastContainer: document.getElementById('toast-container')
+  };
+
+  // ================= TOAST & LOADING HELPERS =================
+  function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    const colors = {
+      info: 'bg-indigo-600 text-white',
+      success: 'bg-emerald-600 text-white',
+      warning: 'bg-amber-500 text-white',
+      error: 'bg-rose-600 text-white'
+    };
+    const icons = {
+      info: 'fa-circle-info',
+      success: 'fa-circle-check',
+      warning: 'fa-triangle-exclamation',
+      error: 'fa-circle-xmark'
+    };
+
+    toast.className = `toast px-4 py-3 rounded-xl shadow-lg flex items-center gap-2.5 text-xs font-semibold ${colors[type] || colors.info}`;
+    toast.innerHTML = `<i class="fa-solid ${icons[type] || icons.info}"></i> <span>${message}</span>`;
+    
+    dom.toastContainer.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(10px)';
+      toast.style.transition = 'all 0.3s ease';
+      setTimeout(() => toast.remove(), 300);
+    }, 4000);
+  }
+
+  function showLoading(title = 'Đang xử lý bằng AI...', subtitle = 'Đang phân tích cấu trúc bài học') {
+    dom.loadingTitle.textContent = title;
+    dom.loadingSubtitle.textContent = subtitle;
+    dom.loadingOverlay.classList.remove('hidden');
+
+    if (state.loadingTimerInterval) {
+      clearInterval(state.loadingTimerInterval);
+    }
+    let seconds = 0;
+    if (dom.loadingTimerBadge && dom.loadingTimerText) {
+      dom.loadingTimerBadge.classList.remove('hidden');
+      dom.loadingTimerText.textContent = 'Thời gian: 0s';
+      state.loadingTimerInterval = setInterval(() => {
+        seconds++;
+        dom.loadingTimerText.textContent = `Thời gian: ${seconds}s`;
+      }, 1000);
+    }
+  }
+
+  function hideLoading() {
+    if (state.loadingTimerInterval) {
+      clearInterval(state.loadingTimerInterval);
+      state.loadingTimerInterval = null;
+    }
+    if (dom.loadingTimerBadge) {
+      dom.loadingTimerBadge.classList.add('hidden');
+    }
+    dom.loadingOverlay.classList.add('hidden');
+  }
+
+  // ================= API KEY ROTATION POOL LOGIC =================
+  // Chỉ giữ đúng 2 mô hình đã kiểm nghiệm thực tế thành công 100% với key của bạn
+  const CASCADE_MODELS = [
+    'gemini-flash-lite-latest', // Ưu tiên số 1: Siêu Tốc 1-2 giây, phản hồi tức thì
+    'gemini-3.5-flash-lite'     // Dự phòng cấp 1: Hoạt động 100%, bảo hiểm khi mạng nghẽn
+  ];
+
+  function getModelCandidates(preferred) {
+    if (!preferred || preferred === 'auto' || !CASCADE_MODELS.includes(preferred)) {
+      return [...CASCADE_MODELS];
+    }
+    const list = [preferred];
+    CASCADE_MODELS.forEach(m => {
+      if (m !== preferred && !list.includes(m)) list.push(m);
+    });
+    return list;
+  }
+
+  // BỘ PHÂN TÍCH & TỰ ĐỘNG SỬA LỖI JSON AN TOÀN CHO CÔNG THỨC TOÁN LATEX
+  function safeParseJson(rawStr) {
+    if (!rawStr) throw new Error("Dữ liệu phản hồi từ AI rỗng.");
+    
+    // 1. Loại bỏ markdown code blocks
+    let cleaned = rawStr.trim();
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+    // 2. Thử parse trực tiếp
+    try {
+      return JSON.parse(cleaned);
+    } catch (e1) {
+      // Tiếp tục tự động sửa lỗi
+    }
+
+    // 3. Tự động sửa lỗi Bad Escaped Characters do ký hiệu LaTeX Toán/KHTN (\Delta, \sqrt, \pm, \frac, \le, \ge, v.v.)
+    try {
+      const repaired = cleaned.replace(/\\(?!["\\/bfnrtu]|u[0-9a-fA-F]{4})/g, '\\\\');
+      return JSON.parse(repaired);
+    } catch (e2) {}
+
+    // 4. Trích xuất substring giữa mảng [ ... ] hoặc object { ... }
+    const firstBracket = cleaned.indexOf('[');
+    const lastBracket = cleaned.lastIndexOf(']');
+    if (firstBracket !== -1 && lastBracket > firstBracket) {
+      const arraySub = cleaned.substring(firstBracket, lastBracket + 1);
+      try {
+        const repaired = arraySub.replace(/\\(?!["\\/bfnrtu]|u[0-9a-fA-F]{4})/g, '\\\\');
+        return JSON.parse(repaired);
+      } catch (e3) {}
+    }
+
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      const objSub = cleaned.substring(firstBrace, lastBrace + 1);
+      try {
+        const repaired = objSub.replace(/\\(?!["\\/bfnrtu]|u[0-9a-fA-F]{4})/g, '\\\\');
+        return JSON.parse(repaired);
+      } catch (e4) {}
+    }
+
+    // 5. Cứu nguy cuối cùng: làm sạch ký tự điều khiển ẩn
+    const superCleaned = cleaned
+      .replace(/[\u0000-\u001F]+/g, ' ')
+      .replace(/\\(?!["\\/bfnrtu]|u[0-9a-fA-F]{4})/g, '\\\\');
+    return JSON.parse(superCleaned);
+  }
+
+  function loadApiKeysFromStorage() {
+    try {
+      const stored = localStorage.getItem('smartedu_api_keys');
+      if (stored) {
+        state.apiKeys = JSON.parse(stored);
+      }
+      const storedModel = localStorage.getItem('smartedu_selected_model');
+      if (storedModel && (storedModel === 'auto' || CASCADE_MODELS.includes(storedModel))) {
+        state.selectedModel = storedModel;
+      } else {
+        state.selectedModel = 'gemini-flash-lite-latest';
+        localStorage.setItem('smartedu_selected_model', 'gemini-flash-lite-latest');
+      }
+      if (dom.selectGeminiModel) {
+        dom.selectGeminiModel.value = state.selectedModel;
+      }
+
+      // Tự động khôi phục key về trạng thái sẵn sàng với mô hình Flash Lite Siêu Tốc
+      state.apiKeys.forEach(k => {
+        k.status = 'ready';
+        k.workingModel = 'gemini-flash-lite-latest';
+        k.errorDetail = '';
+      });
+      localStorage.setItem('smartedu_api_keys', JSON.stringify(state.apiKeys));
+    } catch (e) {
+      console.error('Error loading API keys:', e);
+      state.apiKeys = [];
+    }
+    updateKeyPoolUI();
+  }
+
+  function saveApiKeysToStorage() {
+    localStorage.setItem('smartedu_api_keys', JSON.stringify(state.apiKeys));
+    localStorage.setItem('smartedu_selected_model', state.selectedModel);
+    updateKeyPoolUI();
+  }
+
+  function updateKeyPoolUI() {
+    const total = state.apiKeys.length;
+    const activeKeys = state.apiKeys.filter(k => k.status !== 'error' && k.status !== 'rate_limited');
+    
+    dom.keyPoolCount.textContent = total;
+    if (total === 0) {
+      dom.keySummaryText.textContent = 'Kho API Key (0)';
+      dom.keyDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400';
+      dom.keyPing.className = 'hidden';
+    } else {
+      dom.keySummaryText.textContent = `Kho Key: ${activeKeys.length}/${total} Khả dụng`;
+      dom.keyDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500';
+      dom.keyPing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75';
+    }
+
+    // Render table
+    dom.keysTableBody.innerHTML = '';
+    if (state.apiKeys.length === 0) {
+      dom.keysTableBody.innerHTML = `
+        <tr>
+          <td colspan="5" class="py-4 text-center text-slate-400 italic">
+            Chưa có API key nào. Hãy nhập key vào ô bên trên để kích hoạt xoay vòng tự động!
+          </td>
+        </tr>`;
+      return;
+    }
+
+    state.apiKeys.forEach((item, index) => {
+      const row = document.createElement('tr');
+      const isCurrent = (index === state.currentKeyIndex);
+      
+      const statusBadges = {
+        ready: `<div class="flex flex-col"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 inline-block w-fit">Sẵn sàng</span>${item.workingModel ? `<span class="text-[9px] font-mono text-emerald-600 mt-0.5">${item.workingModel}</span>` : ''}</div>`,
+        active: `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 animate-pulse">Đang xoay tới</span>`,
+        rate_limited: `<div class="flex flex-col"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 inline-block w-fit" title="Đã chạm hạn ngạch 429">Quá tải (429)</span><span class="text-[9px] text-amber-600 mt-0.5">Hết ngạch tạm thời</span></div>`,
+        error: `<div class="flex flex-col"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 inline-block w-fit" title="${item.errorDetail || 'Lỗi kiểm tra key'}">${item.errorDetail && (item.errorDetail.includes('400') || item.errorDetail.includes('API_KEY_INVALID')) ? 'Sai mã Key' : (item.errorDetail && item.errorDetail.includes('403') ? 'Bị khóa quyền (403)' : (item.errorDetail && item.errorDetail.includes('401') ? 'Lỗi xác thực (401)' : 'Lỗi kết nối'))}</span>${item.errorDetail ? `<span class="text-[9px] text-rose-500 mt-0.5 max-w-[200px] truncate block" title="${item.errorDetail}">${item.errorDetail}</span>` : ''}</div>`
+      };
+
+      const maskedKey = item.key.slice(0, 7) + '...' + item.key.slice(-4);
+
+      row.innerHTML = `
+        <td class="py-2.5 px-3 font-mono font-bold text-slate-500">${index + 1}</td>
+        <td class="py-2.5 px-3 font-mono text-slate-800 flex items-center gap-1.5">
+          ${isCurrent ? '<i class="fa-solid fa-arrow-right text-indigo-600 text-xs"></i>' : ''}
+          ${maskedKey}
+        </td>
+        <td class="py-2.5 px-3">${statusBadges[item.status] || statusBadges.ready}</td>
+        <td class="py-2.5 px-3 text-center font-bold text-slate-700">${item.successCount || 0}</td>
+        <td class="py-2.5 px-3 text-right">
+          <div class="flex items-center justify-end gap-1">
+            <button class="test-single-key p-1 text-slate-500 hover:text-indigo-600 rounded" data-index="${index}" title="Kiểm tra kết nối">
+              <i class="fa-solid fa-vial text-xs"></i>
+            </button>
+            <button class="delete-single-key p-1 text-slate-400 hover:text-rose-600 rounded" data-index="${index}" title="Xóa key">
+              <i class="fa-solid fa-trash-can text-xs"></i>
+            </button>
+          </div>
+        </td>
+      `;
+      dom.keysTableBody.appendChild(row);
+    });
+
+    // Add row listeners
+    dom.keysTableBody.querySelectorAll('.delete-single-key').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const idx = parseInt(btn.getAttribute('data-index'));
+        state.apiKeys.splice(idx, 1);
+        if (state.currentKeyIndex >= state.apiKeys.length) {
+          state.currentKeyIndex = 0;
+        }
+        saveApiKeysToStorage();
+        showToast('Đã xóa API Key khỏi kho!', 'info');
+      });
+    });
+
+    dom.keysTableBody.querySelectorAll('.test-single-key').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const idx = parseInt(btn.getAttribute('data-index'));
+        await testSingleKey(idx);
+      });
+    });
+  }
+
+  async function testSingleKey(index) {
+    const item = state.apiKeys[index];
+    if (!item) return;
+
+    if (dom.selectGeminiModel && dom.selectGeminiModel.value) {
+      state.selectedModel = dom.selectGeminiModel.value;
+      localStorage.setItem('smartedu_selected_model', state.selectedModel);
+    }
+
+    const cleanKey = item.key ? item.key.trim() : '';
+    if (!cleanKey) {
+      showToast('Key rỗng hoặc không hợp lệ!', 'error');
+      return;
+    }
+
+    const candidates = getModelCandidates(state.selectedModel);
+    showLoading('Đang kiểm tra kết nối API Key...', `Thử nghiệm Key #${index + 1} qua bộ lọc tự động nhận diện model...`);
+
+    let isSuccess = false;
+    let finalError = '';
+
+    for (const modelCandidate of candidates) {
+      const controller = new AbortController();
+      state.activeAbortController = controller;
+      const timeoutId = setTimeout(() => controller.abort('TIMEOUT'), 8000);
+
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelCandidate}:generateContent?key=${encodeURIComponent(cleanKey)}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: "Chào bạn! Hãy trả lời đúng 2 từ: Sẵn sàng." }] }],
+            generationConfig: { maxOutputTokens: 10 }
+          }),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+        state.activeAbortController = null;
+
+        if (res.ok) {
+          isSuccess = true;
+          item.status = 'ready';
+          item.workingModel = modelCandidate;
+          item.errorDetail = '';
+          saveApiKeysToStorage();
+          showToast(`Key #${index + 1} (${cleanKey.slice(0, 6)}...): Nhận diện thành công [${modelCandidate}]!`, 'success');
+          break;
+        }
+
+        const errJson = await res.json().catch(() => ({}));
+        const rawErrMsg = errJson.error?.message || `Lỗi HTTP ${res.status}`;
+        finalError = `[HTTP ${res.status}] ${rawErrMsg}`;
+
+        // 💡 Cơ chế Failover tự động: Nếu model gặp 404, 503, 500
+        // Tự động chuyển ngay sang model kế tiếp trong 0.1 giây mà không gián đoạn
+        if (res.status === 404 || res.status === 503 || res.status === 500) {
+          console.info(`Model ${modelCandidate} mã ${res.status}. Tự động Failover sang model kế tiếp trong 0.1s...`);
+          continue;
+        }
+
+        // Nếu lỗi 429 (Hết ngạch)
+        if (res.status === 429) {
+          item.status = 'rate_limited';
+          item.errorDetail = 'Hết hạn ngạch 429 (Too Many Requests)';
+          saveApiKeysToStorage();
+          showToast(`Key #${index + 1} chạm giới hạn ngạch 429.`, 'warning');
+          break;
+        }
+
+        // Nếu lỗi 400, 401 hoặc 403 (Sai mã key hoặc chưa cấp quyền)
+        if (res.status === 400 || res.status === 401 || res.status === 403) {
+          item.status = 'error';
+          item.errorDetail = `Lỗi ${res.status}: ${rawErrMsg}`;
+          saveApiKeysToStorage();
+          showToast(`Key #${index + 1}: ${rawErrMsg}`, 'error');
+          break;
+        }
+
+      } catch (err) {
+        clearTimeout(timeoutId);
+        state.activeAbortController = null;
+        if (err.name === 'AbortError' || err === 'TIMEOUT' || err.message === 'TIMEOUT') {
+          continue; // Timeout trên model này, thử ngay model tiếp theo
+        } else {
+          finalError = `Lỗi mạng: ${err.message}`;
+        }
+      }
+    }
+
+    hideLoading();
+
+    if (!isSuccess && item.status !== 'rate_limited') {
+      item.status = 'error';
+      item.errorDetail = finalError || 'Không kết nối được với Google';
+      saveApiKeysToStorage();
+      showToast(`Key #${index + 1}: ${item.errorDetail}`, 'error');
+    }
+  }
+
+  // CORE CALL FUNCTION WITH AUTOMATIC KEY ROTATION & HIGH-SPEED FAILOVER (0.1S)
+  async function callGeminiWithRotation(prompt, inlineImageBase64 = null, options = {}) {
+    if (state.apiKeys.length === 0) {
+      dom.keyModal.classList.remove('hidden');
+      throw new Error("Chưa có API Key nào trong kho. Hãy dán ít nhất 1 Google Gemini API Key để tiếp tục!");
+    }
+
+    if (dom.selectGeminiModel && dom.selectGeminiModel.value) {
+      state.selectedModel = dom.selectGeminiModel.value;
+    }
+
+    const { isJson = false, maxTokens = 4000, taskName = 'Đang xử lý bằng AI...', timeoutMs = 25000 } = options;
+    const maxAttempts = state.apiKeys.length;
+    let attempts = 0;
+    let lastErrorMessage = '';
+    state.userAbortedOperation = false;
+
+    // Lấy danh sách mô hình ưu tiên theo tầng bảo hiểm (Cascade list)
+    const baseCandidates = getModelCandidates(state.selectedModel);
+
+    while (attempts < maxAttempts) {
+      if (state.userAbortedOperation) {
+        hideLoading();
+        throw new Error("Thao tác đã bị dừng theo yêu cầu của bạn.");
+      }
+
+      const keyIndex = state.currentKeyIndex;
+      const keyItem = state.apiKeys[keyIndex];
+      state.currentKeyIndex = (state.currentKeyIndex + 1) % state.apiKeys.length;
+
+      // Nếu key này đã từng chạy thành công với một model cụ thể, ưu tiên model đó lên đầu
+      const keyCandidates = keyItem.workingModel
+        ? [keyItem.workingModel, ...baseCandidates.filter(m => m !== keyItem.workingModel)]
+        : baseCandidates;
+
+      // Thử tuần tự các model theo thứ tự ưu tiên (Failover 0.1s không làm gián đoạn)
+      for (const activeModel of keyCandidates) {
+        if (state.userAbortedOperation) break;
+
+        const controller = new AbortController();
+        state.activeAbortController = controller;
+        const timeoutId = setTimeout(() => {
+          controller.abort('TIMEOUT');
+        }, timeoutMs);
+
+        try {
+          showLoading(taskName, `Sử dụng Key #${keyIndex + 1} (${keyItem.key.slice(0, 6)}...${keyItem.key.slice(-3)}) [Model: ${activeModel}]`);
+
+          const contentsParts = [{ text: prompt }];
+          if (inlineImageBase64) {
+            const match = inlineImageBase64.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+            if (match) {
+              contentsParts.push({
+                inlineData: {
+                  mimeType: match[1],
+                  data: match[2]
+                }
+              });
+            }
+          }
+
+          const generationConfig = {
+            temperature: 0.2,
+            maxOutputTokens: maxTokens
+          };
+          if (isJson) {
+            generationConfig.responseMimeType = "application/json";
+          }
+
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${encodeURIComponent(keyItem.key.trim())}`;
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: contentsParts }],
+              generationConfig
+            }),
+            signal: controller.signal
+          });
+
+          clearTimeout(timeoutId);
+          state.activeAbortController = null;
+
+          if (response.ok) {
+            const data = await response.json();
+            keyItem.status = 'ready';
+            keyItem.workingModel = activeModel;
+            keyItem.successCount = (keyItem.successCount || 0) + 1;
+            keyItem.errorDetail = '';
+            saveApiKeysToStorage();
+            hideLoading();
+
+            const candidates = data.candidates || [];
+            if (!candidates.length) {
+              throw new Error("Không nhận được nội dung trả lời từ AI (có thể do bộ lọc an toàn).");
+            }
+            const parts = candidates[0].content?.parts || [];
+            // Lọc bỏ thought parts nếu có (đối với thinking models)
+            const nonThought = parts.filter(p => !p.thought);
+            const text = (nonThought.length ? nonThought.map(p => p.text || '').join('') : (parts[0]?.text || '')).trim();
+
+            if (!text) {
+              throw new Error("Nội dung trả lời từ AI rỗng.");
+            }
+            return text;
+          }
+
+          const errJson = await response.json().catch(() => ({}));
+          const rawErrMsg = errJson.error?.message || `Lỗi HTTP ${response.status}`;
+          lastErrorMessage = rawErrMsg;
+
+          // 💡 Cơ chế Failover tự động: Quá tải cục bộ (503), lỗi máy chủ (500) hoặc Model 404
+          // Hệ thống tự động chuyển sang model kế tiếp trong 0.1s mà không làm gián đoạn hay báo lỗi ra màn hình
+          if (response.status === 404 || response.status === 503 || response.status === 500) {
+            console.info(`Model ${activeModel} gặp mã ${response.status}. Failover sang model kế tiếp trong 0.1s...`);
+            continue;
+          }
+
+          // Rate Limit (429): Key này hết ngạch -> xoay sang Key kế tiếp
+          if (response.status === 429) {
+            keyItem.status = 'rate_limited';
+            saveApiKeysToStorage();
+            showToast(`Key #${keyIndex + 1} chạm giới hạn ngạch 429. Đang chuyển sang key tiếp theo...`, 'warning');
+            break; // sang key tiếp theo trong bể xoay vòng
+          }
+
+          // Sai mã key hoặc bị cấm quyền (400, 401, 403)
+          if (response.status === 400 || response.status === 401 || response.status === 403) {
+            keyItem.status = 'error';
+            keyItem.errorDetail = `Lỗi ${response.status}: ${rawErrMsg}`;
+            saveApiKeysToStorage();
+            showToast(`Key #${keyIndex + 1}: ${rawErrMsg}. Đang chuyển key tiếp theo...`, 'warning');
+            break; // sang key tiếp theo trong bể xoay vòng
+          }
+
+          continue;
+
+        } catch (err) {
+          clearTimeout(timeoutId);
+          state.activeAbortController = null;
+
+          if (state.userAbortedOperation) {
+            hideLoading();
+            throw new Error("Thao tác đã bị dừng theo yêu cầu của bạn.");
+          }
+
+          if (err.name === 'AbortError' || err === 'TIMEOUT' || err.message === 'TIMEOUT') {
+            console.warn(`Model ${activeModel} timeout ${Math.round(timeoutMs/1000)}s. Failover sang model kế tiếp...`);
+            continue;
+          }
+
+          console.warn(`Model ${activeModel} error:`, err);
+          continue;
+        }
+      }
+
+      attempts++;
+    }
+
+    hideLoading();
+    throw new Error(`Không thể hoàn thành yêu cầu: ${lastErrorMessage || 'Tất cả các API Key hoặc Model trong bể xoay vòng đều bận'}`);
+  }
+
+  // ================= FILE PARSING LOGIC =================
+  function countWords(str) {
+    if (!str) return 0;
+    return str.trim().split(/\s+/).filter(Boolean).length;
+  }
+
+  function setActiveDocument(title, text, type, imageBase64 = null) {
+    state.currentDoc.title = title;
+    state.currentDoc.text = text;
+    state.currentDoc.type = type;
+    state.currentDoc.imageBase64 = imageBase64;
+    state.currentDoc.wordCount = countWords(text);
+
+    // Update UI
+    dom.docPreviewCard.classList.remove('hidden');
+    dom.docTitle.textContent = title;
+    dom.docBadgeType.textContent = type.toUpperCase();
+    dom.docStats.textContent = `${state.currentDoc.wordCount} từ • Sẵn sàng phân tích`;
+
+    const iconMap = {
+      word: 'fa-file-word bg-blue-600',
+      pdf: 'fa-file-pdf bg-red-600',
+      image: 'fa-file-image bg-emerald-600',
+      text: 'fa-file-lines bg-indigo-600'
+    };
+
+    dom.docIconBadge.className = `w-10 h-10 rounded-lg text-white flex items-center justify-center text-lg font-bold ${iconMap[type] || 'fa-file-lines bg-indigo-600'}`;
+    dom.docIconBadge.innerHTML = `<i class="fa-solid ${iconMap[type]?.split(' ')[0] || 'fa-file-lines'}"></i>`;
+
+    if (type === 'image') {
+      dom.btnOcrImage.classList.remove('hidden');
+    } else {
+      dom.btnOcrImage.classList.add('hidden');
+    }
+
+    showToast(`Đã nạp tài liệu: ${title} (${state.currentDoc.wordCount} từ)`, 'success');
+  }
+
+  // 1. Word (.docx) Parsing using Mammoth
+  async function handleWordFile(file) {
+    showLoading('Đang đọc file Word...', file.name);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await window.mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+      hideLoading();
+      if (!result.value || result.value.trim().length === 0) {
+        showToast('File Word rỗng hoặc không chứa văn bản!', 'warning');
+        return;
+      }
+      setActiveDocument(file.name, result.value, 'word');
+    } catch (e) {
+      hideLoading();
+      console.error(e);
+      showToast('Lỗi khi đọc file Word: ' + e.message, 'error');
+    }
+  }
+
+  // 2. PDF Parsing using PDF.js
+  async function handlePdfFile(file) {
+    showLoading('Đang trích xuất nội dung PDF...', file.name);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let fullText = '';
+      
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageStrings = textContent.items.map(item => item.str);
+        fullText += `\n--- TRANG ${i} ---\n` + pageStrings.join(' ');
+      }
+
+      hideLoading();
+      if (!fullText.trim()) {
+        showToast('PDF scan hình ảnh hoặc không có văn bản chọn được!', 'warning');
+        return;
+      }
+      setActiveDocument(file.name, fullText.trim(), 'pdf');
+    } catch (e) {
+      hideLoading();
+      console.error(e);
+      showToast('Lỗi khi đọc file PDF: ' + e.message, 'error');
+    }
+  }
+
+  // 3. Image File & Camera Parsing with Automatic Mobile Compression
+  function handleImageFile(file) {
+    showLoading('Đang đọc ảnh bài học...', file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const rawDataUrl = e.target.result;
+      
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        const maxDim = 1200; // Tối ưu kích thước chuẩn nét cho OCR mà payload cực nhẹ
+
+        // Scale down if camera resolution is huge (e.g. 12MP/48MP)
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        // Nền trắng chuẩn giáo dục tránh lỗi nền trong suốt
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const optimizedBase64 = canvas.toDataURL('image/jpeg', 0.80);
+        hideLoading();
+        const initialText = `[Ảnh chụp bài học: ${file.name}]\n(Đã nạp ảnh thành công. Hãy bấm "Nhận diện chữ qua AI (OCR)" hoặc bấm trực tiếp Tạo Sơ đồ tư duy / Tóm tắt / Đề thi / Thẻ học tập để AI phân tích ngay từ bức ảnh này!)`;
+        setActiveDocument(file.name, initialText, 'image', optimizedBase64);
+        showToast('Đã nạp và tối ưu ảnh bài học thành công!', 'success');
+      };
+
+      img.onerror = () => {
+        hideLoading();
+        setActiveDocument(file.name, `[Ảnh chụp: ${file.name}]`, 'image', rawDataUrl);
+      };
+
+      img.src = rawDataUrl;
+    };
+
+    reader.onerror = () => {
+      hideLoading();
+      showToast('Không đọc được file ảnh!', 'error');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function routeUploadedFile(file) {
+    if (!file) return;
+    const name = file.name ? file.name.toLowerCase() : '';
+    const isImage = (file.type && file.type.startsWith('image/')) || /\.(jpg|jpeg|png|webp|gif|bmp|heic|svg|jfif)$/i.test(name);
+    
+    if (name.endsWith('.docx') || name.endsWith('.doc')) {
+      handleWordFile(file);
+    } else if (name.endsWith('.pdf')) {
+      handlePdfFile(file);
+    } else if (isImage) {
+      handleImageFile(file);
+    } else {
+      showToast('Định dạng file không được hỗ trợ. Vui lòng chọn Word (.docx), PDF hoặc Ảnh bài học!', 'warning');
+    }
+  }
+
+  // ================= OCR WITH GEMINI VISION =================
+  async function runOcrOnCurrentImage() {
+    if (!state.currentDoc.imageBase64) {
+      showToast('Tài liệu hiện tại không phải là ảnh!', 'warning');
+      return;
+    }
+
+    try {
+      const prompt = `Bạn là chuyên gia nhận diện văn bản (OCR) và phiên giải tài liệu học tập, ĐẶC BIỆT LÀ TOÁN HỌC & KHOA HỌC TỰ NHIÊN CẤP 2 (THCS: Lớp 6, 7, 8, 9).
+Hãy đọc cẩn thận bức ảnh này và trích xuất TOÀN BỘ nội dung bài học ra văn bản tiếng Việt rõ ràng, giữ nguyên tiêu đề, các phần đánh số (I, II, 1, 2, a, b):
+
+QUY TẮC NHẬN DẠNG CÔNG THỨC TOÁN THCS CHUẨN XÁC:
+1. Chuyển TẤT CẢ công thức Toán, biểu thức đại số, hình học sang định dạng LaTeX/KaTeX kẹp giữa dấu $ (công thức trong dòng $...$) hoặc $$ (công thức riêng dòng $$...$$).
+2. Phân số: Viết dạng \\frac{a}{b} hoặc \\frac{x + 1}{x - 2}.
+3. Căn thức: Viết dạng \\sqrt{A} hoặc \\sqrt[3]{A}.
+4. Lũy thừa, chỉ số: Viết dạng x^2, x_1, x_2, (a+b)^2.
+5. Hệ phương trình: Viết dạng \\begin{cases} ax + by = c \\\\ a'x + b'y = c' \\end{cases}.
+6. Ký hiệu hình học THCS: Góc (\\widehat{ABC} hoặc \\angle ABC), tam giác (\\triangle ABC), vuông góc (\\perp), song song (// hoặc \\parallel), đồng dạng (\\sim), độ (^\\circ).
+7. Ký hiệu logic & toán tử: \\Delta, \\Delta', \\pm, \\neq, \\ge, \\le, \\Leftrightarrow, \\Rightarrow, \\in, \\notin.
+8. Giữ nguyên cấu trúc bảng biểu, hình vẽ mô tả nếu có. Chỉ trả về nội dung đã nhận diện, không kèm lời chào.`;
+
+      const extracted = await callGeminiWithRotation(prompt, state.currentDoc.imageBase64, {
+        isJson: false,
+        maxTokens: 3000,
+        taskName: 'Đang trích xuất chữ & công thức Toán qua AI (OCR)...'
+      });
+      state.currentDoc.text = extracted;
+      state.currentDoc.wordCount = countWords(extracted);
+      dom.docStats.textContent = `${state.currentDoc.wordCount} từ (Đã nhận diện OCR) • Sẵn sàng phân tích`;
+      showToast(`Đã nhận diện xong chữ từ ảnh (${state.currentDoc.wordCount} từ)!`, 'success');
+
+      // Show in extracted text modal for verification
+      dom.extractedTextArea.value = extracted;
+      dom.extractedWordCount.textContent = `${state.currentDoc.wordCount} từ`;
+      dom.extractedTextModal.classList.remove('hidden');
+    } catch (e) {
+      showToast(e.message, 'error');
+    }
+  }
+
+  // ================= TAB NAVIGATION LOGIC =================
+  dom.tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.getAttribute('data-tab');
+      
+      // Update Tab Buttons UI
+      dom.tabButtons.forEach(b => {
+        b.classList.remove('active', 'text-indigo-600', 'border-indigo-600', 'bg-white', 'shadow-xs');
+        b.classList.add('border-transparent', 'text-slate-500');
+      });
+      btn.classList.add('active', 'text-indigo-600', 'border-indigo-600', 'bg-white', 'shadow-xs');
+      btn.classList.remove('border-transparent', 'text-slate-500');
+
+      // Update Panes
+      dom.tabPanes.forEach(pane => {
+        if (pane.id === targetId) {
+          pane.classList.remove('hidden');
+        } else {
+          pane.classList.add('hidden');
+        }
+      });
+
+      // If switched to Mindmap and instance exists, fit & center view
+      if (targetId === 'tab-mindmap' && state.markmapInstance) {
+        setTimeout(() => state.markmapInstance.fit(), 80);
+        setTimeout(() => state.markmapInstance.fit(), 250);
+        setTimeout(() => state.markmapInstance.fit(), 450);
+      }
+    });
+  });
+
+  // ================= KATEX TOÁN HỌC & CÔNG THỨC KHOA HỌC =================
+  function renderAllMath(targetEl) {
+    const el = targetEl || document.body;
+    const doRender = () => {
+      if (window.renderMathInElement) {
+        try {
+          window.renderMathInElement(el, {
+            delimiters: [
+              { left: '$$', right: '$$', display: true },
+              { left: '$', right: '$', display: false },
+              { left: '\\(', right: '\\)', display: false },
+              { left: '\\[', right: '\\]', display: true }
+            ],
+            throwOnError: false
+          });
+        } catch (e) {
+          console.warn('KaTeX render warning:', e);
+        }
+      }
+    };
+
+    if (window.renderMathInElement) {
+      doRender();
+    } else {
+      setTimeout(doRender, 200);
+      setTimeout(doRender, 600);
+    }
+  }
+
+  // ================= TAB 1: SƠ ĐỒ TƯ DUY (MINDMAP) =================
+  function renderMindmap(markdown) {
+    state.mindmapMarkdown = markdown;
+    if (dom.markdownInput) dom.markdownInput.value = markdown;
+    if (dom.mindmapEmptyState) dom.mindmapEmptyState.classList.add('hidden');
+
+    try {
+      if (window.markmap && window.markmap.Transformer && window.markmap.Markmap) {
+        const transformer = new window.markmap.Transformer();
+        const { root } = transformer.transform(markdown);
+
+        const modernPalette = ['#4f46e5', '#0284c7', '#059669', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#ea580c'];
+        const options = {
+          duration: 350,
+          colorFreezeLevel: 2,
+          paddingX: 20,
+          spacingHorizontal: 65, // Dãn cách các nhánh ngang thông thoáng
+          spacingVertical: 14,   // Dãn cách các nhánh dọc cân đối, thanh lịch
+          color: (node) => {
+            if (node.depth === 0) return '#4f46e5';
+            const idx = (node.order || 0) % modernPalette.length;
+            return modernPalette[idx];
+          }
+        };
+
+        if (!state.markmapInstance) {
+          state.markmapInstance = window.markmap.Markmap.create(dom.markmapSvg, options, root);
+        } else {
+          state.markmapInstance.setData(root);
+        }
+
+        // Tự động căn giữa hoàn hảo và phóng to vừa vặn khung nhìn
+        setTimeout(() => {
+          if (state.markmapInstance) state.markmapInstance.fit();
+        }, 80);
+        setTimeout(() => {
+          if (state.markmapInstance) state.markmapInstance.fit();
+        }, 250);
+        setTimeout(() => {
+          if (state.markmapInstance) state.markmapInstance.fit();
+        }, 450);
+      } else {
+        console.warn('Markmap library not loaded yet');
+      }
+    } catch (e) {
+      console.error('Markmap render error:', e);
+    }
+  }
+
+  async function generateMindmapWithAi() {
+    if (!state.currentDoc.text && !state.currentDoc.imageBase64) {
+      showToast('Vui lòng tải lên tài liệu học tập trước!', 'warning');
+      return;
+    }
+
+    const prompt = `Bạn là một chuyên gia sư phạm và thiết kế Sơ đồ tư duy (Mindmap) chuẩn quốc tế (Tony Buzan) cho học sinh THCS (Lớp 6, 7, 8, 9).
+Dựa trên nội dung bài học sau đây, hãy xây dựng một Sơ đồ tư duy phân cấp CỰC KỲ ĐẸP MẮT, BẮT MẮT, SINH ĐỘNG VÀ DỄ HIỂU theo định dạng Markdown tiêu chuẩn.
+
+QUY TẮC THIẾT KẾ SƠ ĐỒ TƯ DUY HIỆN ĐẠI (CHỐNG DÀI DÒNG, TĂNG TÍNH THẨM MỸ):
+1. BẮT BUỘC gắn Emoji sinh động trực quan ở ĐẦU MỖI NHÁNH (Ví dụ: # 📘 Tiêu đề chính, ## 🎯 I. Khái niệm cốt lõi, ### 💡 1. Đặc điểm nổi bật, - ⚡ Ý chính...).
+2. Từ khóa cô đọng súc tích: Mỗi gạch đầu dòng (-) chỉ ghi TỪ KHÓA NGẮN GỌN (từ 3 đến 8 từ), TUYỆT ĐỐI KHÔNG viết cả một câu văn dài lê thê làm chữ bị dính chùm vào đường kẻ. Dùng **in đậm** cho các từ khóa cốt lõi.
+3. Tỏa nhánh hình cây: Nếu có nhiều ý con, hãy tách thành các dấu gạch đầu dòng con lùi vào trong để sơ đồ bung rộng tỏa nhánh cân xứng, đẹp mắt.
+4. Viết công thức Toán/KHTN dưới dạng LaTeX kẹp giữa $ (Ví dụ: $ax^2 + bx + c = 0$, $\\Delta = b^2 - 4ac$).
+5. CHỈ TRẢ VỀ DUY NHẤT ĐOẠN MÃ MARKDOWN CỦA SƠ ĐỒ TƯ DUY, KHÔNG CÓ BẤT KỲ LỜI DẪN NÀO KHÁC.
+
+NỘI DUNG BÀI HỌC CẤP 2:
+${state.currentDoc.text}`;
+
+    try {
+      // Tối ưu hóa siêu tốc: Không gửi lại ảnh base64 nặng nếu văn bản bài học đã có sẵn
+      const imgToSend = state.currentDoc.text ? null : state.currentDoc.imageBase64;
+      const aiResponse = await callGeminiWithRotation(prompt, imgToSend, {
+        isJson: false,
+        maxTokens: 1500,
+        taskName: 'Đang tạo Sơ đồ tư duy AI...'
+      });
+      // Clean up markdown block quotes if present
+      const cleanMarkdown = aiResponse.replace(/```markdown/gi, '').replace(/```/g, '').trim();
+      renderMindmap(cleanMarkdown);
+      showToast('Đã tạo xong Sơ đồ tư duy AI!', 'success');
+    } catch (e) {
+      showToast(e.message, 'error');
+    }
+  }
+
+  // ================= TAB 2: TÓM TẮT & GỢI Ý HỌC TẬP =================
+  function renderSummary(summaryObj) {
+    state.summaryData = summaryObj;
+    dom.summaryEmptyState.classList.add('hidden');
+
+    // 1. Takeaways
+    dom.listTakeaways.innerHTML = '';
+    (summaryObj.coreTakeaways || []).forEach(item => {
+      const li = document.createElement('li');
+      li.className = 'flex items-start gap-2.5';
+      li.innerHTML = `
+        <i class="fa-solid fa-circle-check text-indigo-600 text-sm mt-0.5 shrink-0"></i>
+        <span class="leading-relaxed">${item}</span>
+      `;
+      dom.listTakeaways.appendChild(li);
+    });
+    dom.sectionTakeaways.classList.remove('hidden');
+
+    // 2. Terms Table
+    dom.tableTermsBody.innerHTML = '';
+    (summaryObj.terms || []).forEach(t => {
+      const tr = document.createElement('tr');
+      tr.className = 'hover:bg-slate-50/80 transition-colors';
+      tr.innerHTML = `
+        <td class="py-2.5 px-4 font-bold text-indigo-900 bg-indigo-50/30">${t.term}</td>
+        <td class="py-2.5 px-4 leading-relaxed">${t.definition}</td>
+      `;
+      dom.tableTermsBody.appendChild(tr);
+    });
+    dom.sectionTerms.classList.remove('hidden');
+
+    // 3. Strategies
+    if (summaryObj.studyStrategy) {
+      dom.feynmanText.textContent = summaryObj.studyStrategy.feynmanTechnique || 'Không có';
+      dom.mnemonicsText.textContent = summaryObj.studyStrategy.mnemonics || 'Không có';
+
+      dom.spacedList.innerHTML = '';
+      (summaryObj.studyStrategy.spacedSchedule || []).forEach(step => {
+        const div = document.createElement('div');
+        div.className = 'p-2 rounded-lg bg-emerald-50/60 border border-emerald-100';
+        div.innerHTML = `<span class="font-bold text-emerald-900 block">${step.day}:</span> <span class="text-slate-600">${step.task}</span>`;
+        dom.spacedList.appendChild(div);
+      });
+      dom.sectionStrategies.classList.remove('hidden');
+    }
+
+    // Render KaTeX cho công thức toán & khoa học trong phần Tóm tắt
+    setTimeout(() => {
+      renderAllMath(dom.tabSummary);
+    }, 50);
+  }
+
+  async function generateSummaryWithAi() {
+    if (!state.currentDoc.text && !state.currentDoc.imageBase64) {
+      showToast('Vui lòng tải lên tài liệu học tập trước!', 'warning');
+      return;
+    }
+
+    const prompt = `Bạn là một cố vấn giáo dục và chuyên gia tối ưu hóa phương pháp học tập dành riêng cho HỌC SINH CẤP 2 (THCS: Lớp 6, 7, 8, 9, độ tuổi 11 - 15).
+Dựa vào bài học cấp 2 sau, hãy tạo bản tóm tắt nội dung cô đọng và gợi ý học tập thông minh, sinh động, dễ tiếp thu.
+QUAN TRỌNG VỀ CÔNG THỨC TOÁN & KHOA HỌC: Bắt buộc viết các công thức toán, lý, hóa dưới dạng LaTeX kẹp giữa dấu $ (ví dụ: $ax^2 + bx + c = 0$, $\\Delta = b^2 - 4ac$, $I = \\frac{U}{R}$, $P = U \\cdot I$, $Q = I^2 R t$).
+Trả về dữ liệu dưới dạng JSON thuần túy (không bọc text ngoài lề) theo đúng cấu trúc sau:
+{
+  "coreTakeaways": [
+    "Ý cốt lõi 1 (ngắn gọn, dễ hiểu cho học sinh cấp 2)...",
+    "Ý cốt lõi 2...",
+    "Ý cốt lõi 3..."
+  ],
+  "terms": [
+    { "term": "Tên thuật ngữ", "definition": "Định nghĩa đơn giản và ví dụ thực tế đời sống" }
+  ],
+  "studyStrategy": {
+    "feynmanTechnique": "Giải thích toàn bộ bài này theo cách trực quan, vui vẻ, ví dụ đời thường để bạn bè cùng lớp 6-9 hiểu ngay trong 2 câu...",
+    "mnemonics": "Mẹo ghi nhớ siêu tốc, câu vần điệu, thơ vui hoặc từ viết tắt liên tưởng...",
+    "spacedSchedule": [
+      { "day": "Hôm nay (Sau 1h)", "task": "..." },
+      { "day": "Ngày 3", "task": "..." },
+      { "day": "Ngày 7", "task": "..." }
+    ]
+  }
+}
+
+NỘI DUNG BÀI HỌC CẤP 2:
+${state.currentDoc.text}`;
+
+    try {
+      // Tối ưu hóa siêu tốc: Không gửi lại ảnh base64 nặng nếu văn bản bài học đã có sẵn
+      const imgToSend = state.currentDoc.text ? null : state.currentDoc.imageBase64;
+      const rawRes = await callGeminiWithRotation(prompt, imgToSend, {
+        isJson: true,
+        maxTokens: 1500,
+        taskName: 'Đang tạo Tóm tắt & Gợi ý học tập AI...'
+      });
+      const parsed = safeParseJson(rawRes);
+      renderSummary(parsed);
+      showToast('Đã tạo xong Tóm tắt & Chiến lược học thông minh!', 'success');
+    } catch (e) {
+      console.error(e);
+      showToast('Lỗi khi tạo tóm tắt: ' + e.message, 'error');
+    }
+  }
+
+  // ================= TAB 3: TẠO ĐỀ THI 3 MỨC ĐỘ =================
+  function renderQuiz(quizArray) {
+    state.quizData = quizArray;
+    state.quizUserAnswers = {};
+    state.quizSubmitted = false;
+
+    dom.quizEmptyState.classList.add('hidden');
+    dom.interactiveQuizContainer.classList.remove('hidden');
+    dom.quizResultCard.classList.add('hidden');
+    dom.quizSubmitBar.classList.remove('hidden');
+
+    // Reset Progress & Timer
+    updateQuizProgress();
+    startQuizTimer();
+
+    // Render interactive cards
+    dom.quizQuestionsList.innerHTML = '';
+    quizArray.forEach((q, qIndex) => {
+      const card = document.createElement('div');
+      card.id = `quiz-card-${q.id}`;
+      card.className = 'bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3 transition-all';
+
+      const tierBadge = {
+        easy: '<span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800"><i class="fa-solid fa-leaf"></i> Mức Dễ (Nhận biết)</span>',
+        medium: '<span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800"><i class="fa-solid fa-chart-simple"></i> Trung Bình (Thông hiểu)</span>',
+        hard: '<span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800"><i class="fa-solid fa-fire-flame-curved"></i> Mức Khó (Vận dụng cao)</span>'
+      };
+
+      const optionsHtml = q.options.map((opt, optIndex) => `
+        <label class="quiz-option-label flex items-start gap-3 p-3 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30 cursor-pointer transition-all text-xs sm:text-sm text-slate-800" data-qid="${q.id}" data-opt="${optIndex}">
+          <input type="radio" name="question-${q.id}" value="${optIndex}" class="mt-0.5 text-indigo-600 focus:ring-indigo-500">
+          <span class="leading-relaxed">${opt}</span>
+        </label>
+      `).join('');
+
+      card.innerHTML = `
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+          <span class="font-extrabold text-sm text-slate-900">Câu ${qIndex + 1}</span>
+          ${tierBadge[q.tier] || tierBadge.easy}
+        </div>
+        <p class="text-sm font-semibold text-slate-800 leading-relaxed">${q.question}</p>
+        <div class="space-y-2 pt-1 options-group">
+          ${optionsHtml}
+        </div>
+        <div id="explanation-${q.id}" class="hidden p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 leading-relaxed mt-2">
+          <span class="font-bold block text-slate-900 mb-1"><i class="fa-solid fa-circle-info text-indigo-600"></i> Lời giải chi tiết:</span>
+          <p>${q.explanation || 'Không có giải thích chi tiết.'}</p>
+        </div>
+      `;
+
+      dom.quizQuestionsList.appendChild(card);
+    });
+
+    // Add radio click listeners
+    dom.quizQuestionsList.querySelectorAll('input[type="radio"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        const qId = parseInt(e.target.name.replace('question-', ''));
+        const optIndex = parseInt(e.target.value);
+        state.quizUserAnswers[qId] = optIndex;
+        updateQuizProgress();
+
+        // Highlight selected option
+        const parentCard = document.getElementById(`quiz-card-${qId}`);
+        parentCard.querySelectorAll('.quiz-option-label').forEach(label => {
+          label.classList.remove('bg-indigo-50', 'border-indigo-500', 'ring-1', 'ring-indigo-500');
+        });
+        const selectedLabel = parentCard.querySelector(`[data-opt="${optIndex}"]`);
+        if (selectedLabel) {
+          selectedLabel.classList.add('bg-indigo-50', 'border-indigo-500', 'ring-1', 'ring-indigo-500');
+        }
+      });
+    });
+
+    // Also populate printable exam sheet
+    populatePrintableExam();
+
+    // Render KaTeX cho câu hỏi trắc nghiệm & công thức toán
+    setTimeout(() => {
+      renderAllMath(dom.quizQuestionsList);
+    }, 50);
+  }
+
+  function updateQuizProgress() {
+    const total = state.quizData.length;
+    const answered = Object.keys(state.quizUserAnswers).length;
+    const pct = total > 0 ? (answered / total) * 100 : 0;
+    
+    dom.quizProgressBar.style.width = `${pct}%`;
+    dom.quizProgressText.textContent = `${answered}/${total} câu`;
+  }
+
+  function startQuizTimer() {
+    if (state.quizTimerInterval) clearInterval(state.quizTimerInterval);
+    state.quizTimeLeft = 15 * 60;
+
+    state.quizTimerInterval = setInterval(() => {
+      if (state.quizTimeLeft <= 0) {
+        clearInterval(state.quizTimerInterval);
+        showToast('Hết thời gian làm bài!', 'warning');
+        submitQuizAnswers();
+        return;
+      }
+      state.quizTimeLeft--;
+      const m = Math.floor(state.quizTimeLeft / 60).toString().padStart(2, '0');
+      const s = (state.quizTimeLeft % 60).toString().padStart(2, '0');
+      dom.quizTimerDisplay.textContent = `${m}:${s}`;
+    }, 1000);
+  }
+
+  function submitQuizAnswers() {
+    if (state.quizSubmitted) return;
+    state.quizSubmitted = true;
+    if (state.quizTimerInterval) clearInterval(state.quizTimerInterval);
+
+    let correctTotal = 0;
+    const tierScores = {
+      easy: { correct: 0, total: 0 },
+      medium: { correct: 0, total: 0 },
+      hard: { correct: 0, total: 0 }
+    };
+
+    state.quizData.forEach(q => {
+      const userChoice = state.quizUserAnswers[q.id];
+      const isCorrect = (userChoice === q.correctIndex);
+      
+      const tierKey = q.tier || 'easy';
+      if (!tierScores[tierKey]) tierScores[tierKey] = { correct: 0, total: 0 };
+      tierScores[tierKey].total++;
+
+      if (isCorrect) {
+        correctTotal++;
+        tierScores[tierKey].correct++;
+      }
+
+      // Highlight options on card
+      const card = document.getElementById(`quiz-card-${q.id}`);
+      if (card) {
+        const labels = card.querySelectorAll('.quiz-option-label');
+        labels.forEach((lbl, idx) => {
+          // Disable further clicking
+          lbl.style.pointerEvents = 'none';
+          
+          if (idx === q.correctIndex) {
+            lbl.className = 'quiz-option-label flex items-start gap-3 p-3 rounded-xl border-2 border-emerald-500 bg-emerald-50/80 text-xs sm:text-sm font-semibold text-emerald-900';
+            lbl.innerHTML += `<span class="ml-auto text-emerald-600 font-bold"><i class="fa-solid fa-check"></i> Đúng</span>`;
+          } else if (idx === userChoice && !isCorrect) {
+            lbl.className = 'quiz-option-label flex items-start gap-3 p-3 rounded-xl border-2 border-rose-500 bg-rose-50/80 text-xs sm:text-sm text-rose-900';
+            lbl.innerHTML += `<span class="ml-auto text-rose-600 font-bold"><i class="fa-solid fa-xmark"></i> Sai</span>`;
+          }
+        });
+
+        // Show explanation
+        const expBox = document.getElementById(`explanation-${q.id}`);
+        if (expBox) expBox.classList.remove('hidden');
+      }
+    });
+
+    // Render KaTeX cho lời giải chi tiết (chứa công thức toán / lý / hóa)
+    setTimeout(() => {
+      renderAllMath(dom.quizQuestionsList);
+    }, 50);
+
+    // Score on scale of 10
+    const totalQ = state.quizData.length;
+    const finalScore = totalQ > 0 ? ((correctTotal / totalQ) * 10).toFixed(1) : 0;
+
+    // Show Results
+    dom.quizResultScore.textContent = `${finalScore} / 10 Điểm`;
+    dom.quizResultSummary.textContent = `Làm đúng ${correctTotal}/${totalQ} câu hỏi (${Math.round((correctTotal/totalQ)*100)}%)`;
+    dom.scoreEasy.textContent = `${tierScores.easy.correct}/${tierScores.easy.total}`;
+    dom.scoreMedium.textContent = `${tierScores.medium.correct}/${tierScores.medium.total}`;
+    dom.scoreHard.textContent = `${tierScores.hard.correct}/${tierScores.hard.total}`;
+
+    dom.quizResultCard.classList.remove('hidden');
+    dom.quizSubmitBar.classList.add('hidden');
+    dom.quizResultCard.scrollIntoView({ behavior: 'smooth' });
+
+    // Confetti celebration if score >= 8
+    if (finalScore >= 8 && window.confetti) {
+      window.confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 } });
+    }
+
+    // Save quiz attempt to history (Learning Analytics & Progress)
+    try {
+      const historyRecord = {
+        id: Date.now(),
+        date: new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
+        title: state.currentDoc.title || 'Bài tập khảo thí',
+        score: parseFloat(finalScore),
+        correctTotal: correctTotal,
+        totalQ: totalQ,
+        percentage: Math.round((correctTotal / totalQ) * 100)
+      };
+      const existingHistory = JSON.parse(localStorage.getItem('smartedu_quiz_history') || '[]');
+      existingHistory.unshift(historyRecord);
+      if (existingHistory.length > 50) existingHistory.length = 50; // Lưu tối đa 50 lần gần nhất
+      localStorage.setItem('smartedu_quiz_history', JSON.stringify(existingHistory));
+    } catch (e) {
+      console.warn('Không thể lưu lịch sử khảo thí vào localStorage:', e);
+    }
+  }
+
+  function populatePrintableExam() {
+    dom.printExamTitle.textContent = state.currentDoc.title ? `Đề Thi Ôn Tập: ${state.currentDoc.title}` : 'Đề Thi Ôn Tập Tổng Hợp';
+    dom.printQuestionsArea.innerHTML = '';
+    dom.printAnswersArea.innerHTML = '';
+
+    state.quizData.forEach((q, idx) => {
+      // 1. Question item for student
+      const qDiv = document.createElement('div');
+      qDiv.className = 'space-y-1.5 leading-relaxed';
+      const optText = q.options.join('&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;');
+      qDiv.innerHTML = `
+        <p class="font-bold">Câu ${idx + 1} [${q.tierLabel || q.tier}]: ${q.question}</p>
+        <div class="pl-4 text-xs sm:text-sm text-slate-700 space-y-1">
+          ${q.options.map(opt => `<div>${opt}</div>`).join('')}
+        </div>
+      `;
+      dom.printQuestionsArea.appendChild(qDiv);
+
+      // 2. Answer key row
+      const aDiv = document.createElement('div');
+      aDiv.className = 'p-2 rounded bg-slate-50 border border-slate-200';
+      aDiv.innerHTML = `
+        <span class="font-bold text-slate-900">Câu ${idx + 1}: ${q.options[q.correctIndex]}</span>
+        <p class="text-slate-600 mt-0.5">↳ <em>Giải thích:</em> ${q.explanation}</p>
+      `;
+      dom.printAnswersArea.appendChild(aDiv);
+    });
+
+    // Render KaTeX cho đề in giấy giáo viên
+    setTimeout(() => {
+      renderAllMath(dom.printableExamContainer);
+    }, 50);
+  }
+
+  async function generateQuizWithAi() {
+    if (!state.currentDoc.text && !state.currentDoc.imageBase64) {
+      showToast('Vui lòng tải lên tài liệu học tập trước!', 'warning');
+      return;
+    }
+
+    const count = parseInt(dom.quizCountSelect.value) || 10;
+    
+    // Distribution calculation
+    const easyCount = Math.max(1, Math.round(count * 0.4));
+    const medCount = Math.max(1, Math.round(count * 0.4));
+    const hardCount = Math.max(1, count - easyCount - medCount);
+
+    const prompt = `Bạn là một chuyên gia ra đề thi và khảo thí giáo dục THCS chuyên nghiệp (Chương trình GDPT 2018 Cấp 2: Lớp 6, 7, 8, 9).
+Dựa trên tài liệu bài học cấp 2 sau, hãy tạo một bộ đề thi trắc nghiệm gồm ĐÚNG ${count} câu hỏi, chia chuẩn theo 3 mức độ nhận thức phù hợp lứa tuổi học sinh THCS:
+- ${easyCount} câu mức Dễ (tier: "easy" - Nhận biết, sự kiện, định nghĩa cơ bản trong SGK).
+- ${medCount} câu mức Trung bình (tier: "medium" - Thông hiểu, so sánh, giải thích hiện tượng đời sống).
+- ${hardCount} câu mức Khó (tier: "hard" - Vận dụng cao, tư duy logic, câu hỏi bẫy, bài toán hoặc thí nghiệm thực tế cấp 2).
+
+QUAN TRỌNG VỀ CÔNG THỨC TOÁN & KHOA HỌC: Bắt buộc viết các công thức toán, lý, hóa trong câu hỏi, đáp án và giải thích dưới dạng LaTeX kẹp giữa dấu $ (ví dụ: $ax^2 + bx + c = 0$, $\\Delta = b^2 - 4ac$, $I = \\frac{U}{R}$, $P = U \\cdot I$, $Q = I^2 R t$).
+Mỗi câu hỏi có 4 đáp án (A, B, C, D) với đúng 1 đáp án chính xác.
+Trả về dữ liệu dưới dạng JSON thuần túy (KHÔNG có văn bản nào ngoài JSON) theo cấu trúc mảng sau:
+[
+  {
+    "id": 1,
+    "tier": "easy",
+    "tierLabel": "Dễ (Nhận biết)",
+    "question": "Nội dung câu hỏi...",
+    "options": [
+      "A. Lựa chọn 1",
+      "B. Lựa chọn 2",
+      "C. Lựa chọn 3",
+      "D. Lựa chọn 4"
+    ],
+    "correctIndex": 0,
+    "explanation": "Giải thích chi tiết ngắn gọn vì sao đáp án này đúng và các đáp án khác sai để học sinh cấp 2 hiểu thấu đáo..."
+  }
+]
+
+NỘI DUNG BÀI HỌC CẤP 2:
+${state.currentDoc.text}`;
+
+    try {
+      // Tối ưu hóa siêu tốc: Không gửi lại ảnh base64 nặng nếu văn bản bài học đã có sẵn
+      const imgToSend = state.currentDoc.text ? null : state.currentDoc.imageBase64;
+      const rawRes = await callGeminiWithRotation(prompt, imgToSend, {
+        isJson: true,
+        maxTokens: count > 10 ? 3000 : 2000,
+        taskName: `Đang tạo bộ đề thi ${count} câu AI...`
+      });
+      const parsed = safeParseJson(rawRes);
+      renderQuiz(parsed);
+      showToast(`Đã tạo xong bộ đề thi ${count} câu phân hóa 3 mức độ!`, 'success');
+    } catch (e) {
+      console.error(e);
+      showToast('Lỗi khi tạo đề thi: ' + e.message, 'error');
+    }
+  }
+
+  // ================= TAB 4: BEAM HỌC TẬP (FLASHCARDS) =================
+  function renderBeams(beamsArray) {
+    state.beamData = beamsArray;
+    dom.beamEmptyState.classList.add('hidden');
+    dom.beamCardsGrid.classList.remove('hidden');
+
+    updateBeamMasteryUI();
+
+    dom.beamCardsGrid.innerHTML = '';
+    beamsArray.forEach((beam, bIndex) => {
+      const cardContainer = document.createElement('div');
+      cardContainer.className = 'h-72 perspective-1000 select-none';
+
+      const inner = document.createElement('div');
+      inner.className = 'flip-card-inner cursor-pointer shadow-md rounded-2xl';
+      inner.id = `beam-inner-${beam.id}`;
+
+      // Front Face
+      const front = document.createElement('div');
+      front.className = 'flip-card-front bg-white p-5 border border-slate-200 flex flex-col justify-between';
+      front.innerHTML = `
+        <div>
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">${beam.badge || `Thẻ ${bIndex + 1}`}</span>
+            <button class="tts-beam-btn text-slate-400 hover:text-indigo-600 p-1" data-index="${bIndex}" title="Nghe đọc thẻ này">
+              <i class="fa-solid fa-volume-high text-xs"></i>
+            </button>
+          </div>
+          <h4 class="text-sm font-bold text-slate-900 mt-2">${beam.title}</h4>
+          <p class="text-xs text-slate-500 mt-1 italic">💡 30s Takeaway: ${beam.takeaway || ''}</p>
+          <div class="mt-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+            <p class="text-xs font-semibold text-slate-800 leading-relaxed">${beam.frontQuestion}</p>
+          </div>
+        </div>
+        <div class="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-100">
+          <span>Bấm để lật xem đáp án</span>
+          <i class="fa-solid fa-rotate text-xs"></i>
+        </div>
+      `;
+
+      // Back Face
+      const back = document.createElement('div');
+      back.className = 'flip-card-back bg-gradient-to-br from-indigo-600 to-indigo-800 text-white p-5 flex flex-col justify-between';
+      back.innerHTML = `
+        <div>
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white">ĐÁP ÁN & CỐT LÕI</span>
+            <button class="mark-mastered-btn p-1 px-2 text-[10px] rounded bg-emerald-500 hover:bg-emerald-600 font-bold text-white transition-all" data-index="${bIndex}">
+              ${beam.mastered ? '✓ Đã thuộc' : '+ Đánh dấu thuộc'}
+            </button>
+          </div>
+          <div class="mt-3 p-3 rounded-xl bg-white/10 backdrop-blur-xs border border-white/20 text-xs leading-relaxed max-h-36 overflow-y-auto">
+            <p>${beam.backAnswer.replace(/\n/g, '<br>')}</p>
+          </div>
+          ${beam.actionPrompt ? `<p class="text-[11px] text-indigo-200 mt-2 italic">🎯 ${beam.actionPrompt}</p>` : ''}
+        </div>
+        <div class="flex items-center justify-between text-[11px] text-indigo-200 pt-2 border-t border-white/10">
+          <span>Bấm để quay lại mặt trước</span>
+          <i class="fa-solid fa-rotate text-xs"></i>
+        </div>
+      `;
+
+      inner.appendChild(front);
+      inner.appendChild(back);
+      cardContainer.appendChild(inner);
+
+      // Card flip on click
+      inner.addEventListener('click', (e) => {
+        // Prevent flip if clicking TTS or Mastered button
+        if (e.target.closest('.tts-beam-btn') || e.target.closest('.mark-mastered-btn')) return;
+        inner.classList.toggle('is-flipped');
+      });
+
+      dom.beamCardsGrid.appendChild(cardContainer);
+    });
+
+    // TTS Listeners
+    dom.beamCardsGrid.querySelectorAll('.tts-beam-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.getAttribute('data-index'));
+        speakBeam(state.beamData[idx]);
+      });
+    });
+
+    // Mastered Listeners
+    dom.beamCardsGrid.querySelectorAll('.mark-mastered-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(btn.getAttribute('data-index'));
+        state.beamData[idx].mastered = !state.beamData[idx].mastered;
+        btn.textContent = state.beamData[idx].mastered ? '✓ Đã thuộc' : '+ Đánh dấu thuộc';
+        updateBeamMasteryUI();
+      });
+    });
+
+    // Render KaTeX cho thẻ Beams
+    setTimeout(() => {
+      renderAllMath(dom.beamCardsGrid);
+    }, 50);
+  }
+
+  function updateBeamMasteryUI() {
+    const total = state.beamData.length;
+    const masteredCount = state.beamData.filter(b => b.mastered).length;
+    const pct = total > 0 ? (masteredCount / total) * 100 : 0;
+    
+    dom.beamMasteryCount.textContent = `${masteredCount}/${total}`;
+    dom.beamMasteryBar.style.width = `${pct}%`;
+  }
+
+  // ================= CHUẨN HÓA & PHÁT ÂM TIẾNG VIỆT TỰ NHIÊN =================
+  let activeSpeechAudio = null;
+  let isSpeaking = false;
+
+  function cleanVietnameseForSpeech(text) {
+    if (!text) return '';
+    let s = text;
+    // 1. Loại bỏ các block code, cú pháp markdown
+    s = s.replace(/```[\s\S]*?```/g, '');
+    s = s.replace(/[#*_`~>|]/g, ' ');
+
+    // 2. Loại bỏ dấu gạch đầu dòng (bullet points) để tuyệt đối không bị đọc thành từ "trừ"
+    s = s.replace(/(^|\n|\.\s*)[-–—•*]\s+/g, '$1 ');
+
+    // 3. Chuẩn hóa tên môn học & cấp học THCS
+    s = s.replace(/Toán\s*9/gi, 'Toán chín');
+    s = s.replace(/Toán\s*8/gi, 'Toán tám');
+    s = s.replace(/Toán\s*7/gi, 'Toán bảy');
+    s = s.replace(/Toán\s*6/gi, 'Toán sáu');
+    s = s.replace(/KHTN\s*9/gi, 'Khoa học tự nhiên chín');
+    s = s.replace(/KHTN\s*8/gi, 'Khoa học tự nhiên tám');
+    s = s.replace(/KHTN\s*7/gi, 'Khoa học tự nhiên bảy');
+    s = s.replace(/KHTN\s*6/gi, 'Khoa học tự nhiên sáu');
+    s = s.replace(/THCS/gi, 'Trung học cơ sở');
+
+    // 4. XỬ LÝ CÔNG THỨC TOÁN HỌC & LATEX CHUYÊN SÂU THCS
+    // Hệ phương trình: \begin{cases} ... \end{cases}
+    s = s.replace(/\\begin\{cases\}([\s\S]*?)\\end\{cases\}/gi, (m, content) => {
+      const equations = content.split(/\\\\/).map(eq => eq.trim()).filter(Boolean);
+      return ' Hệ phương trình gồm: ' + equations.join('; và ') + '. ';
+    });
+
+    s = s.replace(/\\Delta'/g, ' Đen-ta phẩy ');
+    s = s.replace(/\\Delta/g, ' Đen-ta ');
+    s = s.replace(/Δ'/g, ' Đen-ta phẩy ');
+    s = s.replace(/Δ/g, ' Đen-ta ');
+
+    // Ký hiệu góc hình học THCS: \widehat{ABC}, \angle ABC, ^\circ
+    s = s.replace(/\\widehat\{([a-zA-Z0-9]+)\}/g, ' góc $1 ');
+    s = s.replace(/\\angle\s*([a-zA-Z0-9]+)/g, ' góc $1 ');
+    s = s.replace(/(\d+)\^\\circ|(\d+)\s*°/g, '$1 độ');
+    s = s.replace(/\^\\circ|°/g, ' độ ');
+
+    // Tam giác: \triangle ABC
+    s = s.replace(/\\triangle\s*([a-zA-Z0-9]+)/g, ' tam giác $1 ');
+
+    // Quan hệ hình học: vuông góc, song song, đồng dạng
+    s = s.replace(/\\perp|\\bot/g, ' vuông góc với ');
+    s = s.replace(/\\parallel|\\\/\\\//g, ' song song với ');
+    s = s.replace(/\\sim\b/g, ' đồng dạng với ');
+
+    // Ký hiệu tập hợp (Toán 6, 9): \in, \notin, \subset, \cup, \cap, \emptyset
+    s = s.replace(/\\notin/g, ' không thuộc ');
+    s = s.replace(/\\in\b/g, ' thuộc ');
+    s = s.replace(/\\subset/g, ' là tập con của ');
+    s = s.replace(/\\cup/g, ' hợp ');
+    s = s.replace(/\\cap/g, ' giao ');
+    s = s.replace(/\\emptyset|\\empty/g, ' tập rỗng ');
+
+    // Trị tuyệt đối: |x|
+    s = s.replace(/\|([a-zA-Z0-9\+\-\s]+)\|/g, ' giá trị tuyệt đối của $1 ');
+
+    // Số Pi: \pi, π
+    s = s.replace(/\\pi\b|π/g, ' pi ');
+
+    // Phân số: \frac{a}{b} -> a trên b
+    s = s.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, ' $1 trên $2 ');
+
+    // Căn bậc hai: \sqrt{a} -> căn bậc hai của a
+    s = s.replace(/\\sqrt\{([^}]+)\}/g, ' căn bậc hai của $1 ');
+    s = s.replace(/\\sqrt\s*([a-zA-Z0-9]+)/g, ' căn bậc hai của $1 ');
+    s = s.replace(/√([a-zA-Z0-9]+)/g, ' căn bậc hai của $1 ');
+
+    // Dấu cộng trừ: \pm, ±
+    s = s.replace(/\\pm|±/g, ' cộng trừ ');
+
+    // Lũy thừa: x^2 -> x bình phương; x^3 -> x mũ ba
+    s = s.replace(/([a-zA-Z0-9\(\)]+)\^2\b/g, ' $1 bình phương ');
+    s = s.replace(/([a-zA-Z0-9\(\)]+)\^3\b/g, ' $1 mũ ba ');
+    s = s.replace(/([a-zA-Z0-9\(\)]+)\^\{?([0-9a-zA-Z]+)\}?/g, ' $1 mũ $2 ');
+
+    // Chỉ số dưới (Subscript): x_1, x_2
+    s = s.replace(/x_\{?1,2\}?/gi, ' x một, hai ');
+    s = s.replace(/x_\{?1\}?/gi, ' x một ');
+    s = s.replace(/x_\{?2\}?/gi, ' x hai ');
+    s = s.replace(/_\{?([0-9a-zA-Z]+)\}?/g, ' $1 ');
+
+    // Quan hệ & Toán tử so sánh
+    s = s.replace(/\\neq|≠/g, ' khác ');
+    s = s.replace(/\\ge(q)?|≥/g, ' lớn hơn hoặc bằng ');
+    s = s.replace(/\\le(q)?|≤/g, ' nhỏ hơn hoặc bằng ');
+    s = s.replace(/\\Leftrightarrow|⇔/g, ' tương đương ');
+    s = s.replace(/\\Rightarrow|⇒/g, ' suy ra ');
+    s = s.replace(/\\cdot|\\times/g, ' nhân ');
+
+    // Đơn vị khoa học phổ biến
+    s = s.replace(/1\s*kWh/gi, ' một ki-lô-oát giờ ');
+    s = s.replace(/kWh/gi, ' ki-lô-oát giờ ');
+    s = s.replace(/(\d+)\s*kW\b/gi, '$1 ki-lô-oát');
+    s = s.replace(/(\d+)\s*Ω|(\d+)\s*Ôm/gi, '$1 Ôm');
+    s = s.replace(/\\Omega|Ω/g, ' Ôm ');
+    s = s.replace(/(\d+)\s*V\b/g, '$1 Vôn');
+    s = s.replace(/(\d+)\s*A\b/g, '$1 Am-pe');
+    s = s.replace(/(\d+)\s*W\b/g, '$1 Oát');
+    s = s.replace(/(\d+)\s*J\b/g, '$1 Jun');
+
+    // Dấu phép tính (chỉ đọc phép tính khi nằm giữa các con số/ký tự toán)
+    s = s.replace(/(\d+|[a-zA-Z\)])\s*\+\s*(\d+|[a-zA-Z\(])/g, '$1 cộng $2');
+    s = s.replace(/(\d+|[a-zA-Z\)])\s*-\s*(\d+|[a-zA-Z\(])/g, '$1 trừ $2');
+    s = s.replace(/(\d+|[a-zA-Z\)])\s*=\s*(\d+|[a-zA-Z\(])/g, '$1 bằng $2');
+
+    // Dọn dẹp các ký tự LaTeX còn sót lại
+    s = s.replace(/[\$\\{\}\[\]]/g, ' ');
+    s = s.replace(/[-–—]/g, ', ');
+    s = s.replace(/\s+/g, ' ');
+    return s.trim();
+  }
+
+  // ================= BỘ GIỌNG ĐỌC AI TỰ NHIÊN & TRUYỀN CẢM =================
+  let cachedVoices = [];
+  function refreshVoices() {
+    if ('speechSynthesis' in window) {
+      cachedVoices = window.speechSynthesis.getVoices() || [];
+    }
+  }
+  if ('speechSynthesis' in window) {
+    refreshVoices();
+    window.speechSynthesis.onvoiceschanged = refreshVoices;
+  }
+
+  // Thuật toán chọn giọng AI truyền cảm và tự nhiên nhất (Ưu tiên Hoài My, Nam Minh, Google Natural)
+  function getBestVoice(langType) {
+    refreshVoices();
+    if (!cachedVoices || cachedVoices.length === 0) return null;
+
+    if (langType === 'vi') {
+      // 1. Giọng nữ ngọt ngào Hoài My (Microsoft Neural / Natural trên Edge/Windows)
+      let match = cachedVoices.find(v => (v.name.includes('HoaiMy') || v.name.includes('Hoài My')) && (v.lang.startsWith('vi') || v.lang.includes('VN')));
+      if (match) return match;
+
+      // 2. Giọng nam ấm áp Nam Minh (Microsoft Neural / Natural)
+      match = cachedVoices.find(v => (v.name.includes('NamMinh') || v.name.includes('Nam Minh')) && (v.lang.startsWith('vi') || v.lang.includes('VN')));
+      if (match) return match;
+
+      // 3. Giọng Google Tiếng Việt (Chrome nếu có)
+      match = cachedVoices.find(v => v.name.toLowerCase().includes('google') && (v.lang.startsWith('vi') || v.name.toLowerCase().includes('tiếng việt')));
+      if (match) return match;
+
+      // 4. Bất kỳ giọng nào có mã ngôn ngữ vi-VN hoặc vi
+      match = cachedVoices.find(v => (v.lang || '').toLowerCase().startsWith('vi'));
+      if (match) return match;
+
+      // NẾU KHÔNG CÓ GIỌNG TIẾNG VIỆT THỰC SỰ: TRẢ VỀ NULL ĐỂ DÙNG GIỌNG CHỊ GOOGLE ONLINE CHUẨN 100%
+      // TUYỆT ĐỐI KHÔNG DÙNG GIỌNG TIẾNG ANH (NHƯ MICROSOFT DAVID) ĐỂ ĐỌC TIẾNG VIỆT
+      return null;
+
+    } else {
+      // Giọng tiếng Anh bản ngữ chuẩn Mỹ: Jenny, Aria, Guy, Google US English
+      let match = cachedVoices.find(v => (v.name.includes('Jenny') || v.name.includes('Aria') || v.name.includes('Guy')) && (v.name.includes('Natural') || v.name.includes('Neural')));
+      if (match) return match;
+
+      match = cachedVoices.find(v => v.name.toLowerCase().includes('google') && v.lang.toLowerCase().startsWith('en'));
+      if (match) return match;
+
+      return cachedVoices.find(v => v.lang.toLowerCase() === 'en-us') || cachedVoices.find(v => v.lang.toLowerCase().startsWith('en')) || null;
+    }
+  }
+
+  let activeSpeechUtterance = null;
+  let speechKeepAliveInterval = null;
+
+  function stopAllSpeech() {
+    isSpeaking = false;
+    if (speechKeepAliveInterval) {
+      clearInterval(speechKeepAliveInterval);
+      speechKeepAliveInterval = null;
+    }
+    if (activeSpeechAudio) {
+      activeSpeechAudio.pause();
+      activeSpeechAudio.currentTime = 0;
+      activeSpeechAudio = null;
+    }
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    activeSpeechUtterance = null;
+    if (dom.btnStopTts) dom.btnStopTts.classList.add('hidden');
+    if (dom.btnStopTtsSummary) dom.btnStopTtsSummary.classList.add('hidden');
+    if (dom.btnTtsSummary) {
+      dom.btnTtsSummary.classList.remove('bg-indigo-600', 'text-white');
+      dom.btnTtsSummary.classList.add('bg-indigo-50', 'text-indigo-700');
+      const ic = dom.btnTtsSummary.querySelector('i');
+      if (ic) ic.className = 'fa-solid fa-volume-high text-indigo-600';
+    }
+  }
+
+  // MẶC ĐỊNH LUÔN LÀ TIẾNG VIỆT (Nền tảng học tập THCS Việt Nam).
+  // Chỉ chuyển sang tiếng Anh khi bài học/nội dung HOÀN TOÀN là câu tiếng Anh (không có bất kỳ dấu tiếng Việt nào).
+  function isTextEnglish(text) {
+    if (!text) return false;
+
+    // 1. Nếu có BẤT KỲ ký tự tiếng Việt có dấu nào -> 100% là Tiếng Việt!
+    const hasViDiacritics = /[àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÈÉẺẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴĐ]/.test(text);
+    if (hasViDiacritics) {
+      return false;
+    }
+
+    // 2. Nếu có các từ tiếng Việt không dấu phổ biến trong học tập -> 100% là Tiếng Việt!
+    const viKeywords = /\b(bai|hoc|tom|tat|de|thi|cau|hoi|dap|an|giai|thich|diem|cot|loi|khai|niem|thuat|ngu|meo|nho|cong|thuc|phuong|trinh|toan|khtn|thcs|lop|nghiem|he|so|khoa|sinh|su|dia|van)\b/i;
+    if (viKeywords.test(text)) {
+      return false;
+    }
+
+    // 3. Chỉ nhận diện là Tiếng Anh khi nội dung chứa các cấu trúc câu Tiếng Anh đặc trưng
+    const enPatterns = /\b(the|this is|that is|these are|those are|which of the|where is|what is|how to|listen and|choose the|correct answer|fill in the|following passage)\b/i;
+    return enPatterns.test(text);
+  }
+
+  function cleanEnglishForSpeech(text) {
+    if (!text) return '';
+    let s = text;
+    s = s.replace(/```[\s\S]*?```/g, '');
+    s = s.replace(/[#*_`~>|]/g, ' ');
+    s = s.replace(/\bQ(\d+)\b/gi, 'Question $1');
+    s = s.replace(/\bQuestion\s*(\d+)[\.:]/gi, 'Question $1. ');
+    s = s.replace(/\bA\.\s*/g, 'Option A: ');
+    s = s.replace(/\bB\.\s*/g, 'Option B: ');
+    s = s.replace(/\bC\.\s*/g, 'Option C: ');
+    s = s.replace(/\bD\.\s*/g, 'Option D: ');
+    s = s.replace(/\bvs\.\b/gi, 'versus');
+    s = s.replace(/[\$\\{\}]/g, ' ');
+    s = s.replace(/\s+/g, ' ');
+    return s.trim();
+  }
+
+  // Quản lý phong cách & tốc độ giọng đọc (Chống buồn ngủ, tăng cường sự tươi vui & tập trung)
+  state.ttsSpeed = 1.16;
+  state.voiceModeIndex = 0;
+  const voiceModes = [
+    { label: 'Hoạt bát (1.16x)', speed: 1.16, pitch: 1.06, desc: 'Tươi vui, hoạt bát, không buồn ngủ' },
+    { label: 'Cấp tốc (1.28x)', speed: 1.28, pitch: 1.08, desc: 'Nhanh nhẹn, ôn bài cấp tốc' },
+    { label: 'Tiêu chuẩn (1.05x)', speed: 1.05, pitch: 1.02, desc: 'Chuẩn mực, rõ ràng từng chữ' }
+  ];
+
+  function cycleVoiceMode() {
+    state.voiceModeIndex = (state.voiceModeIndex + 1) % voiceModes.length;
+    const mode = voiceModes[state.voiceModeIndex];
+    state.ttsSpeed = mode.speed;
+
+    const lbl1 = document.getElementById('voice-speed-label');
+    const lbl2 = document.getElementById('voice-speed-label-tab4');
+    if (lbl1) lbl1.textContent = mode.label;
+    if (lbl2) lbl2.textContent = mode.label;
+
+    showToast(`🎙️ Đã đổi phong cách giọng: ${mode.label} (${mode.desc})`, 'success');
+  }
+
+  // Phát âm trực tuyến qua Google TTS với giọng chuẩn tiếng Việt 100% tự nhiên (Chị Google)
+  function playOnlineAudioStream(chunks, lang = 'vi', onDone = null) {
+    let index = 0;
+
+    function playNext() {
+      if (!isSpeaking || index >= chunks.length) {
+        stopAllSpeech();
+        if (onDone) onDone();
+        return;
+      }
+
+      const chunk = chunks[index++];
+      const cleanChunk = chunk.replace(/[,\.;:!\?]+$/, '').trim();
+      if (!cleanChunk) {
+        playNext();
+        return;
+      }
+
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(cleanChunk)}`;
+      const audio = new Audio(url);
+      activeSpeechAudio = audio;
+      audio.playbackRate = state.ttsSpeed || 1.16; // Tốc độ nhanh nhẹn, hoạt bát, tràn đầy năng lượng!
+
+      audio.onended = () => {
+        if (isSpeaking) {
+          setTimeout(playNext, 80);
+        }
+      };
+
+      audio.onerror = (e) => {
+        console.warn('Audio stream error on chunk:', cleanChunk, e);
+        if (isSpeaking) {
+          setTimeout(playNext, 50);
+        }
+      };
+
+      audio.play().catch(err => {
+        console.warn('Audio play catch:', err);
+        if (isSpeaking) {
+          setTimeout(playNext, 50);
+        }
+      });
+    }
+
+    playNext();
+  }
+
+  // Phát âm bằng Web Speech API
+  function speakWithWebSpeech(chunks, voice, langCode, rate, pitch, onDone) {
+    let chunkIndex = 0;
+
+    speechKeepAliveInterval = setInterval(() => {
+      if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
+        window.speechSynthesis.resume();
+      }
+    }, 4500);
+
+    function next() {
+      if (!isSpeaking || chunkIndex >= chunks.length) {
+        stopAllSpeech();
+        if (onDone) onDone();
+        return;
+      }
+
+      const textChunk = chunks[chunkIndex++];
+      if (!('speechSynthesis' in window)) {
+        stopAllSpeech();
+        if (onDone) onDone();
+        return;
+      }
+
+      const utterance = new SpeechSynthesisUtterance(textChunk);
+      if (voice) utterance.voice = voice;
+      utterance.lang = langCode;
+      utterance.rate = rate;
+      utterance.pitch = pitch;
+
+      activeSpeechUtterance = utterance;
+
+      utterance.onend = () => {
+        if (isSpeaking) setTimeout(next, 80);
+      };
+      utterance.onerror = () => {
+        if (isSpeaking) setTimeout(next, 80);
+      };
+
+      try {
+        window.speechSynthesis.speak(utterance);
+      } catch (e) {
+        console.error('Speech synthesis speak error:', e);
+        stopAllSpeech();
+        if (onDone) onDone();
+      }
+    }
+
+    next();
+  }
+
+  // Phát âm thông minh: MẶC ĐỊNH LÀ TIẾNG VIỆT, chỉ đọc tiếng Anh khi thực sự là văn bản tiếng Anh
+  function playSmartSpeech(title, content, onDone = null) {
+    stopAllSpeech();
+    isSpeaking = true;
+
+    if (dom.btnStopTts) dom.btnStopTts.classList.remove('hidden');
+    if (dom.btnStopTtsSummary) dom.btnStopTtsSummary.classList.remove('hidden');
+
+    const rawText = `${title}. ${content}`;
+    const isEn = isTextEnglish(rawText);
+    const lang = isEn ? 'en' : 'vi';
+
+    const cleanedText = isEn ? cleanEnglishForSpeech(rawText) : cleanVietnameseForSpeech(rawText);
+    const voice = getBestVoice(lang);
+
+    // Tách văn bản thành các câu hoặc cụm câu ngắn gọn (< 95 ký tự để phát âm mượt nhất)
+    const rawSentences = cleanedText.split(/(?<=[.?!;:\n])\s+/);
+    const chunks = [];
+    
+    rawSentences.forEach(sentence => {
+      const s = sentence.trim();
+      if (!s) return;
+      if (s.length <= 95) {
+        chunks.push(s);
+      } else {
+        const parts = s.split(/(?<=[,])\s+/);
+        let curr = '';
+        parts.forEach(p => {
+          if ((curr + ' ' + p).length > 90) {
+            if (curr.trim()) chunks.push(curr.trim());
+            curr = p;
+          } else {
+            curr += (curr ? ' ' : '') + p;
+          }
+        });
+        if (curr.trim()) chunks.push(curr.trim());
+      }
+    });
+
+    if (chunks.length === 0) chunks.push(cleanedText);
+
+    const activeMode = voiceModes[state.voiceModeIndex] || voiceModes[0];
+
+    // TRƯỜNG HỢP 1: BÀI TIẾNG VIỆT (MẶC ĐỊNH)
+    if (!isEn) {
+      if (voice) {
+        // Nếu trình duyệt có sẵn giọng Tiếng Việt xịn (như Edge có Hoài My/Nam Minh)
+        const voiceName = voice.name.replace(/Microsoft |Google /g, '').split(' - ')[0];
+        showToast(`🔊 Đang đọc [${voiceName} - ${activeMode.label}]: "${title.slice(0, 30)}..."`, 'info');
+        speakWithWebSpeech(chunks, voice, 'vi-VN', activeMode.speed, activeMode.pitch, onDone);
+      } else {
+        // Mặc định cho mọi trình duyệt không có giọng Việt (đặc biệt Google Chrome trên Windows):
+        // DÙNG ONLINE TTS VỚI TỐC ĐỘ 1.16X HOẠT BÁT, TƯƠI VUI, KHÔNG BUỒN NGỦ
+        showToast(`🔊 Đang đọc [Chị Google - ${activeMode.label}]: "${title.slice(0, 30)}..."`, 'info');
+        playOnlineAudioStream(chunks, 'vi', onDone);
+      }
+      return;
+    }
+
+    // TRƯỜNG HỢP 2: BÀI TIẾNG ANH (Thuần tiếng Anh không có dấu)
+    showToast(`🔊 Đang đọc Tiếng Anh bản ngữ: "${title.slice(0, 30)}..."`, 'info');
+    if (voice) {
+      speakWithWebSpeech(chunks, voice, 'en-US', activeMode.speed, 1.0, onDone);
+    } else {
+      playOnlineAudioStream(chunks, 'en', onDone);
+    }
+  }
+
+  const playVietnameseText = playSmartSpeech; // Alias tương thích ngược
+
+  // Phát âm một Beam cụ thể (Tự động chuyển ngữ Tiếng Anh / Tiếng Việt)
+  function speakBeam(beam) {
+    const isEn = isTextEnglish((beam.title || '') + ' ' + (beam.frontQuestion || '') + ' ' + (beam.backAnswer || ''));
+    const title = beam.title || (isEn ? 'Knowledge Card' : 'Thẻ kiến thức');
+    const content = isEn
+      ? `Question: ${beam.frontQuestion}. Answer: ${beam.backAnswer}. ${beam.takeaway ? 'Key takeaway: ' + beam.takeaway : ''}`
+      : `Câu hỏi: ${beam.frontQuestion}. Lời giải: ${beam.backAnswer}. Trọng tâm ba mươi giây: ${beam.takeaway || ''}`;
+    playSmartSpeech(title, content);
+  }
+
+  // Focus Mode Carousel for Beams
+  function openFocusMode(startIndex = 0) {
+    if (state.beamData.length === 0) return;
+    state.focusBeamIndex = startIndex;
+    dom.beamFocusModal.classList.remove('hidden');
+    updateFocusModalCard();
+  }
+
+  function updateFocusModalCard() {
+    const b = state.beamData[state.focusBeamIndex];
+    if (!b) return;
+
+    dom.focusCounter.textContent = `Thẻ ${state.focusBeamIndex + 1} / ${state.beamData.length}`;
+    dom.focusBadge.textContent = b.badge || `THẺ #${state.focusBeamIndex + 1}`;
+    dom.focusTitle.textContent = b.title;
+    dom.focusQuestion.textContent = b.frontQuestion;
+    dom.focusAnswer.innerHTML = b.backAnswer.replace(/\n/g, '<br>');
+    dom.focusAction.textContent = b.actionPrompt ? `🎯 ${b.actionPrompt}` : '';
+    
+    // Reset flip
+    dom.focusFlipInner.classList.remove('is-flipped');
+
+    // Render KaTeX cho thẻ Focus Mode
+    setTimeout(() => {
+      renderAllMath(dom.beamFocusModal);
+    }, 50);
+  }
+
+  async function generateBeamsWithAi() {
+    if (!state.currentDoc.text && !state.currentDoc.imageBase64) {
+      showToast('Vui lòng tải lên tài liệu học tập trước!', 'warning');
+      return;
+    }
+
+    const prompt = `Bạn là một chuyên gia thiết kế trải nghiệm học tập vi mô (Micro-learning & Flashcards) dành riêng cho HỌC SINH CẤP 2 (THCS).
+Hãy chia nhỏ toàn bộ nội dung bài học cấp 2 sau đây thành 5 đến 7 "Thẻ học tập" (Flashcards kiến thức then chốt).
+Mỗi Thẻ học tập gồm thẻ lật Flashcard 3D: Mặt trước là câu hỏi kích thích tư duy / tình huống thực tế đời sống, Mặt sau là câu trả lời cô đọng và điểm cốt lõi trong 30 giây dễ nhớ với học sinh cấp 2.
+
+QUAN TRỌNG VỀ CÔNG THỨC TOÁN & KHOA HỌC: Bắt buộc viết các công thức toán, lý, hóa dưới dạng LaTeX kẹp giữa dấu $ (ví dụ: $ax^2 + bx + c = 0$, $\\Delta = b^2 - 4ac$, $I = \\frac{U}{R}$, $P = U \\cdot I$, $Q = I^2 R t$, $\\begin{cases} ax + by = c \\\\ a'x + b'y = c' \\end{cases}$).
+Trả về mảng JSON thuần túy theo cấu trúc:
+[
+  {
+    "id": 1,
+    "badge": "Thẻ 01 • Chủ đề nhỏ",
+    "title": "Tiêu đề ngắn gọn của thẻ học tập",
+    "takeaway": "Điểm cốt lõi cần nhớ trong 30 giây...",
+    "frontQuestion": "Câu hỏi / Vấn đề ở mặt trước thẻ...",
+    "backAnswer": "Lời giải thích cặn kẽ và trọng tâm ở mặt sau thẻ...",
+    "actionPrompt": "Thử thách nhanh hoặc cách ứng dụng thực tế...",
+    "mastered": false
+  }
+]
+
+NỘI DUNG BÀI HỌC CẤP 2:
+${state.currentDoc.text}`;
+
+    try {
+      // Tối ưu hóa siêu tốc: Không gửi lại ảnh base64 nặng nếu văn bản bài học đã có sẵn
+      const imgToSend = state.currentDoc.text ? null : state.currentDoc.imageBase64;
+      const rawRes = await callGeminiWithRotation(prompt, imgToSend, {
+        isJson: true,
+        maxTokens: 1800,
+        taskName: 'Đang tạo bộ Thẻ học tập Flashcards AI...'
+      });
+      const parsed = safeParseJson(rawRes);
+      renderBeams(parsed);
+      showToast('Đã tạo xong Bộ Thẻ học tập AI!', 'success');
+    } catch (e) {
+      console.error(e);
+      showToast('Lỗi khi tạo Thẻ học tập: ' + e.message, 'error');
+    }
+  }
+
+  // ================= EVENT LISTENERS =================
+
+  // Mode Toggle (File Upload vs Direct Text)
+  dom.btnModeFile.addEventListener('click', () => {
+    dom.btnModeFile.className = 'px-3 py-1.5 rounded-lg bg-white text-indigo-700 shadow-xs font-semibold flex items-center gap-1.5 transition-all';
+    dom.btnModeText.className = 'px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition-all';
+    dom.dropZoneContainer.classList.remove('hidden');
+    dom.textInputContainer.classList.add('hidden');
+  });
+
+  dom.btnModeText.addEventListener('click', () => {
+    dom.btnModeText.className = 'px-3 py-1.5 rounded-lg bg-white text-indigo-700 shadow-xs font-semibold flex items-center gap-1.5 transition-all';
+    dom.btnModeFile.className = 'px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition-all';
+    dom.textInputContainer.classList.remove('hidden');
+    dom.dropZoneContainer.classList.add('hidden');
+  });
+
+  // Drag & Drop
+  dom.dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dom.dropZone.classList.add('border-indigo-600', 'bg-indigo-50');
+  });
+
+  dom.dropZone.addEventListener('dragleave', () => {
+    dom.dropZone.classList.remove('border-indigo-600', 'bg-indigo-50');
+  });
+
+  dom.dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dom.dropZone.classList.remove('border-indigo-600', 'bg-indigo-50');
+    if (e.dataTransfer.files.length > 0) {
+      routeUploadedFile(e.dataTransfer.files[0]);
+    }
+  });
+
+  dom.dropZone.addEventListener('click', () => dom.fileInput.click());
+  dom.fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+      routeUploadedFile(e.target.files[0]);
+    }
+  });
+
+  dom.cameraInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+      routeUploadedFile(e.target.files[0]);
+    }
+  });
+
+  // Text Direct Apply
+  dom.applyTextBtn.addEventListener('click', () => {
+    const text = dom.rawTextInput.value.trim();
+    if (!text) {
+      showToast('Vui lòng nhập nội dung văn bản!', 'warning');
+      return;
+    }
+    const title = text.slice(0, 40).split('\n')[0] || 'Văn bản ghi chú';
+    setActiveDocument(title, text, 'text');
+  });
+
+  // OCR button
+  dom.btnOcrImage.addEventListener('click', runOcrOnCurrentImage);
+
+  // Clear Doc
+  dom.btnClearDoc.addEventListener('click', () => {
+    state.currentDoc = { title: '', text: '', type: '', imageBase64: null, wordCount: 0 };
+    dom.docPreviewCard.classList.add('hidden');
+    dom.rawTextInput.value = '';
+    showToast('Đã xóa tài liệu hiện tại!', 'info');
+  });
+
+  // View / Edit Extracted Text
+  dom.btnViewExtracted.addEventListener('click', () => {
+    dom.extractedTextArea.value = state.currentDoc.text;
+    dom.extractedWordCount.textContent = `${countWords(state.currentDoc.text)} từ`;
+    dom.extractedTextModal.classList.remove('hidden');
+  });
+
+  dom.btnCloseExtractedModal.addEventListener('click', () => dom.extractedTextModal.classList.add('hidden'));
+  dom.btnSaveExtractedText.addEventListener('click', () => {
+    const newText = dom.extractedTextArea.value;
+    state.currentDoc.text = newText;
+    state.currentDoc.wordCount = countWords(newText);
+    dom.docStats.textContent = `${state.currentDoc.wordCount} từ • Sẵn sàng phân tích`;
+    dom.extractedTextModal.classList.add('hidden');
+    showToast('Đã cập nhật nội dung văn bản!', 'success');
+  });
+
+  // Tab 1 Mindmap Controls
+  dom.generateMindmapBtn.addEventListener('click', generateMindmapWithAi);
+  
+  dom.btnToggleEditor.addEventListener('click', () => {
+    dom.mindmapEditorSidebar.classList.toggle('hidden');
+    if (dom.mindmapEditorSidebar.classList.contains('hidden')) {
+      dom.mindmapWrapper.className = 'lg:col-span-12 bg-white rounded-2xl border border-slate-200 shadow-sm p-2 flex flex-col relative overflow-hidden transition-all';
+    } else {
+      dom.mindmapWrapper.className = 'lg:col-span-8 bg-white rounded-2xl border border-slate-200 shadow-sm p-2 flex flex-col relative overflow-hidden transition-all';
+    }
+    if (state.markmapInstance) {
+      setTimeout(() => state.markmapInstance.fit(), 200);
+    }
+  });
+
+  dom.applyMarkdownBtn.addEventListener('click', () => {
+    const md = dom.markdownInput.value.trim();
+    if (md) {
+      renderMindmap(md);
+      showToast('Đã cập nhật sơ đồ từ mã Markdown!', 'success');
+    }
+  });
+
+  dom.btnZoomIn.addEventListener('click', () => {
+    if (state.markmapInstance) state.markmapInstance.rescale(1.25);
+  });
+  dom.btnZoomOut.addEventListener('click', () => {
+    if (state.markmapInstance) state.markmapInstance.rescale(0.8);
+  });
+  dom.btnZoomFit.addEventListener('click', () => {
+    if (state.markmapInstance) state.markmapInstance.fit();
+  });
+
+  // Chế độ phóng to toàn màn hình (PC & Điện thoại / Tablet)
+  function toggleMindmapFullscreen(enable) {
+    if (!dom.mindmapWrapper) return;
+    const isCurrentlyActive = dom.mindmapWrapper.classList.contains('mindmap-fullscreen-active');
+    const targetState = typeof enable === 'boolean' ? enable : !isCurrentlyActive;
+
+    if (targetState) {
+      dom.mindmapWrapper.classList.add('mindmap-fullscreen-active');
+      // Kích hoạt Fullscreen API trình duyệt (hoạt động tốt trên PC và Android Chrome)
+      try {
+        if (dom.mindmapWrapper.requestFullscreen) {
+          dom.mindmapWrapper.requestFullscreen().catch(() => {});
+        } else if (dom.mindmapWrapper.webkitRequestFullscreen) {
+          dom.mindmapWrapper.webkitRequestFullscreen().catch(() => {});
+        }
+      } catch (err) {
+        // Fallback: CSS fixed overlay đã đảm bảo tràn viền 100vw x 100vh trên iOS Safari
+      }
+    } else {
+      dom.mindmapWrapper.classList.remove('mindmap-fullscreen-active');
+      try {
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+          if (document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+          } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen().catch(() => {});
+          }
+        }
+      } catch (err) {}
+    }
+
+    // Tự động căn chỉnh vừa vặn sơ đồ theo kích thước khung hình mới
+    setTimeout(() => {
+      if (state.markmapInstance) state.markmapInstance.fit();
+    }, 100);
+    setTimeout(() => {
+      if (state.markmapInstance) state.markmapInstance.fit();
+    }, 350);
+  }
+
+  if (dom.btnFullscreenMindmap) {
+    dom.btnFullscreenMindmap.addEventListener('click', () => toggleMindmapFullscreen(true));
+  }
+  if (dom.btnExitFullscreen) {
+    dom.btnExitFullscreen.addEventListener('click', () => toggleMindmapFullscreen(false));
+  }
+  if (dom.btnFsFit) {
+    dom.btnFsFit.addEventListener('click', () => {
+      if (state.markmapInstance) state.markmapInstance.fit();
+    });
+  }
+  if (dom.btnFsZoomIn) {
+    dom.btnFsZoomIn.addEventListener('click', () => {
+      if (state.markmapInstance) state.markmapInstance.rescale(1.25);
+    });
+  }
+  if (dom.btnFsZoomOut) {
+    dom.btnFsZoomOut.addEventListener('click', () => {
+      if (state.markmapInstance) state.markmapInstance.rescale(0.8);
+    });
+  }
+
+  // Tự động đồng bộ khi người dùng bấm ESC hoặc phím điều hướng thoát fullscreen
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement && dom.mindmapWrapper && dom.mindmapWrapper.classList.contains('mindmap-fullscreen-active')) {
+      toggleMindmapFullscreen(false);
+    }
+  });
+  document.addEventListener('webkitfullscreenchange', () => {
+    if (!document.webkitFullscreenElement && dom.mindmapWrapper && dom.mindmapWrapper.classList.contains('mindmap-fullscreen-active')) {
+      toggleMindmapFullscreen(false);
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && dom.mindmapWrapper && dom.mindmapWrapper.classList.contains('mindmap-fullscreen-active')) {
+      toggleMindmapFullscreen(false);
+    }
+  });
+
+  // Helper lấy Bounding Box chuẩn xác của sơ đồ tư duy (đa tầng bảo đảm không bao giờ lỗi)
+  function getMindmapBoundingBox(svgEl) {
+    const rootG = svgEl.querySelector('g');
+    if (rootG) {
+      try {
+        const bbox = rootG.getBBox();
+        if (bbox && bbox.width > 20 && bbox.height > 20) {
+          return {
+            x: bbox.x,
+            y: bbox.y,
+            width: bbox.width,
+            height: bbox.height
+          };
+        }
+      } catch (e) {
+        console.warn('rootG.getBBox failed:', e);
+      }
+    }
+
+    // Fallback: Quét tọa độ thực tế của tất cả các nhánh để tính khung chữ nhật bao quanh
+    try {
+      const nodes = svgEl.querySelectorAll('g.markmap-node');
+      if (nodes && nodes.length > 0) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        nodes.forEach(node => {
+          const transform = node.getAttribute('transform') || '';
+          const m = /translate\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)/.exec(transform);
+          if (m) {
+            const nx = parseFloat(m[1]);
+            const ny = parseFloat(m[2]);
+            let nw = 160, nh = 35;
+            try {
+              const nb = node.getBBox();
+              if (nb && nb.width > 0) { nw = nb.width; nh = nb.height; }
+            } catch (e) {}
+            minX = Math.min(minX, nx);
+            minY = Math.min(minY, ny - nh);
+            maxX = Math.max(maxX, nx + nw);
+            maxY = Math.max(maxY, ny + nh);
+          }
+        });
+        if (isFinite(minX) && maxX > minX) {
+          return {
+            x: minX,
+            y: minY,
+            width: maxX - minX,
+            height: maxY - minY
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('Fallback node bbox error:', err);
+    }
+
+    const rect = svgEl.getBoundingClientRect();
+    return {
+      x: 0,
+      y: 0,
+      width: Math.max(800, rect.width || 1000),
+      height: Math.max(600, rect.height || 600)
+    };
+  }
+
+  // Chuẩn hóa SVG: Căn giữa, gỡ transform pan/zoom, nhúng font và style nét căng
+  async function prepareNormalizedMindmapSvg(svgEl) {
+    if (state.markmapInstance) {
+      state.markmapInstance.fit();
+    }
+    await new Promise(r => setTimeout(r, 180));
+
+    const bbox = getMindmapBoundingBox(svgEl);
+    const pad = 65; // Lề an toàn xung quanh nội dung
+    const minX = Math.round(bbox.x - pad);
+    const minY = Math.round(bbox.y - pad);
+    const vbW = Math.round(bbox.width + pad * 2);
+    const vbH = Math.round(bbox.height + pad * 2);
+
+    const clone = svgEl.cloneNode(true);
+    const cloneG = clone.querySelector('g');
+    if (cloneG) {
+      cloneG.removeAttribute('transform');
+    }
+
+    clone.setAttribute('viewBox', `${minX} ${minY} ${vbW} ${vbH}`);
+    clone.setAttribute('width', vbW);
+    clone.setAttribute('height', vbH);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+    // Nền trắng tinh
+    const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    bgRect.setAttribute('x', minX);
+    bgRect.setAttribute('y', minY);
+    bgRect.setAttribute('width', vbW);
+    bgRect.setAttribute('height', vbH);
+    bgRect.setAttribute('fill', '#ffffff');
+    clone.insertBefore(bgRect, clone.firstChild);
+
+    // Nhúng style sắc nét và font chữ
+    const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+    styleEl.textContent = `
+      text { font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif !important; font-weight: 600 !important; font-size: 14.5px !important; fill: #1e293b !important; }
+      .markmap-node[data-depth="0"] text { font-size: 20px !important; font-weight: 800 !important; fill: #0f172a !important; }
+      .markmap-node[data-depth="1"] text { font-size: 16px !important; font-weight: 700 !important; fill: #1e293b !important; }
+      circle { r: 6.5px !important; stroke-width: 2.2px !important; stroke: #ffffff !important; }
+      path.markmap-link { fill: none !important; stroke-width: 3px !important; stroke-linecap: round !important; }
+    `;
+    clone.insertBefore(styleEl, clone.firstChild);
+
+    const svgString = new XMLSerializer().serializeToString(clone);
+    const cleanName = (state.currentDoc.title || 'So_do_tu_duy').replace(/[^a-zA-Z0-9_\u00C0-\u024F\u1E00-\u1EFF]/g, '_');
+
+    return {
+      clone,
+      svgString,
+      vbW,
+      vbH,
+      minX,
+      minY,
+      cleanName
+    };
+  }
+
+  // Kết xuất ảnh sơ đồ tư duy PNG: Chuẩn quy tắc căn chính giữa tâm hình chữ nhật rồi phóng to ra vừa vặn file ảnh
+  async function exportMindmapAsHighResPng() {
+    const svgEl = dom.markmapSvg;
+    if (!svgEl) return;
+    
+    showLoading('Đang kết xuất ảnh chất lượng cao...', 'Căn giữa tâm hình chữ nhật và phóng to vừa vặn...');
+
+    try {
+      const { svgString, vbW, vbH, cleanName } = await prepareNormalizedMindmapSvg(svgEl);
+
+      const fallbackSvgDownload = (svgXml) => {
+        hideLoading();
+        const blob = new Blob([svgXml], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `So_do_tu_duy_${cleanName}.svg`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('Đã xuất ảnh sơ đồ tư duy dưới định dạng Vector SVG siêu nét!', 'success');
+      };
+
+      const base64DataUri = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgString)));
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+
+      const timeoutId = setTimeout(() => {
+        fallbackSvgDownload(svgString);
+      }, 3500);
+
+      img.onload = () => {
+        clearTimeout(timeoutId);
+        try {
+          const canvas = document.createElement('canvas');
+
+          // 1. TÍNH TOÁN KÍCH THƯỚC KHUNG HÌNH CHỮ NHẬT SẮC NÉT (2.5K - 3.5K HD)
+          const baseWidth = Math.max(2800, Math.min(3840, Math.round(vbW * 2.5)));
+          // Chiều cao tự nhiên theo tỷ lệ của sơ đồ tư duy
+          const naturalHeight = Math.round(baseWidth * (vbH / vbW));
+          const footerBarHeight = 90; // Khu vực dải bản quyền chân trang
+          const canvasW = baseWidth;
+          const canvasH = Math.max(1600, Math.round(naturalHeight + footerBarHeight + 100));
+
+          canvas.width = canvasW;
+          canvas.height = canvasH;
+          const ctx = canvas.getContext('2d');
+          
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+
+          // 2. ĐỔ NỀN TRẮNG TOÀN BỘ HÌNH CHỮ NHẬT
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvasW, canvasH);
+
+          // 3. ÁP DỤNG QUY TẮC CỐT LÕI: NẰM GIỮA TÂM HÌNH CHỮ NHẬT RỒI PHÓNG TO RA VỪA VẶN
+          const contentAreaHeight = canvasH - footerBarHeight;
+          const rectCenterX = canvasW / 2;
+          const rectCenterY = contentAreaHeight / 2;
+
+          // Vùng nội dung tối đa cho phép sơ đồ hiển thị (chiếm 90% khung hình chữ nhật)
+          const maxAllowedWidth = canvasW * 0.90;
+          const maxAllowedHeight = contentAreaHeight * 0.90;
+
+          // Hệ số phóng to: Nếu sơ đồ nhỏ thì phóng to lên, nếu to thì co vừa vặn
+          const scale = Math.min(maxAllowedWidth / vbW, maxAllowedHeight / vbH);
+
+          // Kích thước sau khi phóng to từ tâm
+          const drawW = Math.round(vbW * scale);
+          const drawH = Math.round(vbH * scale);
+
+          // Tọa độ vẽ: Đảm bảo TÂM sơ đồ trùng khít với TÂM hình chữ nhật
+          const drawX = Math.round(rectCenterX - (drawW / 2));
+          const drawY = Math.round(rectCenterY - (drawH / 2));
+
+          // Vẽ sơ đồ phóng to cân xứng từ tâm hình chữ nhật
+          ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+          // 4. CHÂN TRANG: ĐƯỜNG PHÂN CÁCH VÀ BẢN QUYỀN TÁC GIẢ
+          const lineY = canvasH - footerBarHeight + 15;
+          ctx.strokeStyle = '#e2e8f0';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(Math.max(80, drawX), lineY);
+          ctx.lineTo(Math.min(canvasW - 80, drawX + drawW), lineY);
+          ctx.stroke();
+
+          // Dòng chữ bên trái
+          ctx.fillStyle = '#64748b';
+          ctx.font = '600 22px "Be Vietnam Pro", -apple-system, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText('SmartEdu THCS • Sơ đồ tư duy kiến thức bài học', Math.max(80, drawX), canvasH - 32);
+
+          // Dòng chữ bên phải: Thiết kế bởi Trần Lê Long Phụng lớp 9a13 THCS Long Cang
+          ctx.textAlign = 'right';
+          ctx.font = '700 22px "Be Vietnam Pro", -apple-system, sans-serif';
+          ctx.fillStyle = '#4f46e5';
+          ctx.fillText('Thiết kế bởi Trần Lê Long Phụng lớp 9A13 - THCS Long Cang', Math.min(canvasW - 80, drawX + drawW), canvasH - 32);
+
+          // 5. XUẤT FILE ẢNH PNG
+          const dataUrl = canvas.toDataURL('image/png', 1.0);
+          const a = document.createElement('a');
+          a.href = dataUrl;
+          a.download = `So_do_tu_duy_${cleanName}.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          hideLoading();
+          showToast('Đã tải thành công ảnh sơ đồ tư duy PNG (căn đúng tâm, phóng to vừa vặn, siêu nét)!', 'success');
+        } catch (canvasErr) {
+          console.warn('Canvas render error, falling back to SVG', canvasErr);
+          fallbackSvgDownload(svgString);
+        }
+      };
+
+      img.onerror = (err) => {
+        clearTimeout(timeoutId);
+        console.warn('Image load error, fallback to SVG file download', err);
+        fallbackSvgDownload(svgString);
+      };
+
+      img.src = base64DataUri;
+
+    } catch (err) {
+      hideLoading();
+      console.error(err);
+      showToast('Lỗi xuất ảnh: ' + err.message, 'error');
+    }
+  }
+
+  dom.btnDownloadPng.addEventListener('click', () => {
+    exportMindmapAsHighResPng();
+  });
+
+  dom.btnDownloadSvg.addEventListener('click', async () => {
+    const svgEl = dom.markmapSvg;
+    if (!svgEl) return;
+    try {
+      showLoading('Đang xuất file Vector SVG...', 'Chuẩn hóa căn giữa sơ đồ tư duy...');
+      const { svgString, cleanName } = await prepareNormalizedMindmapSvg(svgEl);
+      hideLoading();
+      const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `So_do_tu_duy_${cleanName}.svg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('Đã xuất file SVG chuẩn tâm, sắc nét vô cực!', 'success');
+    } catch (e) {
+      hideLoading();
+      console.error(e);
+      showToast('Lỗi xuất file SVG!', 'error');
+    }
+  });
+
+  // Tab 2 Summary Controls
+  dom.generateSummaryBtn.addEventListener('click', generateSummaryWithAi);
+  dom.btnCopySummary.addEventListener('click', () => {
+    if (!state.summaryData) {
+      showToast('Chưa có nội dung tóm tắt để sao chép!', 'warning');
+      return;
+    }
+    let copyText = `TÓM TẮT BÀI HỌC\n\n1. ĐIỂM CỐT LÕI:\n` + 
+      (state.summaryData.coreTakeaways || []).map(t => `- ${t}`).join('\n') +
+      `\n\n2. THUẬT NGỮ CHÍNH:\n` +
+      (state.summaryData.terms || []).map(t => `- ${t.term}: ${t.definition}`).join('\n') +
+      `\n\n3. KỸ THUẬT FEYNMAN:\n${state.summaryData.studyStrategy?.feynmanTechnique || ''}`;
+    
+    navigator.clipboard.writeText(copyText).then(() => {
+      showToast('Đã sao chép nội dung tóm tắt vào clipboard!', 'success');
+    });
+  });
+
+  dom.btnPrintSummary.addEventListener('click', () => {
+    window.print();
+  });
+
+  // Lắng nghe nút Nghe đọc tóm tắt & Dừng đọc (Tự động thích ứng Anh / Việt)
+  if (dom.btnTtsSummary) {
+    dom.btnTtsSummary.addEventListener('click', () => {
+      if (!state.summaryData) {
+        if (state.currentDoc.text || state.currentDoc.imageBase64) {
+          showToast('Đang tạo bản tóm tắt bài học để đọc cho bạn, vui lòng đợi trong giây lát...', 'info');
+          generateSummaryWithAi().then(() => {
+            if (state.summaryData && dom.btnTtsSummary) {
+              setTimeout(() => dom.btnTtsSummary.click(), 300);
+            }
+          });
+          return;
+        } else {
+          showToast('Vui lòng tải lên tài liệu học tập trước khi nghe đọc!', 'warning');
+          return;
+        }
+      }
+
+      // Nếu đang đọc thì bấm lại sẽ dừng
+      if (isSpeaking) {
+        stopAllSpeech();
+        showToast('Đã dừng đọc tóm tắt.', 'info');
+        return;
+      }
+
+      const title = state.currentDoc.title || 'Tóm tắt bài học';
+      const sampleTextForDetection = title + ' ' + 
+        (state.summaryData.coreTakeaways || []).join(' ') + ' ' + 
+        (state.summaryData.terms || []).map(t => t.term + ' ' + t.definition).join(' ');
+      const isEn = isTextEnglish(sampleTextForDetection);
+
+      let speechContent = '';
+
+      if (isEn) {
+        speechContent = `Summary for lesson: ${title}. `;
+        if (state.summaryData.coreTakeaways && state.summaryData.coreTakeaways.length > 0) {
+          speechContent += `Core Takeaways. ${state.summaryData.coreTakeaways.join('. ')}. `;
+        }
+        if (state.summaryData.terms && state.summaryData.terms.length > 0) {
+          speechContent += `Key Terms and Definitions. ${state.summaryData.terms.map(t => `${t.term}: ${t.definition}`).join('. ')}. `;
+        }
+        if (state.summaryData.studyStrategy) {
+          if (state.summaryData.studyStrategy.feynmanTechnique) {
+            speechContent += `Feynman Technique: ${state.summaryData.studyStrategy.feynmanTechnique}. `;
+          }
+          if (state.summaryData.studyStrategy.mnemonics) {
+            speechContent += `Memory Tip: ${state.summaryData.studyStrategy.mnemonics}. `;
+          }
+        }
+      } else {
+        speechContent = `Tóm tắt bài học: ${title}. `;
+        if (state.summaryData.coreTakeaways && state.summaryData.coreTakeaways.length > 0) {
+          speechContent += `Điểm cốt lõi: ${state.summaryData.coreTakeaways.join('. ')}. `;
+        }
+        if (state.summaryData.terms && state.summaryData.terms.length > 0) {
+          speechContent += `Thuật ngữ chính: ${state.summaryData.terms.map(t => `${t.term}: ${t.definition}`).join('. ')}. `;
+        }
+        if (state.summaryData.studyStrategy) {
+          if (state.summaryData.studyStrategy.feynmanTechnique) {
+            speechContent += `Mẹo giải thích dễ hiểu: ${state.summaryData.studyStrategy.feynmanTechnique}. `;
+          }
+          if (state.summaryData.studyStrategy.mnemonics) {
+            speechContent += `Ghi nhớ siêu tốc: ${state.summaryData.studyStrategy.mnemonics}. `;
+          }
+        }
+      }
+
+      // Cập nhật giao diện nút đang phát âm
+      dom.btnTtsSummary.classList.add('bg-indigo-600', 'text-white');
+      dom.btnTtsSummary.classList.remove('bg-indigo-50', 'text-indigo-700');
+      const icon = dom.btnTtsSummary.querySelector('i');
+      if (icon) icon.className = 'fa-solid fa-volume-high text-white animate-bounce';
+
+      playSmartSpeech(title, speechContent, () => {
+        if (dom.btnTtsSummary) {
+          dom.btnTtsSummary.classList.remove('bg-indigo-600', 'text-white');
+          dom.btnTtsSummary.classList.add('bg-indigo-50', 'text-indigo-700');
+          const ic = dom.btnTtsSummary.querySelector('i');
+          if (ic) ic.className = 'fa-solid fa-volume-high text-indigo-600';
+        }
+      });
+    });
+  }
+
+  if (dom.btnStopTtsSummary) {
+    dom.btnStopTtsSummary.addEventListener('click', () => {
+      stopAllSpeech();
+      showToast('Đã dừng phát âm tóm tắt!', 'info');
+    });
+  }
+
+  // Nút đổi tốc độ & phong cách giọng đọc (Hoạt bát / Cấp tốc / Tiêu chuẩn)
+  const btnVoiceSpeed = document.getElementById('btn-voice-speed');
+  const btnVoiceSpeedTab4 = document.getElementById('btn-voice-speed-tab4');
+  if (btnVoiceSpeed) btnVoiceSpeed.addEventListener('click', cycleVoiceMode);
+  if (btnVoiceSpeedTab4) btnVoiceSpeedTab4.addEventListener('click', cycleVoiceMode);
+
+  // Tab 3 Quiz Controls
+  dom.generateQuizBtn.addEventListener('click', generateQuizWithAi);
+  dom.btnSubmitQuiz.addEventListener('click', submitQuizAnswers);
+  
+  dom.btnRetryQuiz.addEventListener('click', () => {
+    if (state.quizData.length > 0) {
+      renderQuiz(state.quizData);
+      showToast('Đã khởi tạo lại bài làm!', 'info');
+    }
+  });
+
+  dom.btnNewQuiz.addEventListener('click', generateQuizWithAi);
+
+  dom.btnViewInteractive.addEventListener('click', () => {
+    dom.btnViewInteractive.className = 'px-3 py-1.5 rounded-lg bg-white text-indigo-700 shadow-xs font-semibold flex items-center gap-1.5';
+    dom.btnViewPrint.className = 'px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5';
+    dom.interactiveQuizContainer.classList.remove('hidden');
+    dom.printableExamContainer.classList.add('hidden');
+  });
+
+  dom.btnViewPrint.addEventListener('click', () => {
+    dom.btnViewPrint.className = 'px-3 py-1.5 rounded-lg bg-white text-indigo-700 shadow-xs font-semibold flex items-center gap-1.5';
+    dom.btnViewInteractive.className = 'px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5';
+    dom.printableExamContainer.classList.remove('hidden');
+    dom.interactiveQuizContainer.classList.add('hidden');
+    populatePrintableExam();
+  });
+
+  dom.btnPrintExam.addEventListener('click', () => {
+    dom.btnViewPrint.click();
+    setTimeout(() => window.print(), 200);
+  });
+
+  // Tab 4 Beams Controls
+  dom.generateBeamsBtn.addEventListener('click', generateBeamsWithAi);
+  
+  dom.btnBeamFocus.addEventListener('click', () => openFocusMode(0));
+  dom.btnCloseFocus.addEventListener('click', () => dom.beamFocusModal.classList.add('hidden'));
+  
+  dom.focusFlipInner.addEventListener('click', () => {
+    dom.focusFlipInner.classList.toggle('is-flipped');
+  });
+
+  dom.btnFocusPrev.addEventListener('click', () => {
+    if (state.focusBeamIndex > 0) {
+      state.focusBeamIndex--;
+      updateFocusModalCard();
+    }
+  });
+
+  dom.btnFocusNext.addEventListener('click', () => {
+    if (state.focusBeamIndex < state.beamData.length - 1) {
+      state.focusBeamIndex++;
+      updateFocusModalCard();
+    }
+  });
+
+  dom.btnFocusTts.addEventListener('click', () => {
+    if (state.beamData[state.focusBeamIndex]) {
+      speakBeam(state.beamData[state.focusBeamIndex]);
+    }
+  });
+
+  if (dom.btnFocusStopTts) {
+    dom.btnFocusStopTts.addEventListener('click', () => {
+      stopAllSpeech();
+      showToast('Đã dừng phát âm thanh Thẻ học tập!', 'info');
+    });
+  }
+
+  if (dom.btnStopTts) {
+    dom.btnStopTts.addEventListener('click', () => {
+      stopAllSpeech();
+      showToast('Đã dừng phát âm thanh Thẻ học tập!', 'info');
+    });
+  }
+
+  if (dom.btnToggleTts) {
+    dom.btnToggleTts.addEventListener('click', () => {
+      if (!state.beamData || state.beamData.length === 0) {
+        showToast('Chưa có thẻ học tập nào để đọc!', 'warning');
+        return;
+      }
+      let currentIdx = 0;
+      function playNextBeam() {
+        if (!isSpeaking || currentIdx >= state.beamData.length) {
+          if (currentIdx >= state.beamData.length) {
+            showToast('Đã đọc xong toàn bộ các thẻ học tập!', 'success');
+          }
+          return;
+        }
+        const b = state.beamData[currentIdx];
+        currentIdx++;
+        showToast(`🔊 Đang đọc Thẻ ${currentIdx}/${state.beamData.length}: ${b.title}`, 'info');
+        const text = `Thẻ số ${currentIdx}: ${b.title}. Câu hỏi: ${b.frontQuestion}. Lời giải: ${b.backAnswer}.`;
+        playVietnameseText(`Thẻ ${currentIdx}`, text, () => {
+          setTimeout(() => {
+            if (isSpeaking) playNextBeam();
+          }, 600);
+        });
+      }
+      isSpeaking = true;
+      playNextBeam();
+    });
+  }
+
+  if (dom.btnCancelLoading) {
+    dom.btnCancelLoading.addEventListener('click', () => {
+      state.userAbortedOperation = true;
+      if (state.activeAbortController) {
+        try {
+          state.activeAbortController.abort('USER_CANCELLED');
+        } catch (e) {}
+        state.activeAbortController = null;
+      }
+      hideLoading();
+      showToast('Đã hủy bỏ thao tác.', 'info');
+    });
+  }
+
+  dom.btnFocusMastered.addEventListener('click', () => {
+    const b = state.beamData[state.focusBeamIndex];
+    if (b) {
+      b.mastered = true;
+      updateBeamMasteryUI();
+      showToast(`Đã đánh dấu thuộc Thẻ ${state.focusBeamIndex + 1}!`, 'success');
+      if (state.focusBeamIndex < state.beamData.length - 1) {
+        state.focusBeamIndex++;
+        updateFocusModalCard();
+      }
+    }
+  });
+
+  // Keyboard navigation for Focus Mode
+  document.addEventListener('keydown', (e) => {
+    if (!dom.beamFocusModal.classList.contains('hidden')) {
+      if (e.key === 'ArrowLeft') dom.btnFocusPrev.click();
+      if (e.key === 'ArrowRight') dom.btnFocusNext.click();
+      if (e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        dom.focusFlipInner.classList.toggle('is-flipped');
+      }
+      if (e.key === 'Escape') dom.btnCloseFocus.click();
+    }
+  });
+
+  // Key Manager Modal
+  window.openKeyModal = function() {
+    if (dom.keyModal) {
+      dom.keyModal.classList.remove('hidden');
+      updateKeyPoolUI();
+    }
+  };
+
+  if (dom.openKeyModalBtn) {
+    dom.openKeyModalBtn.addEventListener('click', window.openKeyModal);
+  }
+  if (dom.openKeyModalBtnDesktop) {
+    dom.openKeyModalBtnDesktop.addEventListener('click', window.openKeyModal);
+  }
+
+  if (dom.selectGeminiModel) {
+    dom.selectGeminiModel.addEventListener('change', (e) => {
+      state.selectedModel = e.target.value;
+      localStorage.setItem('smartedu_selected_model', state.selectedModel);
+      showToast(`Đã chọn mô hình: ${state.selectedModel}`, 'info');
+    });
+  }
+
+  dom.btnCloseKeyModal.addEventListener('click', () => dom.keyModal.classList.add('hidden'));
+  dom.btnSaveKeyModal.addEventListener('click', () => {
+    state.selectedModel = dom.selectGeminiModel.value;
+    saveApiKeysToStorage();
+    dom.keyModal.classList.add('hidden');
+    showToast('Đã lưu cấu hình API Key!', 'success');
+  });
+
+  dom.btnAddKeys.addEventListener('click', () => {
+    const raw = dom.inputMultipleKeys.value.trim();
+    if (!raw) {
+      showToast('Vui lòng dán ít nhất 1 API Key!', 'warning');
+      return;
+    }
+
+    // Split by newline or comma
+    const rawList = raw.split(/[\n,]+/).map(k => k.trim()).filter(k => k.length > 10);
+    if (rawList.length === 0) {
+      showToast('Không tìm thấy API Key hợp lệ!', 'warning');
+      return;
+    }
+
+    let addedCount = 0;
+    rawList.forEach(k => {
+      // Check duplicate
+      if (!state.apiKeys.some(existing => existing.key === k)) {
+        state.apiKeys.push({
+          key: k,
+          status: 'ready',
+          successCount: 0
+        });
+        addedCount++;
+      }
+    });
+
+    dom.inputMultipleKeys.value = '';
+    saveApiKeysToStorage();
+    showToast(`Đã thêm thành công ${addedCount} API Key vào kho!`, 'success');
+  });
+
+  dom.btnTestAllKeys.addEventListener('click', async () => {
+    for (let i = 0; i < state.apiKeys.length; i++) {
+      await testSingleKey(i);
+    }
+  });
+
+  // ================= LOAD SAMPLE LESSON (DEMO CẤP 2 - THCS) =================
+  function loadSpecificLesson(demo, label = '', autoScroll = true) {
+    if (!demo) {
+      showToast('Không tìm thấy dữ liệu bài học mẫu!', 'error');
+      return;
+    }
+
+    setActiveDocument(demo.title, demo.rawContent, 'text');
+
+    // Load sample Mindmap
+    renderMindmap(demo.mindmapMarkdown);
+
+    // Load sample Summary
+    renderSummary(demo.summary);
+
+    // Load sample Quiz
+    renderQuiz(demo.quiz);
+
+    // Load sample Beams
+    renderBeams(demo.beams);
+
+    // Render toàn bộ công thức KaTeX trên toàn trang
+    setTimeout(() => {
+      renderAllMath();
+    }, 100);
+
+    // Tự động cuộn xuống khu vực học tập để học sinh thấy ngay bài học
+    if (autoScroll) {
+      setTimeout(() => {
+        const tabsNav = document.querySelector('.tab-buttons-container');
+        if (tabsNav) {
+          tabsNav.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        if (state.markmapInstance) {
+          setTimeout(() => state.markmapInstance.fit(), 200);
+        }
+      }, 150);
+    }
+
+    showToast(`Đã mở bài mẫu: ${demo.title}!`, 'success');
+  }
+
+  // Expose global helper for inline onclick & reliable access
+  window.loadSpecificLessonById = function(key) {
+    const demo = window.SAMPLE_LESSONS?.[key];
+    if (demo) {
+      loadSpecificLesson(demo, demo.title, true);
+    } else {
+      showToast('Đang tải dữ liệu bài học...', 'info');
+      setTimeout(() => {
+        const retry = window.SAMPLE_LESSONS?.[key];
+        if (retry) loadSpecificLesson(retry, retry.title, true);
+      }, 300);
+    }
+  };
+
+  if (dom.loadSampleToan9Btn) {
+    dom.loadSampleToan9Btn.addEventListener('click', () => {
+      const toan9 = window.SAMPLE_LESSONS?.toan9;
+      loadSpecificLesson(toan9, 'Toán 9 (THCS)', true);
+    });
+  }
+
+  if (dom.loadSampleKhtn9Btn) {
+    dom.loadSampleKhtn9Btn.addEventListener('click', () => {
+      const khtn9 = window.SAMPLE_LESSONS?.khtn9;
+      loadSpecificLesson(khtn9, 'KHTN 9 (THCS)', true);
+    });
+  }
+
+  if (dom.loadSampleKhtn8Btn) {
+    dom.loadSampleKhtn8Btn.addEventListener('click', () => {
+      const khtn8 = window.SAMPLE_LESSONS?.khtn8;
+      loadSpecificLesson(khtn8, 'KHTN 8 (THCS)', true);
+    });
+  }
+
+  if (dom.loadSampleKhtn7Btn) {
+    dom.loadSampleKhtn7Btn.addEventListener('click', () => {
+      const khtn7 = window.SAMPLE_LESSONS?.khtn7 || window.SAMPLE_LESSON;
+      loadSpecificLesson(khtn7, 'KHTN 7 (THCS)', true);
+    });
+  }
+
+  if (dom.btnEnterLesson) {
+    dom.btnEnterLesson.addEventListener('click', () => {
+      const tabsNav = document.querySelector('.tab-buttons-container');
+      if (tabsNav) {
+        tabsNav.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  }
+
+  // ================= PWA SERVICE WORKER REGISTRATION =================
+  if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => {
+          console.log('[SmartEdu PWA] Service Worker đăng ký thành công:', reg.scope);
+        })
+        .catch(err => {
+          console.warn('[SmartEdu PWA] Đăng ký Service Worker thất bại:', err);
+        });
+    });
+  }
+
+  // ================= SHARE QR CODE MODAL =================
+  const btnShareQr = document.getElementById('btn-share-qr');
+  const btnShareQrMobile = document.getElementById('btn-share-qr-mobile');
+  const modalShareQr = document.getElementById('modal-share-qr');
+  const btnCloseQrModal = document.getElementById('btn-close-qr-modal');
+  const qrModalImg = document.getElementById('qr-modal-img');
+  const shareQrUrlInput = document.getElementById('share-qr-url-input');
+  const btnCopyShareUrl = document.getElementById('btn-copy-share-url');
+
+  function openShareQrModal() {
+    if (!modalShareQr) return;
+    const currentUrl = window.location.href.split('#')[0];
+    if (shareQrUrlInput) shareQrUrlInput.value = currentUrl;
+    if (qrModalImg) {
+      const encodedUrl = encodeURIComponent(currentUrl);
+      qrModalImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=10&data=${encodedUrl}`;
+    }
+    modalShareQr.classList.remove('hidden');
+  }
+
+  function closeShareQrModal() {
+    if (modalShareQr) modalShareQr.classList.add('hidden');
+  }
+
+  if (btnShareQr) btnShareQr.addEventListener('click', openShareQrModal);
+  if (btnShareQrMobile) btnShareQrMobile.addEventListener('click', openShareQrModal);
+  if (btnCloseQrModal) btnCloseQrModal.addEventListener('click', closeShareQrModal);
+  if (modalShareQr) {
+    modalShareQr.addEventListener('click', (e) => {
+      if (e.target === modalShareQr) closeShareQrModal();
+    });
+  }
+
+  if (btnCopyShareUrl) {
+    btnCopyShareUrl.addEventListener('click', () => {
+      if (shareQrUrlInput) {
+        shareQrUrlInput.select();
+        navigator.clipboard.writeText(shareQrUrlInput.value).then(() => {
+          showToast('Đã sao chép liên kết vào bộ nhớ tạm!', 'success');
+        }).catch(() => {
+          document.execCommand('copy');
+          showToast('Đã sao chép liên kết!', 'success');
+        });
+      }
+    });
+  }
+
+  // ================= QUIZ HISTORY & PROGRESS MODAL =================
+  const btnQuizHistory = document.getElementById('btn-quiz-history');
+  const modalQuizHistory = document.getElementById('modal-quiz-history');
+  const btnCloseQuizHistory = document.getElementById('btn-close-quiz-history-modal');
+  const btnDoneQuizHistory = document.getElementById('btn-done-quiz-history');
+  const btnClearQuizHistory = document.getElementById('btn-clear-quiz-history');
+  const quizHistoryTableBody = document.getElementById('quiz-history-table-body');
+  const quizHistoryEmpty = document.getElementById('quiz-history-empty');
+
+  const statTotalTests = document.getElementById('quiz-stat-total-tests');
+  const statMaxScore = document.getElementById('quiz-stat-max-score');
+  const statAvgScore = document.getElementById('quiz-stat-avg-score');
+  const statTotalCorrect = document.getElementById('quiz-stat-total-correct');
+
+  function renderQuizHistory() {
+    if (!quizHistoryTableBody) return;
+    const history = JSON.parse(localStorage.getItem('smartedu_quiz_history') || '[]');
+    
+    if (history.length === 0) {
+      quizHistoryTableBody.innerHTML = '';
+      if (quizHistoryEmpty) quizHistoryEmpty.classList.remove('hidden');
+      if (statTotalTests) statTotalTests.textContent = '0';
+      if (statMaxScore) statMaxScore.textContent = '0.0';
+      if (statAvgScore) statAvgScore.textContent = '0.0';
+      if (statTotalCorrect) statTotalCorrect.textContent = '0';
+      return;
+    }
+
+    if (quizHistoryEmpty) quizHistoryEmpty.classList.add('hidden');
+
+    let totalScore = 0;
+    let maxScore = 0;
+    let totalCorrect = 0;
+
+    quizHistoryTableBody.innerHTML = history.map(item => {
+      const scoreNum = parseFloat(item.score) || 0;
+      totalScore += scoreNum;
+      if (scoreNum > maxScore) maxScore = scoreNum;
+      totalCorrect += (item.correctTotal || 0);
+
+      const scoreBadgeColor = scoreNum >= 8 
+        ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
+        : (scoreNum >= 5 ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-rose-100 text-rose-800 border-rose-300');
+
+      return `
+        <tr class="hover:bg-slate-50/80 transition-colors">
+          <td class="p-2.5 sm:px-3 text-slate-500 font-mono text-[11px] whitespace-nowrap">${item.date}</td>
+          <td class="p-2.5 sm:px-3 font-medium text-slate-800 max-w-[180px] sm:max-w-xs truncate" title="${item.title}">${item.title}</td>
+          <td class="p-2.5 sm:px-3 text-center font-semibold text-slate-700">${item.correctTotal}/${item.totalQ} (${item.percentage}%)</td>
+          <td class="p-2.5 sm:px-3 text-right">
+            <span class="inline-block px-2 py-0.5 rounded-md font-bold text-xs border ${scoreBadgeColor}">
+              ${scoreNum.toFixed(1)} đ
+            </span>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    const avgScore = (totalScore / history.length).toFixed(1);
+
+    if (statTotalTests) statTotalTests.textContent = history.length;
+    if (statMaxScore) statMaxScore.textContent = maxScore.toFixed(1);
+    if (statAvgScore) statAvgScore.textContent = avgScore;
+    if (statTotalCorrect) statTotalCorrect.textContent = totalCorrect;
+  }
+
+  function openQuizHistoryModal() {
+    renderQuizHistory();
+    if (modalQuizHistory) modalQuizHistory.classList.remove('hidden');
+  }
+
+  function closeQuizHistoryModal() {
+    if (modalQuizHistory) modalQuizHistory.classList.add('hidden');
+  }
+
+  if (btnQuizHistory) btnQuizHistory.addEventListener('click', openQuizHistoryModal);
+  if (btnCloseQuizHistory) btnCloseQuizHistory.addEventListener('click', closeQuizHistoryModal);
+  if (btnDoneQuizHistory) btnDoneQuizHistory.addEventListener('click', closeQuizHistoryModal);
+  if (modalQuizHistory) {
+    modalQuizHistory.addEventListener('click', (e) => {
+      if (e.target === modalQuizHistory) closeQuizHistoryModal();
+    });
+  }
+
+  if (btnClearQuizHistory) {
+    btnClearQuizHistory.addEventListener('click', () => {
+      if (confirm('Bạn có chắc chắn muốn xóa toàn bộ lịch sử làm bài thi trên máy này không?')) {
+        localStorage.removeItem('smartedu_quiz_history');
+        renderQuizHistory();
+        showToast('Đã xóa toàn bộ lịch sử khảo thí!', 'info');
+      }
+    });
+  }
+
+  // Initialize
+  loadApiKeysFromStorage();
+
+  // Kiểm tra nếu người dùng đã bấm nút trước khi DOM load xong
+  if (window._pendingLessonKey && window.SAMPLE_LESSONS?.[window._pendingLessonKey]) {
+    loadSpecificLesson(window.SAMPLE_LESSONS[window._pendingLessonKey], window._pendingLessonKey.toUpperCase(), true);
+    window._pendingLessonKey = null;
+  } else {
+    // Tự động nạp bài học mẫu cấp 2 tiêu biểu (Toán 9 - Hệ hai phương trình bậc nhất hai ẩn) khi mở trang
+    setTimeout(() => {
+      if (!state.currentDoc.text) {
+        const defaultLesson = window.SAMPLE_LESSONS?.toan9 || window.SAMPLE_LESSONS?.khtn9 || window.SAMPLE_LESSON;
+        loadSpecificLesson(defaultLesson, 'Toán 9 (THCS)', false);
+      }
+    }, 300);
+  }
+
+});
