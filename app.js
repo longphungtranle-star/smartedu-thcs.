@@ -3134,6 +3134,39 @@ ${state.currentDoc.text}`;
   // Initialize
   loadApiKeysFromStorage();
 
+  // Tự động nhận diện API Key từ biến môi trường Vercel nếu có
+  async function fetchKeyFromVercelEnv() {
+    try {
+      const res = await fetch('/api/key');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.key && typeof data.key === 'string' && data.key.trim().length > 0) {
+          const rawKeys = data.key.split(/[,\n]+/).map(k => k.trim()).filter(Boolean);
+          let added = false;
+          rawKeys.forEach(k => {
+            if (!state.apiKeys.some(existing => existing.key === k)) {
+              state.apiKeys.push({
+                key: k,
+                status: 'ready',
+                successCount: 0,
+                errorCount: 0,
+                errorDetail: 'Từ Vercel Environment'
+              });
+              added = true;
+            }
+          });
+          if (added) {
+            saveApiKeysToStorage();
+            updateKeyPoolUI();
+          }
+        }
+      }
+    } catch (e) {
+      // Bỏ qua nếu chạy offline hoặc môi trường local không có /api/key
+    }
+  }
+  fetchKeyFromVercelEnv();
+
   // Kiểm tra nếu người dùng đã bấm nút trước khi DOM load xong
   if (window._pendingLessonKey && window.SAMPLE_LESSONS?.[window._pendingLessonKey]) {
     loadSpecificLesson(window.SAMPLE_LESSONS[window._pendingLessonKey], window._pendingLessonKey.toUpperCase(), true);
