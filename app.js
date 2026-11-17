@@ -1819,7 +1819,30 @@ ${state.currentDoc.text}`;
     showToast(`🎙️ Đã đổi phong cách giọng: ${mode.label} (${mode.desc})`, 'success');
   }
 
-  // Phát âm trực tuyến qua Google TTS với giọng chuẩn tiếng Việt 100% tự nhiên (Chị Google)
+  // Khởi tạo và mở khóa âm thanh trên điện thoại ngay từ lần chạm đầu tiên
+  function unlockMobileAudio() {
+    if ('speechSynthesis' in window && !window._speechUnlocked) {
+      try {
+        const u = new SpeechSynthesisUtterance(' ');
+        u.volume = 0;
+        u.rate = 10;
+        window.speechSynthesis.speak(u);
+        window._speechUnlocked = true;
+      } catch (e) {}
+    }
+    if (!window._audioContextUnlocked) {
+      try {
+        const a = new Audio();
+        a.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+        a.volume = 0;
+        a.play().then(() => { window._audioContextUnlocked = true; }).catch(() => {});
+      } catch (e) {}
+    }
+  }
+  document.addEventListener('touchstart', unlockMobileAudio, { passive: true });
+  document.addEventListener('click', unlockMobileAudio, { passive: true });
+
+  // Phát âm trực tuyến (hỗ trợ qua Proxy /api/tts để chống chặn Referer trên Vercel)
   function playOnlineAudioStream(chunks, lang = 'vi', onDone = null) {
     let index = 0;
 
@@ -1837,10 +1860,11 @@ ${state.currentDoc.text}`;
         return;
       }
 
-      const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(cleanChunk)}`;
-      const audio = new Audio(url);
+      // 1. Ưu tiên qua API proxy serverless /api/tts (không bị chặn Referer trên điện thoại và máy tính)
+      const proxyUrl = `/api/tts?lang=${encodeURIComponent(lang)}&text=${encodeURIComponent(cleanChunk)}`;
+      const audio = new Audio(proxyUrl);
       activeSpeechAudio = audio;
-      audio.playbackRate = state.ttsSpeed || 1.16; // Tốc độ nhanh nhẹn, hoạt bát, tràn đầy năng lượng!
+      audio.playbackRate = state.ttsSpeed || 1.16;
 
       audio.onended = () => {
         if (isSpeaking) {
@@ -1850,6 +1874,18 @@ ${state.currentDoc.text}`;
 
       audio.onerror = (e) => {
         console.warn('Audio stream error on chunk:', cleanChunk, e);
+        // Fallback: nếu proxy lỗi, thử phát âm bằng Web Speech API nếu chưa thử
+        if ('speechSynthesis' in window) {
+          try {
+            const u = new SpeechSynthesisUtterance(cleanChunk);
+            u.lang = lang === 'en' ? 'en-US' : 'vi-VN';
+            u.rate = state.ttsSpeed || 1.16;
+            u.onend = () => { if (isSpeaking) setTimeout(playNext, 80); };
+            u.onerror = () => { if (isSpeaking) setTimeout(playNext, 80); };
+            window.speechSynthesis.speak(u);
+            return;
+          } catch (err) {}
+        }
         if (isSpeaking) {
           setTimeout(playNext, 50);
         }
@@ -1857,6 +1893,18 @@ ${state.currentDoc.text}`;
 
       audio.play().catch(err => {
         console.warn('Audio play catch:', err);
+        // Nếu bị chặn autoplay hoặc mạng, thử sang Web Speech API
+        if ('speechSynthesis' in window) {
+          try {
+            const u = new SpeechSynthesisUtterance(cleanChunk);
+            u.lang = lang === 'en' ? 'en-US' : 'vi-VN';
+            u.rate = state.ttsSpeed || 1.16;
+            u.onend = () => { if (isSpeaking) setTimeout(playNext, 80); };
+            u.onerror = () => { if (isSpeaking) setTimeout(playNext, 80); };
+            window.speechSynthesis.speak(u);
+            return;
+          } catch (err) {}
+        }
         if (isSpeaking) {
           setTimeout(playNext, 50);
         }
@@ -1870,11 +1918,16 @@ ${state.currentDoc.text}`;
   function speakWithWebSpeech(chunks, voice, langCode, rate, pitch, onDone) {
     let chunkIndex = 0;
 
+    // Reset lại speech queue để tránh bị treo trên Chrome / Android
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+
     speechKeepAliveInterval = setInterval(() => {
       if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
         window.speechSynthesis.resume();
       }
-    }, 4500);
+    }, 3500);
 
     function next() {
       if (!isSpeaking || chunkIndex >= chunks.length) {
@@ -1885,13 +1938,15 @@ ${state.currentDoc.text}`;
 
       const textChunk = chunks[chunkIndex++];
       if (!('speechSynthesis' in window)) {
-        stopAllSpeech();
-        if (onDone) onDone();
+        // Fallback sang online audio stream
+        playOnlineAudioStream([textChunk, ...chunks.slice(chunkIndex)], langCode.startsWith('en') ? 'en' : 'vi', onDone);
         return;
       }
 
       const utterance = new SpeechSynthesisUtterance(textChunk);
-      if (voice) utterance.voice = voice;
+      if (voice) {
+        utterance.voice = voice;
+      }
       utterance.lang = langCode;
       utterance.rate = rate;
       utterance.pitch = pitch;
@@ -1899,18 +1954,19 @@ ${state.currentDoc.text}`;
       activeSpeechUtterance = utterance;
 
       utterance.onend = () => {
-        if (isSpeaking) setTimeout(next, 80);
+        if (isSpeaking) setTimeout(next, 60);
       };
-      utterance.onerror = () => {
-        if (isSpeaking) setTimeout(next, 80);
+      utterance.onerror = (e) => {
+        console.warn('Speech error on chunk, continuing...', e);
+        if (isSpeaking) setTimeout(next, 60);
       };
 
       try {
         window.speechSynthesis.speak(utterance);
       } catch (e) {
         console.error('Speech synthesis speak error:', e);
-        stopAllSpeech();
-        if (onDone) onDone();
+        // Fallback sang online audio stream nếu Web Speech gặp lỗi
+        playOnlineAudioStream([textChunk, ...chunks.slice(chunkIndex)], langCode.startsWith('en') ? 'en' : 'vi', onDone);
       }
     }
 
@@ -1962,14 +2018,17 @@ ${state.currentDoc.text}`;
 
     // TRƯỜNG HỢP 1: BÀI TIẾNG VIỆT (MẶC ĐỊNH)
     if (!isEn) {
+      // Ưu tiên 1: Web Speech API nếu thiết bị có sẵn giọng Tiếng Việt
       if (voice) {
-        // Nếu trình duyệt có sẵn giọng Tiếng Việt xịn (như Edge có Hoài My/Nam Minh)
         const voiceName = voice.name.replace(/Microsoft |Google /g, '').split(' - ')[0];
         showToast(`🔊 Đang đọc [${voiceName} - ${activeMode.label}]: "${title.slice(0, 30)}..."`, 'info');
         speakWithWebSpeech(chunks, voice, 'vi-VN', activeMode.speed, activeMode.pitch, onDone);
+      } else if ('speechSynthesis' in window && (/Android|iPhone|iPad|Macintosh/i.test(navigator.userAgent))) {
+        // Trên điện thoại (Android / iOS): Luôn có giọng hệ thống Tiếng Việt chuẩn
+        showToast(`🔊 Đang đọc [Giọng Việt - ${activeMode.label}]: "${title.slice(0, 30)}..."`, 'info');
+        speakWithWebSpeech(chunks, null, 'vi-VN', activeMode.speed, activeMode.pitch, onDone);
       } else {
-        // Mặc định cho mọi trình duyệt không có giọng Việt (đặc biệt Google Chrome trên Windows):
-        // DÙNG ONLINE TTS VỚI TỐC ĐỘ 1.16X HOẠT BÁT, TƯƠI VUI, KHÔNG BUỒN NGỦ
+        // Trên máy tính hoặc thiết bị không có giọng Việt: dùng audio stream qua /api/tts
         showToast(`🔊 Đang đọc [Chị Google - ${activeMode.label}]: "${title.slice(0, 30)}..."`, 'info');
         playOnlineAudioStream(chunks, 'vi', onDone);
       }
@@ -1978,6 +2037,14 @@ ${state.currentDoc.text}`;
 
     // TRƯỜNG HỢP 2: BÀI TIẾNG ANH (Thuần tiếng Anh không có dấu)
     showToast(`🔊 Đang đọc Tiếng Anh bản ngữ: "${title.slice(0, 30)}..."`, 'info');
+    if (voice) {
+      speakWithWebSpeech(chunks, voice, 'en-US', activeMode.speed, 1.0, onDone);
+    } else {
+      speakWithWebSpeech(chunks, null, 'en-US', activeMode.speed, 1.0, () => {
+        playOnlineAudioStream(chunks, 'en', onDone);
+      });
+    }
+  }
     if (voice) {
       speakWithWebSpeech(chunks, voice, 'en-US', activeMode.speed, 1.0, onDone);
     } else {
