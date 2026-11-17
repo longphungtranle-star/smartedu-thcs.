@@ -1,18 +1,32 @@
 {
   "name": "SmartEdu THCS - Nền Tảng Học Tập Thông Minh Cấp 2",
   "short_name": "SmartEdu",
+  "id": "./index.html",
   "description": "Trợ lý học tập thông minh THCS: Sơ đồ tư duy, Tóm tắt, Đề thi phân hóa và Thẻ học tập",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#f8fafc",
   "theme_color": "#4f46e5",
   "orientation": "any",
   "icons": [
     {
-      "src": "icon.svg",
-      "sizes": "192x192 512x512",
-      "type": "image/svg+xml",
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ]
 }

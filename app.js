@@ -3803,10 +3803,14 @@ ${state.currentDoc.text}`;
   const btnPwaBannerDismiss = document.getElementById('btn-pwa-banner-dismiss');
   const iosInstallModal = document.getElementById('ios-install-modal');
   const btnCloseIosModal = document.getElementById('btn-close-ios-modal');
+  const androidInstallModal = document.getElementById('android-install-modal');
+  const btnCloseAndroidModal = document.getElementById('btn-close-android-modal');
+  const zaloBrowserWarning = document.getElementById('zalo-browser-warning');
 
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const isInAppBrowser = /FBAN|FBAV|Zalo|Line|Instagram|BytedanceWebview/i.test(navigator.userAgent);
 
   function showInstallUi() {
     if (isStandalone) return;
@@ -3844,6 +3848,7 @@ ${state.currentDoc.text}`;
   }
 
   async function handleInstallClick() {
+    // 1. Nếu trình duyệt đã kích hoạt native prompt (Chrome Android / Edge)
     if (deferredInstallPrompt) {
       try {
         deferredInstallPrompt.prompt();
@@ -3858,11 +3863,26 @@ ${state.currentDoc.text}`;
         console.warn('PWA install prompt error:', err);
       }
       deferredInstallPrompt = null;
-    } else if (isIos) {
-      // Hướng dẫn 3 bước trực quan trên Safari iOS
+      return;
+    }
+
+    // 2. Nếu đang dùng thiết bị Apple (iOS Safari)
+    if (isIos) {
       if (iosInstallModal) iosInstallModal.classList.remove('hidden');
+      return;
+    }
+
+    // 3. Nếu đang dùng Android hoặc trình duyệt khác khi chưa có native prompt
+    if (androidInstallModal) {
+      if (zaloBrowserWarning) {
+        if (isInAppBrowser) {
+          zaloBrowserWarning.classList.remove('hidden');
+        } else {
+          zaloBrowserWarning.classList.add('hidden');
+        }
+      }
+      androidInstallModal.classList.remove('hidden');
     } else {
-      // Thiết bị Android khi chưa có native prompt
       showToast('Bấm nút menu (⋮) ở góc trên trình duyệt rồi chọn "Cài đặt ứng dụng" hoặc "Thêm vào MH chính"!', 'info');
     }
   }
@@ -3887,6 +3907,18 @@ ${state.currentDoc.text}`;
   if (iosInstallModal) {
     iosInstallModal.addEventListener('click', (e) => {
       if (e.target === iosInstallModal) iosInstallModal.classList.add('hidden');
+    });
+  }
+
+  if (btnCloseAndroidModal && androidInstallModal) {
+    btnCloseAndroidModal.addEventListener('click', () => {
+      androidInstallModal.classList.add('hidden');
+    });
+  }
+
+  if (androidInstallModal) {
+    androidInstallModal.addEventListener('click', (e) => {
+      if (e.target === androidInstallModal) androidInstallModal.classList.add('hidden');
     });
   }
 
