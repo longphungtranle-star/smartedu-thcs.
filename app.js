@@ -1090,9 +1090,6 @@ document.addEventListener('DOMContentLoaded', () => {
       isOcrDone: type !== 'image'
     }];
     refreshMultiDocumentsState();
-    if (isSample) {
-      showToast(`Đã mở bài mẫu: ${title}`, 'success');
-    }
   }
 
   // ================= OCR WITH GEMINI VISION (NHẬN DIỆN CÔNG THỨC TOÁN - LÝ - HÓA & HÌNH VẼ CHI TIẾT) =================
@@ -4431,23 +4428,10 @@ ${state.currentDoc.text}`;
   }
   fetchKeyFromVercelEnv();
 
-  // Tự động nạp ngay bài học mẫu cấp 2 tiêu biểu (Toán 9) khi mở trang
-  const triggerDefaultLesson = () => {
-    if (!state.currentDoc.text) {
-      const defaultLesson = window.SAMPLE_LESSONS?.toan9 || window.SAMPLE_LESSONS?.khtn9 || window.SAMPLE_LESSON;
-      if (defaultLesson) {
-        loadSpecificLesson(defaultLesson, 'Toán 9 (THCS)', false, false);
-      }
-    }
-  };
-
+  // Chỉ nạp bài học mẫu khi người dùng chủ động bấm chọn bài mẫu (không tự động nạp khi khởi chạy)
   if (window._pendingLessonKey && window.SAMPLE_LESSONS?.[window._pendingLessonKey]) {
     loadSpecificLesson(window.SAMPLE_LESSONS[window._pendingLessonKey], window._pendingLessonKey.toUpperCase(), false, true);
     window._pendingLessonKey = null;
-  } else {
-    triggerDefaultLesson();
-    setTimeout(triggerDefaultLesson, 60);
-    setTimeout(triggerDefaultLesson, 300);
   }
 
 });
