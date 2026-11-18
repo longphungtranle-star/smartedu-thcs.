@@ -5,8 +5,8 @@
 > **Tác giả:** Trần Lê Long Phụng (Lớp 9A13)  
 > **Đơn vị:** Trường THCS Long Cang  
 > **Lĩnh vực:** Hệ thống phần mềm (Systems Software)  
-> **Kho mã nguồn GitHub:** [https://github.com/haidhsp2005-cyber/web_smart_thcs.git](https://github.com/haidhsp2005-cyber/web_smart_thcs.git)  
-> **Trải nghiệm trực tuyến (Live Demo):** [https://websmartthcs.vercel.app/](https://websmartthcs.vercel.app/)
+> **Kho mã nguồn GitHub:** [https://github.com/longphungtranle-star/smartedu-thcs.](https://github.com/longphungtranle-star/smartedu-thcs.)  
+> **Trải nghiệm trực tuyến (Live Demo):** [https://smartedu-thcs.vercel.app/](https://smartedu-thcs.vercel.app/)
 
 ---
 
