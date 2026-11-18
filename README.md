@@ -1,4 +1,4 @@
-# SmartEdu THCS - Nền Tảng Hỗ Trợ Học Tập & Khảo Thí Thông Minh (Chuyên Cấp 2 & Mở Rộng STEM Cấp 3)
+﻿# SmartEdu THCS - Nền Tảng Hỗ Trợ Học Tập & Khảo Thí Thông Minh (Chuyên Cấp 2 & Mở Rộng STEM Cấp 3)
 
 > **Dự án tham dự:** Cuộc Thi Khoa Học Kỹ Thuật Dành Cho Học Sinh Trung Học Cấp Trường & Cấp Tỉnh  
 > **Năm học:** 2026 – 2027  
@@ -91,14 +91,16 @@ d:\Antigravity\phan_mem_hoc_tap\
 └── Tai_Lieu_Bao_Cao_KHKT/                  # Toàn bộ hồ sơ báo cáo dự thi KHKT
     ├── 1_Ban_Mo_Ta_De_Tai/                 # Bản mô tả đề tài (PDF, Word, HTML)
     ├── 2_Giai_Thich_Code_Va_Van_Dap/       # Cẩm nang giải thích code & 17 câu hỏi GK (PDF, Word, HTML)
-    └── 3_Huong_Dan_GitHub_Vercel_Demo/     # Hướng dẫn GitHub/Vercel & Kịch bản demo (PDF, Word, HTML)
+    ├── 3_Huong_Dan_GitHub_Vercel_Demo/     # Hướng dẫn GitHub/Vercel & Kịch bản demo (PDF, Word, HTML)
+    ├── 4_Cac_Diem_Moi_Va_Nang_Cap_Dot_Pha/ # Báo cáo điểm mới & nâng cấp đột phá (PDF, Word, HTML)
+    └── 5_Huong_Dan_Su_Dung_Cho_Hoc_Sinh_THCS/ # Sổ tay hướng dẫn sử dụng dành cho học sinh THCS (PDF, Word, HTML)
 ```
 
 ---
 
 ## 🚀 Hướng Dẫn Chạy & Cài Đặt
 
-1. **Trải nghiệm ngay trên trình duyệt:** Truy cập [https://websmartthcs.vercel.app/](https://websmartthcs.vercel.app/)
+1. **Trải nghiệm ngay trên trình duyệt:** Truy cập [https://smartedu-thcs.vercel.app/](https://smartedu-thcs.vercel.app/)
 2. **Chạy cục bộ trên máy tính:**
    - Mở terminal tại thư mục dự án và chạy server nội bộ:
      ```powershell
