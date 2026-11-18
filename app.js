@@ -2047,7 +2047,7 @@ ${state.currentDoc.text.slice(0, 8000)}`;
     dom.beamCardsGrid.innerHTML = '';
     beamsArray.forEach((beam, bIndex) => {
       const cardContainer = document.createElement('div');
-      cardContainer.className = 'h-72 perspective-1000 select-none';
+      cardContainer.className = 'min-h-[380px] sm:min-h-[330px] h-[380px] sm:h-[330px] perspective-1000 select-none';
 
       const inner = document.createElement('div');
       inner.className = 'flip-card-inner cursor-pointer shadow-md rounded-2xl';
@@ -2055,7 +2055,7 @@ ${state.currentDoc.text.slice(0, 8000)}`;
 
       // Front Face
       const front = document.createElement('div');
-      front.className = 'flip-card-front bg-white p-5 border border-slate-200 flex flex-col justify-between';
+      front.className = 'flip-card-front bg-white p-5 border border-slate-200 flex flex-col justify-between overflow-y-auto';
       front.innerHTML = `
         <div>
           <div class="flex items-center justify-between">
@@ -2066,7 +2066,7 @@ ${state.currentDoc.text.slice(0, 8000)}`;
           </div>
           <h4 class="text-sm font-bold text-slate-900 mt-2">${beam.title}</h4>
           <p class="text-xs text-slate-500 mt-1 italic">💡 30s Takeaway: ${beam.takeaway || ''}</p>
-          <div class="mt-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+          <div class="mt-3 p-3 rounded-xl bg-slate-50 border border-slate-100 max-h-48 overflow-y-auto">
             <p class="text-xs font-semibold text-slate-800 leading-relaxed">${beam.frontQuestion}</p>
           </div>
         </div>
@@ -2078,7 +2078,7 @@ ${state.currentDoc.text.slice(0, 8000)}`;
 
       // Back Face
       const back = document.createElement('div');
-      back.className = 'flip-card-back bg-gradient-to-br from-indigo-600 to-indigo-800 text-white p-5 flex flex-col justify-between';
+      back.className = 'flip-card-back bg-gradient-to-br from-indigo-600 to-indigo-800 text-white p-5 flex flex-col justify-between overflow-y-auto';
       back.innerHTML = `
         <div>
           <div class="flex items-center justify-between">
@@ -2166,8 +2166,10 @@ ${state.currentDoc.text.slice(0, 8000)}`;
     s = s.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{FE00}-\u{FE0F}]/gu, ' ');
 
     // 3. Loại bỏ ký hiệu đầu dòng (bullet points) để tuyệt đối không bị đọc thành "trừ", "chấm", "gạch", "sao"
-    s = s.replace(/(^|\n|\.\s*)[-–—•*+◦▪▫►▶✓✔✕✖★☆]\s+/g, '$1 ');
-    s = s.replace(/[-–—•◦▪▫►▶✓✔✕✖★☆]/g, ' ');
+    // Chỉ loại bỏ gạch đầu dòng ở đầu câu/đầu dòng, bảo toàn dấu trừ (-) trong biểu thức toán học
+    s = s.replace(/(^|\n|\.\s*)[–—•*+◦▪▫►▶✓✔✕✖★☆]\s*/g, '$1 ');
+    s = s.replace(/(^|\n|\.\s*)-\s+/g, '$1 ');
+    s = s.replace(/[–—•◦▪▫►▶✓✔✕✖★☆]/g, ' ');
 
     // 4. Chuẩn hóa tên môn học & cấp học THCS
     s = s.replace(/Toán\s*9/gi, 'Toán chín');
@@ -2266,16 +2268,21 @@ ${state.currentDoc.text.slice(0, 8000)}`;
     s = s.replace(/(\d+|[a-zA-Z\)])\s*\+\s*(\d+|[a-zA-Z\(])/g, '$1 cộng $2');
     s = s.replace(/(\d+|[a-zA-Z\)])\s*-\s*(\d+|[a-zA-Z\(])/g, '$1 trừ $2');
     s = s.replace(/(\d+|[a-zA-Z\)])\s*=\s*(\d+|[a-zA-Z\(])/g, '$1 bằng $2');
+    s = s.replace(/\s*\+\s*/g, ' cộng ');
+    s = s.replace(/\s*-\s*/g, ' trừ ');
+    s = s.replace(/\s*=\s*/g, ' bằng ');
+    s = s.replace(/\s*>\s*/g, ' lớn hơn ');
+    s = s.replace(/\s*<\s*/g, ' nhỏ hơn ');
 
     // 6. LOẠI BỎ TOÀN BỘ KÝ TỰ ĐẶC BIỆT CÒN LẠI ĐỂ CHỈ ĐỌC NỘI DUNG VĂN BẢN THUẦN TÚY:
     // - Dấu ngoặc đơn, ngoặc vuông, ngoặc nhọn: thay bằng dấu phẩy để giọng đọc ngắt câu tự nhiên thay vì phát âm "mở ngoặc", "đóng ngoặc"
     s = s.replace(/[\(\)\[\]\{\}]/g, ', ');
     // - Dấu gạch chéo /, \: thay bằng khoảng trắng
     s = s.replace(/[\/\\]/g, ' ');
-    // - Các ký tự Markdown & đặc biệt: #, *, _, ~, >, |, @, $, ^, &, %, +, =, <, >
+    // - Các ký tự Markdown & đặc biệt
     s = s.replace(/[%]/g, ' phần trăm ');
     s = s.replace(/[&]/g, ' và ');
-    s = s.replace(/[#*_`~>|@$^+=<>]/g, ' ');
+    s = s.replace(/[#*_`~|@$^]/g, ' ');
     // - Dấu ngoặc kép, nháy đơn
     s = s.replace(/["'“”‘’«»]/g, ' ');
     // - Dấu chấm lửng ...
@@ -2522,7 +2529,7 @@ ${state.currentDoc.text.slice(0, 8000)}`;
   function splitTextIntoSpeechSentences(text) {
     if (!text) return [];
 
-    // 1. Tách văn bản theo các dấu kết thúc câu hoặc xuống dòng
+    // 1. Tách văn bản theo các dấu kết thúc câu hoặc xuống dòng (. ? ! hoặc dòng mới)
     // Đòi hỏi sau dấu chấm phải có khoảng trắng hoặc xuống dòng để tránh tách nhầm 3.14 hay công thức
     const rawSentences = text.split(/(?:[\r\n]+|[.?!]+[\s\t]+)/);
     const chunks = [];
@@ -2533,14 +2540,28 @@ ${state.currentDoc.text.slice(0, 8000)}`;
       s = s.replace(/^[,\.\s;:]+|[,\.\s;:]+$/g, '').trim();
       if (!s) return;
 
-      // Nếu câu quá dài (> 140 ký tự), chia theo dấu phẩy, chấm phẩy hoặc liên từ để giữ trọn vẹn ngữ nghĩa
+      // Nếu câu quá dài (> 120 ký tự), chia câu theo các dấu ngắt câu tự nhiên (dấu phẩy, chấm phẩy, hai chấm)
+      // TUYỆT ĐỐI KHÔNG chia theo từ (như "và", "hoặc") để bảo toàn 100% từ ngữ trong câu!
       let subParts = [];
-      if (s.length > 140) {
-        const parts = s.split(/(?:,\s+|;\s+|\s+và\s+|\s+hoặc\s+|\s+nhưng\s+)/);
-        parts.forEach(p => {
+      if (s.length > 120 && /[,;:]/.test(s)) {
+        const rawParts = s.split(/[,;:]\s+/);
+        rawParts.forEach(p => {
           const pt = p.trim();
           if (pt) subParts.push(pt);
         });
+      } else if (s.length > 130) {
+        // Nếu một câu không có dấu phẩy mà dài > 130 ký tự, tách theo từ an toàn
+        const words = s.split(/\s+/);
+        let wBuf = '';
+        words.forEach(w => {
+          if ((wBuf + ' ' + w).length <= 110) {
+            wBuf = (wBuf ? wBuf + ' ' : '') + w;
+          } else {
+            if (wBuf) subParts.push(wBuf);
+            wBuf = w;
+          }
+        });
+        if (wBuf) subParts.push(wBuf);
       } else {
         subParts = [s];
       }
@@ -2549,27 +2570,11 @@ ${state.currentDoc.text.slice(0, 8000)}`;
         const p = part.trim();
         if (!p) return;
 
-        // Nếu một cụm từ đơn lẻ vẫn quá dài (> 150 ký tự), ngắt an toàn theo khoảng trắng (từ)
-        if (p.length > 150) {
-          const words = p.split(/\s+/);
-          let wBuffer = '';
-          words.forEach(w => {
-            if ((wBuffer + ' ' + w).length <= 130) {
-              wBuffer = (wBuffer ? wBuffer + ' ' : '') + w;
-            } else {
-              if (wBuffer) chunks.push(wBuffer.trim());
-              wBuffer = w;
-            }
-          });
-          if (wBuffer.trim()) chunks.push(wBuffer.trim());
-          return;
-        }
-
-        // Gom các câu ngắn thành đoạn phát âm tự nhiên (khoảng 90 - 140 ký tự)
-        // Kích thước này chuẩn xác cho cả Web Speech API lẫn Google TTS, không bao giờ bị cắt chữ hay ngắt ngang
+        // Gom các câu ngắn thành đoạn phát âm tự nhiên (khoảng 80 - 130 ký tự)
+        // Kích thước này chuẩn xác tuyệt đối cho cả Google TTS và WebSpeech, không bao giờ bị cắt chữ hay ngắt ngang
         if (currentBuffer.length === 0) {
           currentBuffer = p;
-        } else if ((currentBuffer + ', ' + p).length <= 140) {
+        } else if ((currentBuffer + ', ' + p).length <= 130) {
           currentBuffer += ', ' + p;
         } else {
           chunks.push(currentBuffer.trim());
@@ -2585,7 +2590,7 @@ ${state.currentDoc.text.slice(0, 8000)}`;
     return chunks.length > 0 ? chunks : [text.trim()];
   }
 
-  // Phát âm trực tuyến (hỗ trợ qua Proxy /api/tts và direct Google TTS fallback)
+  // Phát âm trực tuyến Chị Google HD (hỗ trợ qua Proxy /api/tts và direct Google TTS fallback kèm tải trước thông minh)
   function playOnlineAudioStream(chunks, lang = 'vi', onDone = null, isSequence = false) {
     if (!chunks || chunks.length === 0) {
       if (!isSequence) stopAllSpeech();
@@ -2599,6 +2604,29 @@ ${state.currentDoc.text.slice(0, 8000)}`;
     }
     const audio = window._sharedTtsAudio;
     activeSpeechAudio = audio;
+
+    function buildTtsUrl(text) {
+      const cleanChunk = text.replace(/[,\.;:!\?]+$/, '').trim();
+      let safeText = cleanChunk;
+      if (safeText.length > 180) {
+        const lastSpace = safeText.lastIndexOf(' ', 180);
+        safeText = lastSpace > 100 ? safeText.slice(0, lastSpace) : safeText.slice(0, 180);
+      }
+      return `/api/tts?lang=${encodeURIComponent(lang)}&text=${encodeURIComponent(safeText)}`;
+    }
+
+    // Cơ chế tải trước (Preload) câu kế tiếp để khi câu hiện tại đọc xong là có sẵn âm thanh ngay lập tức
+    let nextPreloadAudio = null;
+    function preloadNextChunk(idx) {
+      if (idx < chunks.length) {
+        try {
+          const url = buildTtsUrl(chunks[idx]);
+          nextPreloadAudio = new Audio();
+          nextPreloadAudio.src = url;
+          nextPreloadAudio.preload = 'auto';
+        } catch (e) {}
+      }
+    }
 
     function playNextAudio() {
       if (!isSpeaking || index >= chunks.length) {
@@ -2614,8 +2642,6 @@ ${state.currentDoc.text.slice(0, 8000)}`;
         return;
       }
 
-      // Đảm bảo không bao giờ bị cắt cụt từ:
-      // Các đoạn văn bản đã được splitTextIntoSpeechSentences tối ưu <= 140 ký tự
       let safeText = cleanChunk;
       if (safeText.length > 180) {
         const lastSpace = safeText.lastIndexOf(' ', 180);
@@ -2625,6 +2651,9 @@ ${state.currentDoc.text.slice(0, 8000)}`;
       const primaryUrl = `/api/tts?lang=${encodeURIComponent(lang)}&text=${encodeURIComponent(safeText)}`;
       const fallbackUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${encodeURIComponent(lang)}&client=tw-ob&q=${encodeURIComponent(safeText)}`;
 
+      // Bắt đầu tải trước câu tiếp theo ngay lập tức để chuyển câu mượt mà
+      preloadNextChunk(index);
+
       audio.src = primaryUrl;
       audio.playbackRate = state.ttsSpeed || 1.0;
 
@@ -2633,7 +2662,7 @@ ${state.currentDoc.text.slice(0, 8000)}`;
         if (advanced) return;
         advanced = true;
         if (isSpeaking) {
-          setTimeout(playNextAudio, 60);
+          playNextAudio();
         }
       };
 
@@ -2807,22 +2836,24 @@ ${state.currentDoc.text.slice(0, 8000)}`;
 
     // TRƯỜNG HỢP 1: BÀI TIẾNG VIỆT (MẶC ĐỊNH)
     if (!isEn) {
-      if (voice) {
-        const voiceName = voice.name.replace(/Microsoft |Google /g, '').split(' - ')[0];
-        if (!isSequence) showToast(`🔊 Đang đọc [${voiceName} - ${activeMode.label}]: "${title.slice(0, 30)}..."`, 'info');
+      // 1. TRÊN ĐIỆN THOẠI DI ĐỘNG (ANDROID / IPHONE / TABLET):
+      // Giọng WebSpeech nội bộ của điện thoại (Android Google TTS) thường rè, máy móc, nuốt âm và hay rớt chữ.
+      // DÙNG NGAY GIỌNG CHỊ GOOGLE ONLINE HD (/api/tts):
+      // Chuẩn tiếng Việt 100%, cực kỳ tròn vành rõ chữ, trong trẻo, không bao giờ bị rớt bất kỳ chữ nào!
+      if (isMobile) {
+        if (!isSequence) showToast(`🔊 Đang đọc [Chị Google HD - ${activeMode.label}]: "${title.slice(0, 30)}..."`, 'info');
+        playOnlineAudioStream(chunks, 'vi', onDone, isSequence);
+        return;
+      }
+
+      // 2. TRÊN MÁY TÍNH (DESKTOP):
+      // Ưu tiên giọng Microsoft Hoài My (Edge/Windows) nếu có, vì đây là giọng Neural tự nhiên của máy tính
+      if (voice && (voice.name.includes('HoaiMy') || voice.name.includes('Hoài My'))) {
+        if (!isSequence) showToast(`🔊 Đang đọc [Hoài My Neural - ${activeMode.label}]: "${title.slice(0, 30)}..."`, 'info');
         speakWithWebSpeech(chunks, voice, 'vi-VN', activeMode.speed, activeMode.pitch, onDone, isSequence);
-      } else if ('speechSynthesis' in window && (/iPhone|iPad|Macintosh/i.test(navigator.userAgent))) {
-        // Trên iPhone/iPad/Mac: Apple có sẵn giọng Linh
-        if (!isSequence) showToast(`🔊 Đang đọc [Siri Tiếng Việt - ${activeMode.label}]: "${title.slice(0, 30)}..."`, 'info');
-        speakWithWebSpeech(chunks, null, 'vi-VN', activeMode.speed, activeMode.pitch, onDone, isSequence);
-      } else if ('speechSynthesis' in window && isMobile && cachedVoices && cachedVoices.some(v => (v.lang || '').startsWith('vi'))) {
-        // Trên điện thoại Android có cài gói tiếng Việt
-        if (!isSequence) showToast(`🔊 Đang đọc [Giọng Việt - ${activeMode.label}]: "${title.slice(0, 30)}..."`, 'info');
-        speakWithWebSpeech(chunks, null, 'vi-VN', activeMode.speed, activeMode.pitch, onDone, isSequence);
       } else {
-        // Nếu điện thoại không có sẵn giọng tiếng Việt hoặc trên máy tính:
-        // Dùng NGAY Online Audio Stream ("Chị Google") - 100% chuẩn tiếng Việt, đọc mượt từ đầu đến cuối không bao giờ bị ngắt!
-        if (!isSequence) showToast(`🔊 Đang đọc [Chị Google - ${activeMode.label}]: "${title.slice(0, 30)}..."`, 'info');
+        // Mọi trường hợp khác trên máy tính: Dùng Chị Google HD để đảm bảo chất lượng phát âm cao nhất
+        if (!isSequence) showToast(`🔊 Đang đọc [Chị Google HD - ${activeMode.label}]: "${title.slice(0, 30)}..."`, 'info');
         playOnlineAudioStream(chunks, 'vi', onDone, isSequence);
       }
       return;
