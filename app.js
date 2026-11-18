@@ -2281,7 +2281,29 @@ ${state.currentDoc.text.slice(0, 8000)}`;
     // - Dấu chấm lửng ...
     s = s.replace(/\.{2,}/g, '. ');
 
-    // 7. Làm sạch các dấu phẩy, chấm lặp và khoảng trắng dư thừa
+    // 7. TỐI ƯU HÓA NGỮ ÂM & PHÁT ÂM RÕ CHỮ, TRÁNH NUỐT TỪ (ĐẶC BIỆT LÀ CẶP TỪ NGHỀ NGHIỆP, KINH NGHIỆM)
+    // Tách các cụm từ có phụ âm đầu lặp lại hoặc thanh điệu dễ bị lướt/nuốt khi đọc nhanh:
+    s = s.replace(/\bnghề\s+nghiệp\b/gi, 'nghề, nghiệp');
+    s = s.replace(/\bhướng\s+nghiệp\b/gi, 'hướng, nghiệp');
+    s = s.replace(/\bchuyên\s+nghiệp\b/gi, 'chuyên, nghiệp');
+    s = s.replace(/\bdoanh\s+nghiệp\b/gi, 'doanh, nghiệp');
+    s = s.replace(/\bkinh\s+nghiệm\b/gi, 'kinh, nghiệm');
+    s = s.replace(/\btrải\s+nghiệm\b/gi, 'trải, nghiệm');
+    s = s.replace(/\bthực\s+nghiệm\b/gi, 'thực, nghiệm');
+    s = s.replace(/\bxét\s+nghiệm\b/gi, 'xét, nghiệm');
+    s = s.replace(/\btốt\s+nghiệp\b/gi, 'tốt, nghiệp');
+    s = s.replace(/\bkhởi\s+nghiệp\b/gi, 'khởi, nghiệp');
+    s = s.replace(/\bsự\s+nghiệp\b/gi, 'sự, nghiệp');
+    s = s.replace(/\bthất\s+nghiệp\b/gi, 'thất, nghiệp');
+    s = s.replace(/\bnông\s+nghiệp\b/gi, 'nông, nghiệp');
+    s = s.replace(/\bcông\s+nghiệp\b/gi, 'công, nghiệp');
+    s = s.replace(/\blâm\s+nghiệp\b/gi, 'lâm, nghiệp');
+    s = s.replace(/\bngư\s+nghiệp\b/gi, 'ngư, nghiệp');
+    s = s.replace(/\bhọc\s+nghề\b/gi, 'học, nghề');
+    s = s.replace(/\bdạy\s+nghề\b/gi, 'dạy, nghề');
+    s = s.replace(/\blàng\s+nghề\b/gi, 'làng, nghề');
+
+    // 8. Làm sạch các dấu phẩy, chấm lặp và khoảng trắng dư thừa
     s = s.replace(/,\s*,+/g, ',');
     s = s.replace(/\.\s*\.+/g, '.');
     s = s.replace(/,\s*\./g, '.');
@@ -2460,13 +2482,13 @@ ${state.currentDoc.text.slice(0, 8000)}`;
     return s.trim();
   }
 
-  // Quản lý phong cách & tốc độ giọng đọc (Chống buồn ngủ, tăng cường sự tươi vui & tập trung)
-  state.ttsSpeed = 1.16;
+  // Quản lý phong cách & tốc độ giọng đọc (Mặc định: 1.0x Chuẩn mực, tròn vành rõ chữ, không nuốt từ)
+  state.ttsSpeed = 1.0;
   state.voiceModeIndex = 0;
   const voiceModes = [
-    { label: 'Hoạt bát (1.16x)', speed: 1.16, pitch: 1.06, desc: 'Tươi vui, hoạt bát, không buồn ngủ' },
-    { label: 'Cấp tốc (1.28x)', speed: 1.28, pitch: 1.08, desc: 'Nhanh nhẹn, ôn bài cấp tốc' },
-    { label: 'Tiêu chuẩn (1.05x)', speed: 1.05, pitch: 1.02, desc: 'Chuẩn mực, rõ ràng từng chữ' }
+    { label: 'Tiêu chuẩn (1.0x)', speed: 1.0, pitch: 1.0, desc: 'Chuẩn mực, phát âm tròn vành rõ chữ từng từ' },
+    { label: 'Hoạt bát (1.1x)', speed: 1.1, pitch: 1.04, desc: 'Tươi vui, hoạt bát, dễ nhớ bài' },
+    { label: 'Cấp tốc (1.2x)', speed: 1.2, pitch: 1.06, desc: 'Nhanh nhẹn, ôn bài cấp tốc' }
   ];
 
   function cycleVoiceMode() {
@@ -2496,7 +2518,7 @@ ${state.currentDoc.text.slice(0, 8000)}`;
   document.addEventListener('touchstart', unlockMobileAudio, { passive: true });
   document.addEventListener('click', unlockMobileAudio, { passive: true });
 
-  // Tách văn bản thành các đoạn phát âm tự nhiên, liền mạch, tránh đứt quãng trên thiết bị di động
+  // Tách văn bản thành các đoạn phát âm tự nhiên, tròn vành rõ chữ, không sót bất kỳ từ nào
   function splitTextIntoSpeechSentences(text) {
     if (!text) return [];
 
@@ -2511,19 +2533,44 @@ ${state.currentDoc.text.slice(0, 8000)}`;
       s = s.replace(/^[,\.\s;:]+|[,\.\s;:]+$/g, '').trim();
       if (!s) return;
 
-      // Nếu một câu đơn quá dài (> 200 ký tự), chia theo dấu phẩy hoặc liên từ
-      const subParts = (s.length > 200) ? s.split(/(?:,\s+|\s+và\s+|\s+hoặc\s+)/) : [s];
+      // Nếu câu quá dài (> 140 ký tự), chia theo dấu phẩy, chấm phẩy hoặc liên từ để giữ trọn vẹn ngữ nghĩa
+      let subParts = [];
+      if (s.length > 140) {
+        const parts = s.split(/(?:,\s+|;\s+|\s+và\s+|\s+hoặc\s+|\s+nhưng\s+)/);
+        parts.forEach(p => {
+          const pt = p.trim();
+          if (pt) subParts.push(pt);
+        });
+      } else {
+        subParts = [s];
+      }
 
       subParts.forEach(part => {
         const p = part.trim();
         if (!p) return;
 
-        // Gom các câu ngắn thành đoạn phát âm tự nhiên (khoảng 130 - 220 ký tự)
-        // Việc gom này giúp giọng đọc trôi chảy như người thật và giảm 80% số lần chuyển câu gây ngắt quãng trên điện thoại
+        // Nếu một cụm từ đơn lẻ vẫn quá dài (> 150 ký tự), ngắt an toàn theo khoảng trắng (từ)
+        if (p.length > 150) {
+          const words = p.split(/\s+/);
+          let wBuffer = '';
+          words.forEach(w => {
+            if ((wBuffer + ' ' + w).length <= 130) {
+              wBuffer = (wBuffer ? wBuffer + ' ' : '') + w;
+            } else {
+              if (wBuffer) chunks.push(wBuffer.trim());
+              wBuffer = w;
+            }
+          });
+          if (wBuffer.trim()) chunks.push(wBuffer.trim());
+          return;
+        }
+
+        // Gom các câu ngắn thành đoạn phát âm tự nhiên (khoảng 90 - 140 ký tự)
+        // Kích thước này chuẩn xác cho cả Web Speech API lẫn Google TTS, không bao giờ bị cắt chữ hay ngắt ngang
         if (currentBuffer.length === 0) {
           currentBuffer = p;
-        } else if ((currentBuffer + '. ' + p).length <= 200) {
-          currentBuffer += '. ' + p;
+        } else if ((currentBuffer + ', ' + p).length <= 140) {
+          currentBuffer += ', ' + p;
         } else {
           chunks.push(currentBuffer.trim());
           currentBuffer = p;
@@ -2567,13 +2614,19 @@ ${state.currentDoc.text.slice(0, 8000)}`;
         return;
       }
 
-      // Giới hạn an toàn 190 ký tự cho API Google Translate TTS
-      const safeText = cleanChunk.slice(0, 190).trim();
+      // Đảm bảo không bao giờ bị cắt cụt từ:
+      // Các đoạn văn bản đã được splitTextIntoSpeechSentences tối ưu <= 140 ký tự
+      let safeText = cleanChunk;
+      if (safeText.length > 180) {
+        const lastSpace = safeText.lastIndexOf(' ', 180);
+        safeText = lastSpace > 100 ? safeText.slice(0, lastSpace) : safeText.slice(0, 180);
+      }
+
       const primaryUrl = `/api/tts?lang=${encodeURIComponent(lang)}&text=${encodeURIComponent(safeText)}`;
       const fallbackUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${encodeURIComponent(lang)}&client=tw-ob&q=${encodeURIComponent(safeText)}`;
 
       audio.src = primaryUrl;
-      audio.playbackRate = state.ttsSpeed || 1.15;
+      audio.playbackRate = state.ttsSpeed || 1.0;
 
       let advanced = false;
       const advance = () => {
@@ -4153,7 +4206,7 @@ ${state.currentDoc.text}`;
 
   function showInstallUi() {
     if (isStandalone) return;
-    if (btnInstallPwa) {
+    if (btnInstallPwa && !isMobile) {
       btnInstallPwa.classList.remove('hidden');
       btnInstallPwa.classList.add('flex');
     }
