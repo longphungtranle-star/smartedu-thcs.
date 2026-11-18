@@ -218,7 +218,28 @@ code, pre, .font-mono {
   }
 }
 
-/* Mobile Phone Responsive Optimizations */
+/* Mobile Phone & iOS Safari Responsive Optimizations */
+@supports (-webkit-touch-callout: none) {
+  /* Chống iOS Safari tự động phóng to màn hình khi chạm vào ô nhập dữ liệu (nếu font < 16px) */
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+/* Safe Area Insets cho iPhone X / 11 / 12 / 13 / 14 / 15 / 16 (Home Indicator & Tai thỏ/Đảo thích ứng) */
+body {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  -webkit-tap-highlight-color: transparent;
+}
+
+#pwa-install-banner {
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+.overflow-y-auto, .overflow-x-auto, .tab-buttons-container {
+  -webkit-overflow-scrolling: touch;
+}
+
 @media (max-width: 640px) {
   body {
     overflow-x: hidden;

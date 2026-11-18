@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>SmartEdu THCS - Nền Tảng Học Tập & Khảo Thí Thông Minh Dành Cho Cấp 2</title>
   
   <!-- PWA & Mobile Capabilities -->
@@ -10,6 +10,9 @@
   <meta name="theme-color" content="#4f46e5">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SmartEdu THCS">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icon-192.png">
   <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
@@ -200,7 +203,7 @@
       <!-- Mode 1: File & Image Upload Area -->
       <div id="drop-zone-container" class="mt-4">
         <div id="drop-zone" class="border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/30 hover:bg-indigo-50/60 rounded-xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-3">
-          <input type="file" id="file-input" class="hidden" accept=".docx,.doc,.pdf,image/*">
+          <input type="file" id="file-input" class="hidden" accept=".docx,.doc,.pdf,image/*" multiple>
           
           <div class="w-14 h-14 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-2xl shadow-inner">
             <i class="fa-solid fa-file-circle-plus"></i>
@@ -208,12 +211,12 @@
 
           <div>
             <p class="text-xs sm:text-sm font-semibold text-slate-800">
-              Kéo thả file vào đây hoặc <span class="text-indigo-600 hover:underline">chọn từ thiết bị</span>
+              Kéo thả một hoặc <span class="text-indigo-600 hover:underline">chọn nhiều tài liệu / ảnh bài học cùng lúc</span>
             </p>
             <p class="text-xs text-slate-500 mt-1 flex flex-wrap items-center justify-center gap-1.5">
-              <span class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200 text-[11px]"><i class="fa-solid fa-file-word"></i> Word</span>
-              <span class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-50 text-red-700 rounded border border-red-200 text-[11px]"><i class="fa-solid fa-file-pdf"></i> PDF</span>
-              <span class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded border border-emerald-200 text-[11px]"><i class="fa-solid fa-camera"></i> Ảnh / Camera</span>
+              <span class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200 text-[11px]"><i class="fa-solid fa-file-word"></i> Nhiều file Word</span>
+              <span class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-50 text-red-700 rounded border border-red-200 text-[11px]"><i class="fa-solid fa-file-pdf"></i> Nhiều file PDF</span>
+              <span class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded border border-emerald-200 text-[11px]"><i class="fa-solid fa-images"></i> Nhiều ảnh bài học / Có hình vẽ</span>
             </p>
           </div>
 
@@ -221,9 +224,9 @@
           <div class="pt-2 flex items-center gap-2">
             <label for="camera-input" class="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95">
               <i class="fa-solid fa-camera text-indigo-600"></i>
-              <span>Chụp ảnh bài học ngay</span>
+              <span>Chụp ảnh bài học / hình vẽ ngay</span>
             </label>
-            <input type="file" id="camera-input" class="hidden" accept="image/*" capture="environment">
+            <input type="file" id="camera-input" class="hidden" accept="image/*" capture="environment" multiple>
           </div>
         </div>
       </div>
@@ -241,43 +244,69 @@
       </div>
 
       <!-- ACTIVE DOCUMENT PREVIEW BANNER -->
-      <div id="doc-preview-card" class="mt-4 hidden p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 min-w-0">
-        <div class="flex items-center gap-2.5 min-w-0 flex-1">
-          <div id="doc-icon-badge" class="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-base font-bold shrink-0">
-            <i class="fa-solid fa-file-lines"></i>
-          </div>
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-1.5">
-              <h3 id="doc-title" class="text-xs sm:text-sm font-bold text-slate-900 truncate">Chưa tải tài liệu</h3>
-              <span id="doc-badge-type" class="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-200 text-indigo-800 shrink-0">TEXT</span>
+      <div id="doc-preview-card" class="mt-4 hidden p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl flex flex-col gap-2.5 min-w-0 transition-all">
+        <!-- Top Summary Row -->
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 min-w-0">
+          <div class="flex items-center gap-2.5 min-w-0 flex-1">
+            <div id="doc-icon-badge" class="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-base font-bold shrink-0">
+              <i class="fa-solid fa-file-lines"></i>
             </div>
-            <p id="doc-stats" class="text-[11px] text-slate-500 mt-0.5 truncate">0 từ • Sẵn sàng tạo Sơ đồ tư duy, Đề thi, Tóm tắt</p>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-1.5">
+                <h3 id="doc-title" class="text-xs sm:text-sm font-bold text-slate-900 truncate">Chưa tải tài liệu</h3>
+                <span id="doc-badge-type" class="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-200 text-indigo-800 shrink-0">TEXT</span>
+              </div>
+              <p id="doc-stats" class="text-[11px] text-slate-500 mt-0.5 truncate">0 từ • Sẵn sàng tạo Sơ đồ tư duy, Đề thi, Tóm tắt</p>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-1.5 self-end sm:self-auto shrink-0 flex-wrap">
+            <!-- Enter / Scroll to Lesson -->
+            <button id="btn-enter-lesson" class="px-2.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-all flex items-center gap-1 shadow-xs active:scale-95 cursor-pointer" title="Cuộn xuống xem nội dung bài học">
+              <i class="fa-solid fa-graduation-cap text-xs"></i>
+              <span>Vào học</span>
+            </button>
+
+            <!-- Image OCR Trigger if images present -->
+            <button id="btn-ocr-image" class="hidden px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 rounded-lg transition-all flex items-center gap-1 active:scale-95 cursor-pointer">
+              <i class="fa-solid fa-eye text-xs"></i>
+              <span id="ocr-btn-text">Nhận diện OCR tất cả ảnh</span>
+            </button>
+            
+            <!-- View raw text modal trigger -->
+            <button id="btn-view-extracted" class="px-2 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg transition-all flex items-center gap-1 active:scale-95 cursor-pointer">
+              <i class="fa-solid fa-align-left text-xs"></i>
+              <span>Xem văn bản</span>
+            </button>
+
+            <!-- Clear all files -->
+            <button id="btn-clear-doc" class="px-2 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 rounded-lg transition-all active:scale-95 cursor-pointer" title="Xóa toàn bộ tài liệu đã nạp">
+              <i class="fa-solid fa-trash-can text-xs"></i>
+            </button>
           </div>
         </div>
 
-        <div class="flex items-center gap-1.5 self-end sm:self-auto shrink-0 flex-wrap">
-          <!-- Enter / Scroll to Lesson -->
-          <button id="btn-enter-lesson" class="px-2.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-all flex items-center gap-1 shadow-xs active:scale-95 cursor-pointer" title="Cuộn xuống xem nội dung bài học">
-            <i class="fa-solid fa-graduation-cap text-xs"></i>
-            <span>Vào học</span>
-          </button>
-
-          <!-- Image OCR Trigger if image -->
-          <button id="btn-ocr-image" class="hidden px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 rounded-lg transition-all flex items-center gap-1">
-            <i class="fa-solid fa-eye text-xs"></i>
-            Nhận diện OCR
-          </button>
-          
-          <!-- View raw text modal trigger -->
-          <button id="btn-view-extracted" class="px-2 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg transition-all flex items-center gap-1">
-            <i class="fa-solid fa-align-left text-xs"></i>
-            <span>Xem văn bản</span>
-          </button>
-
-          <!-- Clear file -->
-          <button id="btn-clear-doc" class="px-2 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 rounded-lg transition-all" title="Xóa tài liệu">
-            <i class="fa-solid fa-trash-can text-xs"></i>
-          </button>
+        <!-- Multi-Files Breakdown List (Shown when 1 or more files are uploaded) -->
+        <div id="uploaded-files-container" class="mt-1 pt-2.5 border-t border-indigo-200/60 hidden">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[11px] font-bold text-indigo-950 flex items-center gap-1.5">
+              <i class="fa-solid fa-layer-group text-indigo-600"></i>
+              Danh sách tài liệu đã gộp (<span id="uploaded-files-count" class="text-indigo-600 font-extrabold">0</span>):
+            </span>
+            <div class="flex items-center gap-1.5">
+              <button id="btn-add-more-files" class="px-2 py-1 text-[11px] font-semibold text-indigo-700 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg flex items-center gap-1 shadow-2xs active:scale-95 cursor-pointer" title="Chọn thêm file Word, PDF hoặc Ảnh từ máy tính/điện thoại">
+                <i class="fa-solid fa-plus text-indigo-600 text-[10px]"></i>
+                <span>Thêm file</span>
+              </button>
+              <button id="btn-add-more-camera" class="px-2 py-1 text-[11px] font-semibold text-emerald-700 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-1 shadow-2xs active:scale-95 cursor-pointer" title="Chụp thêm ảnh bài học mới">
+                <i class="fa-solid fa-camera text-emerald-600 text-[10px]"></i>
+                <span>Chụp thêm</span>
+              </button>
+            </div>
+          </div>
+          <div id="uploaded-files-items" class="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
+            <!-- Populated dynamically via JS -->
+          </div>
         </div>
       </div>
     </section>
@@ -1227,31 +1256,46 @@
 
   <!-- iOS / Safari PWA Install Instruction Modal -->
   <div id="ios-install-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-4 no-print">
-    <div class="bg-white rounded-2xl max-w-sm w-full p-5 space-y-3.5 shadow-2xl border border-slate-200 text-slate-800">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 space-y-3.5 shadow-2xl border border-slate-200 text-slate-800 animate-in fade-in zoom-in-95 duration-150">
       <div class="flex items-center justify-between pb-2 border-b border-slate-100">
         <h3 class="text-sm font-bold text-indigo-950 flex items-center gap-2">
-          <i class="fa-brands fa-apple text-lg"></i> Cài đặt lên màn hình chính iOS
+          <i class="fa-brands fa-apple text-slate-800 text-lg"></i> Cài đặt trên iPhone / iPad (iOS)
         </h3>
-        <button id="btn-close-ios-modal" class="p-1 text-slate-400 hover:text-slate-700">
+        <button id="btn-close-ios-modal" class="p-1 text-slate-400 hover:text-slate-700 cursor-pointer">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
+
+      <!-- Cảnh báo nếu mở trong Zalo / Messenger / Facebook trên iPhone -->
+      <div id="ios-inapp-warning" class="hidden p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 text-xs space-y-2">
+        <p class="font-bold flex items-center gap-1.5 text-amber-800">
+          <i class="fa-solid fa-circle-exclamation text-amber-600 text-sm"></i> Bạn đang mở trong ứng dụng khác
+        </p>
+        <p class="text-[11px] leading-relaxed text-amber-900">
+          Do bảo mật của iOS, để thêm vào màn hình chính bạn cần chuyển sang trình duyệt <strong>Safari</strong>:
+        </p>
+        <div class="space-y-1 text-[11px] text-amber-900 bg-white/70 p-2 rounded-lg border border-amber-200/60">
+          <div>1. Bấm biểu tượng <strong>dấu 3 chấm (...)</strong> hoặc <strong>Chia sẻ</strong> ở góc màn hình Zalo/Messenger.</div>
+          <div>2. Chọn <strong>"Mở bằng Safari" (Open in Safari)</strong>.</div>
+        </div>
+      </div>
+
       <div class="space-y-2.5 text-xs leading-relaxed text-slate-600">
         <div class="flex items-start gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-100">
           <span class="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-[10px] shrink-0">1</span>
-          <p>Bấm biểu tượng <strong>Chia sẻ (Share) <i class="fa-solid fa-arrow-up-from-bracket text-indigo-600"></i></strong> ở thanh công cụ Safari.</p>
+          <p>Trên thanh công cụ Safari (ở dưới cùng hoặc trên cùng), bấm nút <strong>Chia sẻ (Share) <i class="fa-solid fa-arrow-up-from-bracket text-indigo-600"></i></strong>.</p>
         </div>
         <div class="flex items-start gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-100">
           <span class="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-[10px] shrink-0">2</span>
-          <p>Cuộn xuống và chọn <strong>"Thêm vào MH chính" (Add to Home Screen <i class="fa-regular fa-square-plus text-indigo-600"></i>)</strong>.</p>
+          <p>Cuộn xuống menu và bấm chọn dòng <strong>"Thêm vào MH chính" (Add to Home Screen <i class="fa-regular fa-square-plus text-indigo-600"></i>)</strong>.</p>
         </div>
         <div class="flex items-start gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-100">
           <span class="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-[10px] shrink-0">3</span>
-          <p>Bấm <strong>"Thêm" (Add)</strong> ở góc trên bên phải để hoàn tất!</p>
+          <p>Bấm chữ <strong>"Thêm" (Add)</strong> ở góc trên bên phải màn hình để hoàn tất!</p>
         </div>
       </div>
-      <button onclick="document.getElementById('ios-install-modal').classList.add('hidden')" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs">
-        Đã hiểu
+      <button onclick="document.getElementById('ios-install-modal').classList.add('hidden')" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs active:scale-95 cursor-pointer">
+        Đã hiểu & Làm theo ngay
       </button>
     </div>
   </div>

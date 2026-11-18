@@ -17,10 +17,12 @@ document.addEventListener('DOMContentLoaded', () => {
     currentDoc: {
       title: '',
       text: '',
-      type: '', // 'word' | 'pdf' | 'image' | 'text'
+      type: '', // 'word' | 'pdf' | 'image' | 'text' | 'multiple'
       imageBase64: null,
+      images: [], // Danh sách ảnh base64 khi nạp nhiều ảnh
       wordCount: 0
     },
+    uploadedFiles: [], // Danh sách đa tài liệu [{ id, name, type, text, wordCount, size, imageBase64, isOcrDone }]
 
     // Tab Data
     mindmapMarkdown: '',
@@ -46,6 +48,12 @@ document.addEventListener('DOMContentLoaded', () => {
     loadingTimerInterval: null,
     userAbortedOperation: false
   };
+
+  // ================= DEVICE & PLATFORM DETECTION (IOS / ANDROID / SAFARI / PWA) =================
+  const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || isIos;
+  const isInAppBrowser = /FBAN|FBAV|Zalo|Line|Instagram|BytedanceWebview/i.test(navigator.userAgent);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
   // ================= DOM ELEMENTS =================
   const dom = {
@@ -79,9 +87,15 @@ document.addEventListener('DOMContentLoaded', () => {
     docStats: document.getElementById('doc-stats'),
     btnEnterLesson: document.getElementById('btn-enter-lesson'),
     btnOcrImage: document.getElementById('btn-ocr-image'),
+    ocrBtnText: document.getElementById('ocr-btn-text'),
     btnViewExtracted: document.getElementById('btn-view-extracted'),
     btnReadDoc: document.getElementById('btn-read-doc'),
     btnClearDoc: document.getElementById('btn-clear-doc'),
+    uploadedFilesContainer: document.getElementById('uploaded-files-container'),
+    uploadedFilesCount: document.getElementById('uploaded-files-count'),
+    uploadedFilesItems: document.getElementById('uploaded-files-items'),
+    btnAddMoreFiles: document.getElementById('btn-add-more-files'),
+    btnAddMoreCamera: document.getElementById('btn-add-more-camera'),
 
     // Tabs
     tabButtons: document.querySelectorAll('.tab-btn'),
@@ -657,15 +671,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
           const contentsParts = [{ text: prompt }];
           if (inlineImageBase64) {
-            const match = inlineImageBase64.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
-            if (match) {
-              contentsParts.push({
-                inlineData: {
-                  mimeType: match[1],
-                  data: match[2]
+            const imgList = Array.isArray(inlineImageBase64) ? inlineImageBase64 : [inlineImageBase64];
+            imgList.forEach(img => {
+              if (typeof img === 'string') {
+                const match = img.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+                if (match) {
+                  contentsParts.push({
+                    inlineData: {
+                      mimeType: match[1],
+                      data: match[2]
+                    }
+                  });
                 }
-              });
-            }
+              }
+            });
           }
 
           const generationConfig = {
@@ -770,212 +789,377 @@ document.addEventListener('DOMContentLoaded', () => {
     throw new Error(`Không thể hoàn thành yêu cầu: ${lastErrorMessage || 'Tất cả các API Key hoặc Model trong bể xoay vòng đều bận'}`);
   }
 
-  // ================= FILE PARSING LOGIC =================
+  // ================= FILE PARSING LOGIC (HỖ TRỢ ĐA TÀI LIỆU WORD, PDF, NHIỀU ẢNH BÀI HỌC) =================
   function countWords(str) {
     if (!str) return 0;
     return str.trim().split(/\s+/).filter(Boolean).length;
   }
 
-  function setActiveDocument(title, text, type, imageBase64 = null, isSample = false) {
-    state.currentDoc.title = title;
-    state.currentDoc.text = text;
-    state.currentDoc.type = type;
-    state.currentDoc.imageBase64 = imageBase64;
-    state.currentDoc.wordCount = countWords(text);
+  // Tối ưu ảnh chụp bài học / camera tự động bằng Canvas (Độ phân giải chuẩn nét, dung lượng nhẹ)
+  function processImageFileToOptimizedBase64(file) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const rawDataUrl = e.target.result;
+        const img = new Image();
+        img.onload = () => {
+          let width = img.width;
+          let height = img.height;
+          const maxDim = 1280; // Chuẩn nét sắc sảo cho OCR công thức Toán, Lý, Hóa & Hình vẽ
 
-    // Dừng âm thanh đang phát cũ nếu có
-    stopAllSpeech();
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
 
-    // Nếu người dùng tải file bài học mới vào (không phải bài mẫu do hệ thống tự load):
-    // Reset dữ liệu tóm tắt cũ để khi bấm "Nghe đọc tóm tắt" hệ thống sẽ đọc bài mới của học sinh!
-    if (!isSample) {
-      state.summaryData = null;
-      if (dom.summaryEmptyState) dom.summaryEmptyState.classList.remove('hidden');
-      if (dom.sectionTakeaways) dom.sectionTakeaways.classList.add('hidden');
-      if (dom.sectionTerms) dom.sectionTerms.classList.add('hidden');
-      if (dom.sectionStrategies) dom.sectionStrategies.classList.add('hidden');
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const optimizedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+          resolve(optimizedBase64);
+        };
+        img.onerror = () => resolve(rawDataUrl);
+        img.src = rawDataUrl;
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Phân tích từng file đơn lẻ (Word, PDF, hoặc Ảnh)
+  async function parseSingleFile(file) {
+    const name = file.name || 'Tai_lieu';
+    const lowerName = name.toLowerCase();
+    const isImage = (file.type && file.type.startsWith('image/')) || /\.(jpg|jpeg|png|webp|gif|bmp|heic|svg|jfif)$/i.test(lowerName);
+
+    // 1. File Word (.docx / .doc)
+    if (lowerName.endsWith('.docx') || lowerName.endsWith('.doc')) {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await window.mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+        const text = result.value ? result.value.trim() : '';
+        return {
+          id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+          name: name,
+          type: 'word',
+          text: text || `[File Word: ${name} (Không có văn bản trích xuất được)]`,
+          wordCount: countWords(text),
+          size: file.size,
+          imageBase64: null,
+          isOcrDone: true
+        };
+      } catch (err) {
+        console.warn('Mammoth parse error:', err);
+        return {
+          id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+          name: name,
+          type: 'word',
+          text: `[Lỗi đọc file Word: ${err.message}]`,
+          wordCount: 0,
+          size: file.size,
+          imageBase64: null,
+          isOcrDone: true
+        };
+      }
     }
 
-    // Update UI
-    dom.docPreviewCard.classList.remove('hidden');
-    dom.docTitle.textContent = title;
-    dom.docBadgeType.textContent = type.toUpperCase();
-    dom.docStats.textContent = `${state.currentDoc.wordCount} từ • Sẵn sàng phân tích & nghe đọc`;
+    // 2. File PDF
+    if (lowerName.endsWith('.pdf')) {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let fullText = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageStrings = textContent.items.map(item => item.str);
+          fullText += `\n--- TRANG ${i} ---\n` + pageStrings.join(' ');
+        }
+        const cleanText = fullText.trim();
+        return {
+          id: 'pdf_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+          name: name,
+          type: 'pdf',
+          text: cleanText || `[File PDF scan ảnh: ${name}]`,
+          wordCount: countWords(cleanText),
+          size: file.size,
+          imageBase64: null,
+          isOcrDone: true
+        };
+      } catch (err) {
+        console.warn('PDF.js parse error:', err);
+        return {
+          id: 'pdf_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+          name: name,
+          type: 'pdf',
+          text: `[Lỗi đọc file PDF: ${err.message}]`,
+          wordCount: 0,
+          size: file.size,
+          imageBase64: null,
+          isOcrDone: true
+        };
+      }
+    }
 
+    // 3. Ảnh bài học / Chụp từ camera
+    if (isImage) {
+      const base64 = await processImageFileToOptimizedBase64(file);
+      const text = `[Ảnh chụp bài học: ${name}]\n(Ảnh đã được nạp thành công. Hãy bấm "Nhận diện OCR" để AI đọc chữ, công thức Toán - Lý - Hóa và phân tích hình vẽ, hoặc bấm trực tiếp Tạo Sơ đồ tư duy / Tóm tắt / Đề thi!)`;
+      return {
+        id: 'img_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        name: name,
+        type: 'image',
+        text: text,
+        wordCount: countWords(text),
+        size: file.size,
+        imageBase64: base64,
+        isOcrDone: false
+      };
+    }
+
+    return null;
+  }
+
+  // Cập nhật và đồng bộ trạng thái khi có một hoặc nhiều tài liệu được tải lên
+  function refreshMultiDocumentsState() {
+    stopAllSpeech();
+
+    if (!state.uploadedFiles || state.uploadedFiles.length === 0) {
+      state.currentDoc = { title: '', text: '', type: '', imageBase64: null, images: [], wordCount: 0 };
+      if (dom.docPreviewCard) dom.docPreviewCard.classList.add('hidden');
+      if (dom.uploadedFilesContainer) dom.uploadedFilesContainer.classList.add('hidden');
+      return;
+    }
+
+    const totalFiles = state.uploadedFiles.length;
+    const allImages = state.uploadedFiles.filter(f => f.imageBase64).map(f => f.imageBase64);
+
+    if (totalFiles === 1) {
+      const single = state.uploadedFiles[0];
+      state.currentDoc.title = single.name;
+      state.currentDoc.text = single.text;
+      state.currentDoc.type = single.type;
+      state.currentDoc.imageBase64 = single.imageBase64;
+      state.currentDoc.images = single.imageBase64 ? [single.imageBase64] : [];
+      state.currentDoc.wordCount = single.wordCount;
+    } else {
+      // Gộp nội dung của tất cả các tài liệu / ảnh thành một bài học hoàn chỉnh
+      const combinedText = state.uploadedFiles.map((f, idx) => {
+        return `=== [TÀI LIỆU #${idx + 1}: ${f.name} (${f.type.toUpperCase()})] ===\n${f.text || ''}`;
+      }).join('\n\n');
+
+      state.currentDoc.title = `${totalFiles} tài liệu đã gộp (${state.uploadedFiles[0].name}...)`;
+      state.currentDoc.text = combinedText;
+      state.currentDoc.type = 'multiple';
+      state.currentDoc.images = allImages;
+      state.currentDoc.imageBase64 = allImages[0] || null;
+      state.currentDoc.wordCount = countWords(combinedText);
+    }
+
+    // Reset dữ liệu tóm tắt cũ để học sinh luôn làm việc với tài liệu mới
+    state.summaryData = null;
+    if (dom.summaryEmptyState) dom.summaryEmptyState.classList.remove('hidden');
+    if (dom.sectionTakeaways) dom.sectionTakeaways.classList.add('hidden');
+    if (dom.sectionTerms) dom.sectionTerms.classList.add('hidden');
+    if (dom.sectionStrategies) dom.sectionStrategies.classList.add('hidden');
+
+    // Cập nhật giao diện Preview Card
+    if (dom.docPreviewCard) dom.docPreviewCard.classList.remove('hidden');
+    if (dom.docTitle) dom.docTitle.textContent = state.currentDoc.title;
+    
+    if (dom.docBadgeType) {
+      dom.docBadgeType.textContent = totalFiles > 1 ? `GỘP ${totalFiles} FILE` : state.currentDoc.type.toUpperCase();
+    }
+
+    const imageCount = allImages.length;
+    const imageInfo = imageCount > 0 ? ` • ${imageCount} ảnh bài học` : '';
+    if (dom.docStats) {
+      dom.docStats.textContent = `${state.currentDoc.wordCount} từ${imageInfo} • Sẵn sàng phân tích & khảo thí`;
+    }
+
+    // Biểu tượng loại tài liệu
     const iconMap = {
       word: 'fa-file-word bg-blue-600',
       pdf: 'fa-file-pdf bg-red-600',
       image: 'fa-file-image bg-emerald-600',
+      multiple: 'fa-layer-group bg-indigo-600',
       text: 'fa-file-lines bg-indigo-600'
     };
-
-    dom.docIconBadge.className = `w-10 h-10 rounded-lg text-white flex items-center justify-center text-lg font-bold ${iconMap[type] || 'fa-file-lines bg-indigo-600'}`;
-    dom.docIconBadge.innerHTML = `<i class="fa-solid ${iconMap[type]?.split(' ')[0] || 'fa-file-lines'}"></i>`;
-
-    if (type === 'image') {
-      dom.btnOcrImage.classList.remove('hidden');
-    } else {
-      dom.btnOcrImage.classList.add('hidden');
+    if (dom.docIconBadge) {
+      const cls = iconMap[state.currentDoc.type] || iconMap.multiple;
+      dom.docIconBadge.className = `w-10 h-10 rounded-lg text-white flex items-center justify-center text-lg font-bold shrink-0 ${cls}`;
+      dom.docIconBadge.innerHTML = `<i class="fa-solid ${cls.split(' ')[0]}"></i>`;
     }
 
-    showToast(`Đã nạp tài liệu: ${title} (${state.currentDoc.wordCount} từ)`, 'success');
-  }
-
-  // 1. Word (.docx) Parsing using Mammoth
-  async function handleWordFile(file) {
-    showLoading('Đang đọc file Word...', file.name);
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      const result = await window.mammoth.extractRawText({ arrayBuffer: arrayBuffer });
-      hideLoading();
-      if (!result.value || result.value.trim().length === 0) {
-        showToast('File Word rỗng hoặc không chứa văn bản!', 'warning');
-        return;
-      }
-      setActiveDocument(file.name, result.value, 'word');
-    } catch (e) {
-      hideLoading();
-      console.error(e);
-      showToast('Lỗi khi đọc file Word: ' + e.message, 'error');
-    }
-  }
-
-  // 2. PDF Parsing using PDF.js
-  async function handlePdfFile(file) {
-    showLoading('Đang trích xuất nội dung PDF...', file.name);
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      let fullText = '';
-      
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageStrings = textContent.items.map(item => item.str);
-        fullText += `\n--- TRANG ${i} ---\n` + pageStrings.join(' ');
-      }
-
-      hideLoading();
-      if (!fullText.trim()) {
-        showToast('PDF scan hình ảnh hoặc không có văn bản chọn được!', 'warning');
-        return;
-      }
-      setActiveDocument(file.name, fullText.trim(), 'pdf');
-    } catch (e) {
-      hideLoading();
-      console.error(e);
-      showToast('Lỗi khi đọc file PDF: ' + e.message, 'error');
-    }
-  }
-
-  // 3. Image File & Camera Parsing with Automatic Mobile Compression
-  function handleImageFile(file) {
-    showLoading('Đang đọc ảnh bài học...', file.name);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const rawDataUrl = e.target.result;
-      
-      const img = new Image();
-      img.onload = () => {
-        let width = img.width;
-        let height = img.height;
-        const maxDim = 1200; // Tối ưu kích thước chuẩn nét cho OCR mà payload cực nhẹ
-
-        // Scale down if camera resolution is huge (e.g. 12MP/48MP)
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
+    // Nút Nhận diện OCR: Hiện lên nếu có ít nhất 1 ảnh
+    if (dom.btnOcrImage) {
+      if (imageCount > 0) {
+        dom.btnOcrImage.classList.remove('hidden');
+        if (dom.ocrBtnText) {
+          const unOcrCount = state.uploadedFiles.filter(f => f.imageBase64 && !f.isOcrDone).length;
+          dom.ocrBtnText.textContent = unOcrCount > 0 
+            ? (totalFiles > 1 ? `Nhận diện OCR ${unOcrCount} ảnh bài học` : 'Nhận diện OCR ảnh & hình vẽ')
+            : 'Đã nhận diện OCR xong';
         }
+      } else {
+        dom.btnOcrImage.classList.add('hidden');
+      }
+    }
 
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        // Nền trắng chuẩn giáo dục tránh lỗi nền trong suốt
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(img, 0, 0, width, height);
+    // Hiển thị danh sách các tài liệu con đã gộp
+    if (dom.uploadedFilesContainer && dom.uploadedFilesItems) {
+      dom.uploadedFilesContainer.classList.remove('hidden');
+      if (dom.uploadedFilesCount) dom.uploadedFilesCount.textContent = totalFiles;
 
-        const optimizedBase64 = canvas.toDataURL('image/jpeg', 0.80);
-        hideLoading();
-        const initialText = `[Ảnh chụp bài học: ${file.name}]\n(Đã nạp ảnh thành công. Hãy bấm "Nhận diện chữ qua AI (OCR)" hoặc bấm trực tiếp Tạo Sơ đồ tư duy / Tóm tắt / Đề thi / Thẻ học tập để AI phân tích ngay từ bức ảnh này!)`;
-        setActiveDocument(file.name, initialText, 'image', optimizedBase64);
-        showToast('Đã nạp và tối ưu ảnh bài học thành công!', 'success');
-      };
+      dom.uploadedFilesItems.innerHTML = state.uploadedFiles.map(item => {
+        const itemIcon = item.type === 'word' ? 'fa-file-word text-blue-600' :
+                         (item.type === 'pdf' ? 'fa-file-pdf text-red-600' : 'fa-image text-emerald-600');
+        const statusText = item.imageBase64 
+          ? (item.isOcrDone ? '<span class="text-emerald-600 font-bold">Đã OCR</span>' : '<span class="text-amber-600 font-semibold">Chờ OCR</span>')
+          : `<span class="text-slate-500">${item.wordCount} từ</span>`;
 
-      img.onerror = () => {
-        hideLoading();
-        setActiveDocument(file.name, `[Ảnh chụp: ${file.name}]`, 'image', rawDataUrl);
-      };
-
-      img.src = rawDataUrl;
-    };
-
-    reader.onerror = () => {
-      hideLoading();
-      showToast('Không đọc được file ảnh!', 'error');
-    };
-    reader.readAsDataURL(file);
-  }
-
-  function routeUploadedFile(file) {
-    if (!file) return;
-    const name = file.name ? file.name.toLowerCase() : '';
-    const isImage = (file.type && file.type.startsWith('image/')) || /\.(jpg|jpeg|png|webp|gif|bmp|heic|svg|jfif)$/i.test(name);
-    
-    if (name.endsWith('.docx') || name.endsWith('.doc')) {
-      handleWordFile(file);
-    } else if (name.endsWith('.pdf')) {
-      handlePdfFile(file);
-    } else if (isImage) {
-      handleImageFile(file);
-    } else {
-      showToast('Định dạng file không được hỗ trợ. Vui lòng chọn Word (.docx), PDF hoặc Ảnh bài học!', 'warning');
+        return `
+          <div class="inline-flex items-center gap-2 px-2.5 py-1.5 bg-white border border-indigo-100 rounded-lg shadow-2xs text-xs max-w-full">
+            <i class="fa-solid ${itemIcon} shrink-0 text-sm"></i>
+            <span class="font-medium text-slate-800 truncate max-w-[130px] sm:max-w-[190px]" title="${item.name}">${item.name}</span>
+            <span class="text-[11px]">${statusText}</span>
+            <button onclick="window.removeUploadedFileItem('${item.id}')" class="text-slate-400 hover:text-rose-600 p-0.5 rounded cursor-pointer transition-colors" title="Xóa file này">
+              <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+          </div>
+        `;
+      }).join('');
     }
   }
 
-  // ================= OCR WITH GEMINI VISION =================
+  // Xóa 1 tài liệu con khỏi danh sách gộp
+  window.removeUploadedFileItem = function(id) {
+    state.uploadedFiles = state.uploadedFiles.filter(f => f.id !== id);
+    refreshMultiDocumentsState();
+    showToast('Đã bỏ bớt tài liệu khỏi danh sách gộp!', 'info');
+  };
+
+  // Hàm xử lý nạp nhiều file cùng một lúc (Word, PDF, Ảnh bài học)
+  async function handleMultipleUploadedFiles(fileList) {
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    showLoading(`Đang xử lý ${files.length} tài liệu...`, 'Đang phân tích cấu trúc & tối ưu hóa...');
+
+    let loadedCount = 0;
+    for (const file of files) {
+      try {
+        const parsed = await parseSingleFile(file);
+        if (parsed) {
+          state.uploadedFiles.push(parsed);
+          loadedCount++;
+        }
+      } catch (err) {
+        console.warn(`Lỗi khi đọc file ${file.name}:`, err);
+      }
+    }
+
+    hideLoading();
+
+    if (loadedCount > 0) {
+      refreshMultiDocumentsState();
+      showToast(`Đã nạp thành công ${loadedCount} tài liệu!`, 'success');
+    } else {
+      showToast('Không có file nào hợp lệ (.docx, .pdf hoặc ảnh)!', 'warning');
+    }
+  }
+
+  function setActiveDocument(title, text, type, imageBase64 = null, isSample = false) {
+    state.uploadedFiles = [{
+      id: 'doc_' + Date.now(),
+      name: title,
+      type: type,
+      text: text,
+      wordCount: countWords(text),
+      size: 0,
+      imageBase64: imageBase64,
+      isOcrDone: type !== 'image'
+    }];
+    refreshMultiDocumentsState();
+    if (isSample) {
+      showToast(`Đã mở bài mẫu: ${title}`, 'success');
+    }
+  }
+
+  // ================= OCR WITH GEMINI VISION (NHẬN DIỆN CÔNG THỨC TOÁN - LÝ - HÓA & HÌNH VẼ CHI TIẾT) =================
   async function runOcrOnCurrentImage() {
-    if (!state.currentDoc.imageBase64) {
-      showToast('Tài liệu hiện tại không phải là ảnh!', 'warning');
+    const unOcrImages = state.uploadedFiles.filter(f => f.imageBase64 && !f.isOcrDone);
+    const targetImages = unOcrImages.length > 0 ? unOcrImages : state.uploadedFiles.filter(f => f.imageBase64);
+
+    if (targetImages.length === 0 && !state.currentDoc.imageBase64) {
+      showToast('Không tìm thấy ảnh bài học nào để nhận diện OCR!', 'warning');
       return;
     }
 
+    const itemsToProcess = targetImages.length > 0 ? targetImages : [{
+      id: 'single_img',
+      name: state.currentDoc.title || 'Ảnh bài học',
+      imageBase64: state.currentDoc.imageBase64
+    }];
+
     try {
-      const prompt = `Bạn là chuyên gia nhận diện văn bản (OCR) và phiên giải tài liệu học tập, ĐẶC BIỆT LÀ TOÁN HỌC, VẬT LÝ, HÓA HỌC & KHOA HỌC TỰ NHIÊN (Cả Cấp 2 THCS & Cấp 3 THPT).
-Hãy đọc cẩn thận tài liệu/bức ảnh này và trích xuất TOÀN BỘ nội dung bài học ra văn bản tiếng Việt rõ ràng, giữ nguyên tiêu đề, các phần đánh số (I, II, 1, 2, a, b):
+      showLoading(`Đang nhận diện OCR qua AI...`, `Đang trích xuất công thức Toán - Lý - Hóa và phân tích hình vẽ từ ${itemsToProcess.length} ảnh bài học...`);
 
-QUY TẮC NHẬN DẠNG CÔNG THỨC TOÁN, LÝ, HÓA CHUẨN XÁC:
-1. Chuyển TẤT CẢ công thức Toán, biểu thức đại số, hình học, công thức Vật lý, phương trình Hóa học sang định dạng LaTeX/KaTeX kẹp giữa dấu $ (công thức trong dòng $...$) hoặc $$ (công thức riêng dòng $$...$$).
-2. Phân số & căn thức: \\frac{a}{b}, \\frac{x + 1}{x - 2}, \\sqrt{A}, \\sqrt[n]{A}.
-3. Lũy thừa, chỉ số: x^2, x_1, x_2, (a+b)^2, \\log_a b, e^x.
-4. Hệ phương trình & ngoặc: \\begin{cases} ax + by = c \\\\ a'x + b'y = c' \\end{cases}.
-5. Giải tích & hình học THCS/THPT: \\int_a^b f(x)dx, \\lim_{x \\to x_0}, f'(x), \\vec{u}(x;y;z), \\triangle ABC, \\widehat{ABC}, \\perp, \\parallel, \\sim, ^\\circ.
-6. Vật lý: \\vec{F}, I = \\frac{U}{R}, P = U \\cdot I, x = A\\cos(\\omega t + \\varphi), \\lambda = \\frac{v}{f}, \\Omega, \\mu.
-7. Hóa học: Phương trình phản ứng (dùng \\rightarrow hoặc \\rightleftharpoons), điều kiện nhiệt độ (\\xrightarrow{t^\\circ}), ion (\\text{SO}_4^{2-}, \\text{Fe}^{3+}), kết tủa (\\downarrow), bay hơi (\\uparrow), công thức hữu cơ (\\text{CH}_3\\text{COOH}).
-8. Ký hiệu logic & toán tử: \\Delta, \\Delta', \\pm, \\mp, \\neq, \\ge, \\le, \\Leftrightarrow, \\Rightarrow, \\in, \\notin, \\forall, \\exists.
-9. Giữ nguyên cấu trúc bảng biểu, hình vẽ mô tả nếu có. Chỉ trả về nội dung đã nhận diện, không kèm lời chào.`;
+      const prompt = `Bạn là chuyên gia nhận diện văn bản (OCR) và phiên giải tài liệu học tập ĐẶC BIỆT LÀ TOÁN HỌC, VẬT LÝ, HÓA HỌC & KHOA HỌC TỰ NHIÊN (Cả Cấp 2 THCS & Cấp 3 THPT).
+Hãy đọc cẩn thận bức ảnh bài học này và trích xuất TOÀN BỘ nội dung ra văn bản tiếng Việt rõ ràng, mạch lạc, giữ nguyên tiêu đề và cấu trúc bài học:
 
-      const extracted = await callGeminiWithRotation(prompt, state.currentDoc.imageBase64, {
-        isJson: false,
-        maxTokens: 3000,
-        taskName: 'Đang trích xuất chữ & công thức Toán - Lý - Hóa qua AI (OCR)...'
-      });
-      state.currentDoc.text = extracted;
-      state.currentDoc.wordCount = countWords(extracted);
-      dom.docStats.textContent = `${state.currentDoc.wordCount} từ (Đã nhận diện OCR) • Sẵn sàng phân tích`;
-      showToast(`Đã nhận diện xong chữ từ ảnh (${state.currentDoc.wordCount} từ)!`, 'success');
+1. QUY TẮC NHẬN DẠNG CÔNG THỨC TOÁN, LÝ, HÓA CHUẨN XÁC:
+- Chuyển TẤT CẢ công thức Toán, biểu thức đại số, hình học, công thức Vật lý, phương trình Hóa học sang định dạng LaTeX/KaTeX kẹp giữa dấu $ (công thức trong dòng $...$) hoặc $$ (công thức riêng dòng $$...$$).
+- Phân số & căn thức: \\frac{a}{b}, \\frac{x + 1}{x - 2}, \\sqrt{A}, \\sqrt[n]{A}.
+- Lũy thừa, chỉ số: x^2, x_1, x_2, (a+b)^2, \\log_a b, e^x.
+- Hệ phương trình & ngoặc: \\begin{cases} ax + by = c \\\\ a'x + b'y = c' \\end{cases}.
+- Hình học & Giải tích THCS/THPT: \\triangle ABC, \\widehat{ABC}, \\perp, \\parallel, \\sim, ^\\circ, \\vec{u}(x;y;z).
+- Vật lý: \\vec{F}, I = \\frac{U}{R}, P = U \\cdot I, Q = I^2 R t, x = A\\cos(\\omega t + \\varphi), \\lambda = \\frac{v}{f}, \\Omega, \\mu.
+- Hóa học: Phương trình phản ứng (\\rightarrow, \\rightleftharpoons), điều kiện nhiệt độ (\\xrightarrow{t^\\circ}), ion (\\text{SO}_4^{2-}, \\text{Fe}^{3+}), kết tủa (\\downarrow), bay hơi (\\uparrow), công thức hữu cơ (\\text{CH}_3\\text{COOH}).
+
+2. PHÂN TÍCH VÀ MÔ TẢ CHI TIẾT HÌNH VẼ, SƠ ĐỒ, ĐỒ THỊ, BẢNG BIỂU (RẤT QUAN TRỌNG):
+- Nếu bài học có HÌNH VẼ HÌNH HỌC (tam giác, đường tròn, góc, tiếp tuyến, đường cao): Mô tả chi tiết hình vẽ, các điểm, góc, cạnh bằng nhau, số đo và chuyển thành giả thiết toán học rõ ràng.
+- Nếu có SƠ ĐỒ MẠCH ĐIỆN VẬT LÝ (nguồn điện, ampe kế, vôn kế, các điện trở nối tiếp hay song song): Liệt kê chính xác sơ đồ mạch điện (ví dụ: (R1 // R2) nt R3) cùng các thông số ghi trên hình.
+- Nếu có HÌNH VẼ THÍ NGHIỆM HÓA HỌC / KHOA HỌC TỰ NHIÊN (bình tam giác, ống nghiệm, chất phản ứng, ngọn lửa đèn cồn, hiện tượng sủi bọt, kết tủa): Mô tả cụ thể dụng cụ, hóa chất tham gia, điều kiện và hiện tượng quan sát được.
+- Nếu có ĐỒ THỊ / BIỂU ĐỒ: Đọc rõ các trục tọa độ, xu hướng biến thiên và giá trị tại các điểm đặc biệt.
+
+Chỉ trả về nội dung bài học và phần phân tích hình vẽ đã nhận diện, không kèm lời chào.`;
+
+      for (let i = 0; i < itemsToProcess.length; i++) {
+        const item = itemsToProcess[i];
+        showLoading(`Đang nhận diện ảnh ${i + 1}/${itemsToProcess.length}...`, item.name);
+
+        const extracted = await callGeminiWithRotation(prompt, item.imageBase64, {
+          isJson: false,
+          maxTokens: 3500,
+          taskName: `Đang nhận diện OCR ảnh ${i + 1}/${itemsToProcess.length}: ${item.name}...`
+        });
+
+        item.text = extracted;
+        item.wordCount = countWords(extracted);
+        item.isOcrDone = true;
+      }
+
+      hideLoading();
+      refreshMultiDocumentsState();
 
       // Show in extracted text modal for verification
-      dom.extractedTextArea.value = extracted;
+      dom.extractedTextArea.value = state.currentDoc.text;
       dom.extractedWordCount.textContent = `${state.currentDoc.wordCount} từ`;
       dom.extractedTextModal.classList.remove('hidden');
+
+      showToast(`Đã nhận diện OCR thành công ${itemsToProcess.length} ảnh (${state.currentDoc.wordCount} từ)!`, 'success');
     } catch (e) {
+      hideLoading();
       showToast(e.message, 'error');
     }
   }
@@ -1384,8 +1568,21 @@ QUY TẮC NHẬN DẠNG CÔNG THỨC TOÁN, LÝ, HÓA CHUẨN XÁC:
     }
   }
 
+  // Helper lấy ảnh gửi AI Vision (hỗ trợ 1 ảnh hoặc mảng nhiều ảnh bài học) khi người dùng chưa chạy OCR
+  function getImagesToSend() {
+    const hasImages = (state.currentDoc.images && state.currentDoc.images.length > 0) || state.currentDoc.imageBase64;
+    const isPlaceholderText = !state.currentDoc.text || state.currentDoc.text.includes('[Ảnh chụp bài học:');
+    if (hasImages && isPlaceholderText) {
+      if (state.currentDoc.images && state.currentDoc.images.length > 0) {
+        return state.currentDoc.images;
+      }
+      return state.currentDoc.imageBase64 ? [state.currentDoc.imageBase64] : null;
+    }
+    return null;
+  }
+
   async function generateMindmapWithAi() {
-    if (!state.currentDoc.text && !state.currentDoc.imageBase64) {
+    if (!state.currentDoc.text && !state.currentDoc.imageBase64 && (!state.currentDoc.images || state.currentDoc.images.length === 0)) {
       showToast('Vui lòng tải lên tài liệu học tập trước!', 'warning');
       return;
     }
@@ -1397,15 +1594,15 @@ QUY TẮC THIẾT KẾ SƠ ĐỒ TƯ DUY HIỆN ĐẠI (CHỐNG DÀI DÒNG, TĂN
 1. BẮT BUỘC gắn Emoji sinh động trực quan ở ĐẦU MỖI NHÁNH (Ví dụ: # 📘 Tiêu đề chính, ## 🎯 I. Khái niệm cốt lõi, ### 💡 1. Đặc điểm nổi bật, - ⚡ Ý chính...).
 2. Từ khóa cô đọng súc tích: Mỗi gạch đầu dòng (-) chỉ ghi TỪ KHÓA NGẮN GỌN (từ 3 đến 8 từ), TUYỆT ĐỐI KHÔNG viết cả một câu văn dài lê thê làm chữ bị dính chùm vào đường kẻ. Dùng **in đậm** cho các từ khóa cốt lõi.
 3. Tỏa nhánh hình cây: Nếu có nhiều ý con, hãy tách thành các dấu gạch đầu dòng con lùi vào trong để sơ đồ bung rộng tỏa nhánh cân xứng, đẹp mắt.
-4. Viết công thức Toán/KHTN dưới dạng LaTeX kẹp giữa $ (Ví dụ: $ax^2 + bx + c = 0$, $\\Delta = b^2 - 4ac$).
-5. CHỈ TRẢ VỀ DUY NHẤT ĐOẠN MÃ MARKDOWN CỦA SƠ ĐỒ TƯ DUY, KHÔNG CÓ BẤT KỲ LỜI DẪN NÀO KHÁC.
+4. Viết công thức Toán/KHTN dưới dạng LaTeX kẹp giữa $ (Ví dụ: $ax^2 + bx + c = 0$, $\\Delta = b^2 - 4ac$, $I = \\frac{U}{R}$).
+5. ĐẶC BIỆT LƯU Ý HÌNH VẼ & SƠ ĐỒ MINH HỌA: Nếu bài học có hình vẽ hình học, sơ đồ mạch điện, thí nghiệm hóa học hoặc đồ thị, hãy trích xuất và đưa các dữ kiện then chốt từ hình vẽ vào các nhánh kiến thức tương ứng.
+6. CHỈ TRẢ VỀ DUY NHẤT ĐOẠN MÃ MARKDOWN CỦA SƠ ĐỒ TƯ DUY, KHÔNG CÓ BẤT KỲ LỜI DẪN NÀO KHÁC.
 
 NỘI DUNG BÀI HỌC CẤP 2:
 ${state.currentDoc.text}`;
 
     try {
-      // Tối ưu hóa siêu tốc: Không gửi lại ảnh base64 nặng nếu văn bản bài học đã có sẵn
-      const imgToSend = state.currentDoc.text ? null : state.currentDoc.imageBase64;
+      const imgToSend = getImagesToSend();
       const aiResponse = await callGeminiWithRotation(prompt, imgToSend, {
         isJson: false,
         maxTokens: 1500,
@@ -1473,7 +1670,7 @@ ${state.currentDoc.text}`;
   }
 
   async function generateSummaryWithAi() {
-    if (!state.currentDoc.text && !state.currentDoc.imageBase64) {
+    if (!state.currentDoc.text && !state.currentDoc.imageBase64 && (!state.currentDoc.images || state.currentDoc.images.length === 0)) {
       showToast('Vui lòng tải lên tài liệu học tập trước!', 'warning');
       return;
     }
@@ -1481,6 +1678,7 @@ ${state.currentDoc.text}`;
     const prompt = `Bạn là một cố vấn giáo dục và chuyên gia tối ưu hóa phương pháp học tập dành riêng cho HỌC SINH CẤP 2 (THCS: Lớp 6, 7, 8, 9, độ tuổi 11 - 15).
 Dựa vào bài học cấp 2 sau, hãy tạo bản tóm tắt nội dung cô đọng và gợi ý học tập thông minh, sinh động, dễ tiếp thu.
 QUAN TRỌNG VỀ CÔNG THỨC TOÁN & KHOA HỌC: Bắt buộc viết các công thức toán, lý, hóa dưới dạng LaTeX kẹp giữa dấu $ (ví dụ: $ax^2 + bx + c = 0$, $\\Delta = b^2 - 4ac$, $I = \\frac{U}{R}$, $P = U \\cdot I$, $Q = I^2 R t$).
+ĐẶC BIỆT LƯU Ý HÌNH VẼ & SƠ ĐỒ MINH HỌA: Nếu bài học có hình vẽ hình học, sơ đồ mạch điện, dụng cụ thí nghiệm hóa học hoặc đồ thị, hãy giải thích và đưa vào phần tóm tắt cốt lõi.
 Trả về dữ liệu dưới dạng JSON thuần túy (không bọc text ngoài lề) theo đúng cấu trúc sau:
 {
   "coreTakeaways": [
@@ -1506,8 +1704,7 @@ NỘI DUNG BÀI HỌC CẤP 2:
 ${state.currentDoc.text}`;
 
     try {
-      // Tối ưu hóa siêu tốc: Không gửi lại ảnh base64 nặng nếu văn bản bài học đã có sẵn
-      const imgToSend = state.currentDoc.text ? null : state.currentDoc.imageBase64;
+      const imgToSend = getImagesToSend();
       const rawRes = await callGeminiWithRotation(prompt, imgToSend, {
         isJson: true,
         maxTokens: 1500,
@@ -1782,7 +1979,7 @@ ${state.currentDoc.text}`;
   }
 
   async function generateQuizWithAi() {
-    if (!state.currentDoc.text && !state.currentDoc.imageBase64) {
+    if (!state.currentDoc.text && !state.currentDoc.imageBase64 && (!state.currentDoc.images || state.currentDoc.images.length === 0)) {
       showToast('Vui lòng tải lên tài liệu học tập trước!', 'warning');
       return;
     }
@@ -1802,6 +1999,7 @@ Dựa trên tài liệu bài học cấp 2 sau, hãy tạo một bộ đề thi 
 
 QUAN TRỌNG VỀ CÔNG THỨC TOÁN & KHOA HỌC: Bắt buộc viết các công thức toán, lý, hóa trong câu hỏi, đáp án và giải thích dưới dạng LaTeX kẹp giữa dấu $ (ví dụ: $ax^2 + bx + c = 0$, $\\Delta = b^2 - 4ac$, $I = \\frac{U}{R}$, $P = U \\cdot I$, $Q = I^2 R t$).
 LƯU Ý KỸ THUẬT VỀ ĐỊNH DẠNG JSON: Mọi công thức LaTeX trong chuỗi JSON PHẢI dùng 2 dấu gạch chéo ngược \\\\ (ví dụ \\\\frac{U}{R}, \\\\sqrt{x}, \\\\Delta, \\\\cdot, \\\\Omega, \\\\pm) để đảm bảo chuỗi JSON hợp lệ 100%.
+ĐẶC BIỆT LƯU Ý HÌNH VẼ & SƠ ĐỒ MINH HỌA: Nếu bài học có hình vẽ hình học, sơ đồ mạch điện, thí nghiệm hóa học hoặc đồ thị, hãy sáng tạo ít nhất 2-3 câu hỏi khai thác trực tiếp từ các dữ kiện trên hình vẽ (ví dụ: "Dựa vào hình vẽ/sơ đồ mạch điện, hãy tính...", "Hiện tượng quan sát được trong thí nghiệm là...").
 Mỗi câu hỏi có 4 đáp án (A, B, C, D) với đúng 1 đáp án chính xác.
 Trả về dữ liệu dưới dạng JSON thuần túy (KHÔNG có văn bản nào ngoài JSON) theo cấu trúc mảng sau:
 [
@@ -1825,8 +2023,7 @@ NỘI DUNG BÀI HỌC CẤP 2:
 ${state.currentDoc.text.slice(0, 8000)}`;
 
     try {
-      // Tối ưu hóa siêu tốc: Không gửi lại ảnh base64 nặng nếu văn bản bài học đã có sẵn
-      const imgToSend = state.currentDoc.text ? null : state.currentDoc.imageBase64;
+      const imgToSend = getImagesToSend();
       const rawRes = await callGeminiWithRotation(prompt, imgToSend, {
         isJson: true,
         maxTokens: count >= 15 ? 8192 : (count >= 10 ? 6000 : 3500),
@@ -2117,15 +2314,19 @@ ${state.currentDoc.text.slice(0, 8000)}`;
       let match = cachedVoices.find(v => (v.name.includes('HoaiMy') || v.name.includes('Hoài My')) && (v.lang.startsWith('vi') || v.lang.includes('VN')));
       if (match) return match;
 
-      // 2. Giọng nam ấm áp Nam Minh (Microsoft Neural / Natural)
+      // 2. Giọng Apple Linh bản địa trên iPhone / iPad / macOS
+      match = cachedVoices.find(v => (v.name.includes('Linh') || v.name.toLowerCase().includes('vietnamese')) && (v.lang || '').startsWith('vi'));
+      if (match) return match;
+
+      // 3. Giọng nam ấm áp Nam Minh (Microsoft Neural / Natural)
       match = cachedVoices.find(v => (v.name.includes('NamMinh') || v.name.includes('Nam Minh')) && (v.lang.startsWith('vi') || v.lang.includes('VN')));
       if (match) return match;
 
-      // 3. Giọng Google Tiếng Việt (Chrome nếu có)
+      // 4. Giọng Google Tiếng Việt (Chrome nếu có)
       match = cachedVoices.find(v => v.name.toLowerCase().includes('google') && (v.lang.startsWith('vi') || v.name.toLowerCase().includes('tiếng việt')));
       if (match) return match;
 
-      // 4. Bất kỳ giọng nào có mã ngôn ngữ vi-VN hoặc vi
+      // 5. Bất kỳ giọng nào có mã ngôn ngữ vi-VN hoặc vi
       match = cachedVoices.find(v => (v.lang || '').toLowerCase().startsWith('vi'));
       if (match) return match;
 
@@ -2146,30 +2347,51 @@ ${state.currentDoc.text.slice(0, 8000)}`;
   }
 
   let activeSpeechUtterance = null;
+  let activeSpeechUtterances = []; // Giữ tham chiếu toàn cục chống V8 Garbage Collection giữa chừng
   let speechKeepAliveInterval = null;
+  let isReadingAllBeams = false; // Trạng thái đọc chuỗi toàn bộ thẻ học tập Flashcards
 
   function stopAllSpeech() {
     isSpeaking = false;
+    isReadingAllBeams = false;
     if (speechKeepAliveInterval) {
       clearInterval(speechKeepAliveInterval);
       speechKeepAliveInterval = null;
     }
     if (activeSpeechAudio) {
-      activeSpeechAudio.pause();
-      activeSpeechAudio.currentTime = 0;
+      try {
+        activeSpeechAudio.pause();
+        activeSpeechAudio.currentTime = 0;
+      } catch (e) {}
       activeSpeechAudio = null;
     }
     if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+      try {
+        window.speechSynthesis.cancel();
+      } catch (e) {}
     }
     activeSpeechUtterance = null;
+    activeSpeechUtterances = [];
+
     if (dom.btnStopTts) dom.btnStopTts.classList.add('hidden');
     if (dom.btnStopTtsSummary) dom.btnStopTtsSummary.classList.add('hidden');
+
+    // Khôi phục nút Nghe đọc tóm tắt
     if (dom.btnTtsSummary) {
       dom.btnTtsSummary.classList.remove('bg-indigo-600', 'text-white');
       dom.btnTtsSummary.classList.add('bg-indigo-50', 'text-indigo-700');
       const ic = dom.btnTtsSummary.querySelector('i');
       if (ic) ic.className = 'fa-solid fa-volume-high text-indigo-600';
+    }
+
+    // Khôi phục nút Nghe đọc toàn bộ thẻ học tập
+    if (dom.btnToggleTts) {
+      dom.btnToggleTts.classList.remove('bg-indigo-600', 'text-white');
+      dom.btnToggleTts.classList.add('bg-white', 'text-slate-700');
+      const ic = dom.btnToggleTts.querySelector('i');
+      if (ic) ic.className = 'fa-solid fa-volume-high text-indigo-600';
+      const span = dom.btnToggleTts.querySelector('span');
+      if (span) span.textContent = 'Nghe đọc toàn bộ';
     }
   }
 
@@ -2256,7 +2478,8 @@ ${state.currentDoc.text.slice(0, 8000)}`;
 
   // Khởi tạo và mở khóa âm thanh trên điện thoại ngay từ lần chạm đầu tiên
   function unlockMobileAudio() {
-    if ('speechSynthesis' in window && !window._speechUnlocked) {
+    // Trên Android mở khóa bằng utterance câm, trên iOS WebKit tránh phát utterance rỗng làm nghẽn hàng đợi
+    if (!isIos && 'speechSynthesis' in window && !window._speechUnlocked) {
       try {
         const u = new SpeechSynthesisUtterance(' ');
         u.volume = 0;
@@ -2277,13 +2500,57 @@ ${state.currentDoc.text.slice(0, 8000)}`;
   document.addEventListener('touchstart', unlockMobileAudio, { passive: true });
   document.addEventListener('click', unlockMobileAudio, { passive: true });
 
-  // Phát âm trực tuyến (hỗ trợ qua Proxy /api/tts để chống chặn Referer trên Vercel)
-  function playOnlineAudioStream(chunks, lang = 'vi', onDone = null) {
-    let index = 0;
+  // Tách văn bản thành các câu tự nhiên, tránh lỗi Lookbehind trên thiết bị di động
+  function splitTextIntoSpeechSentences(text) {
+    if (!text) return [];
+    // Tách theo các dấu kết thúc câu hoặc xuống dòng
+    const rawTokens = text.split(/[\r\n]+|[.?!;]+[\s]+/);
+    const result = [];
 
-    function playNext() {
+    rawTokens.forEach(token => {
+      let s = token.trim();
+      s = s.replace(/^[,\.\s]+|[,\.\s]+$/g, '').trim();
+      if (!s) return;
+
+      // Độ dài tối ưu cho mỗi lần phát âm: 40 - 160 ký tự
+      if (s.length <= 160) {
+        result.push(s);
+      } else {
+        // Tách câu quá dài theo dấu phẩy hoặc liên từ để giọng đọc mượt mà
+        const sub = s.split(/,\s+|\s+và\s+|\s+hoặc\s+/);
+        let buf = '';
+        sub.forEach(part => {
+          const p = part.trim();
+          if (!p) return;
+          if ((buf + ', ' + p).length > 140) {
+            if (buf.trim()) result.push(buf.trim());
+            buf = p;
+          } else {
+            buf = buf ? (buf + ', ' + p) : p;
+          }
+        });
+        if (buf.trim()) result.push(buf.trim());
+      }
+    });
+
+    return result.length > 0 ? result : [text.trim()];
+  }
+
+  // Phát âm trực tuyến (hỗ trợ qua Proxy /api/tts để chống chặn Referer trên Vercel)
+  function playOnlineAudioStream(chunks, lang = 'vi', onDone = null, isSequence = false) {
+    if (!chunks || chunks.length === 0) {
+      if (!isSequence) stopAllSpeech();
+      if (onDone) onDone();
+      return;
+    }
+
+    let index = 0;
+    const audio = activeSpeechAudio || new Audio();
+    activeSpeechAudio = audio;
+
+    function playNextAudio() {
       if (!isSpeaking || index >= chunks.length) {
-        stopAllSpeech();
+        if (!isSequence) stopAllSpeech();
         if (onDone) onDone();
         return;
       }
@@ -2291,126 +2558,162 @@ ${state.currentDoc.text.slice(0, 8000)}`;
       const chunk = chunks[index++];
       const cleanChunk = chunk.replace(/[,\.;:!\?]+$/, '').trim();
       if (!cleanChunk) {
-        playNext();
+        playNextAudio();
         return;
       }
 
-      // 1. Ưu tiên qua API proxy serverless /api/tts (không bị chặn Referer trên điện thoại và máy tính)
       const proxyUrl = `/api/tts?lang=${encodeURIComponent(lang)}&text=${encodeURIComponent(cleanChunk)}`;
-      const audio = new Audio(proxyUrl);
-      activeSpeechAudio = audio;
-      audio.playbackRate = state.ttsSpeed || 1.16;
+      audio.src = proxyUrl;
+      audio.playbackRate = state.ttsSpeed || 1.15;
 
-      audio.onended = () => {
-        if (isSpeaking) {
-          setTimeout(playNext, 80);
-        }
+      let advanced = false;
+      const advance = () => {
+        if (advanced) return;
+        advanced = true;
+        if (isSpeaking) setTimeout(playNextAudio, 70);
       };
 
+      audio.onended = advance;
       audio.onerror = (e) => {
-        console.warn('Audio stream error on chunk:', cleanChunk, e);
-        // Fallback: nếu proxy lỗi, thử phát âm bằng Web Speech API nếu chưa thử
-        if ('speechSynthesis' in window) {
-          try {
-            const u = new SpeechSynthesisUtterance(cleanChunk);
-            u.lang = lang === 'en' ? 'en-US' : 'vi-VN';
-            u.rate = state.ttsSpeed || 1.16;
-            u.onend = () => { if (isSpeaking) setTimeout(playNext, 80); };
-            u.onerror = () => { if (isSpeaking) setTimeout(playNext, 80); };
-            window.speechSynthesis.speak(u);
-            return;
-          } catch (err) {}
-        }
-        if (isSpeaking) {
-          setTimeout(playNext, 50);
-        }
+        console.warn('Audio stream error on chunk, skipping:', cleanChunk, e);
+        advance();
       };
 
       audio.play().catch(err => {
-        console.warn('Audio play catch:', err);
-        // Nếu bị chặn autoplay hoặc mạng, thử sang Web Speech API
-        if ('speechSynthesis' in window) {
-          try {
-            const u = new SpeechSynthesisUtterance(cleanChunk);
-            u.lang = lang === 'en' ? 'en-US' : 'vi-VN';
-            u.rate = state.ttsSpeed || 1.16;
-            u.onend = () => { if (isSpeaking) setTimeout(playNext, 80); };
-            u.onerror = () => { if (isSpeaking) setTimeout(playNext, 80); };
-            window.speechSynthesis.speak(u);
-            return;
-          } catch (err) {}
-        }
-        if (isSpeaking) {
-          setTimeout(playNext, 50);
-        }
+        console.warn('Audio play failed, skipping to next chunk:', err);
+        advance();
       });
     }
 
-    playNext();
+    playNextAudio();
   }
 
-  // Phát âm bằng Web Speech API
-  function speakWithWebSpeech(chunks, voice, langCode, rate, pitch, onDone) {
-    let chunkIndex = 0;
-
-    // Reset lại speech queue để tránh bị treo trên Chrome / Android
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+  // Phát âm bằng Web Speech API (Hỗ trợ Watchdog Timer chống nuốt onend và chống V8 GC)
+  function speakWithWebSpeech(chunks, voice, langCode, rate, pitch, onDone, isSequence = false) {
+    if (!chunks || chunks.length === 0) {
+      if (!isSequence) stopAllSpeech();
+      if (onDone) onDone();
+      return;
     }
 
+    if (!('speechSynthesis' in window)) {
+      playOnlineAudioStream(chunks, langCode.startsWith('en') ? 'en' : 'vi', onDone, isSequence);
+      return;
+    }
+
+    // Đảm bảo speech synth không bị treo ở trạng thái pause
+    try {
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.resume();
+    } catch (e) {}
+
+    let chunkIndex = 0;
+    let watchdogTimer = null;
+
+    // Giữ nhịp thở cho Chromium (Tránh tự ngắt sau 14s). KHÔNG gọi pause() trên iOS Safari vì WebKit sẽ ngắt hẳn tiếng!
+    if (speechKeepAliveInterval) clearInterval(speechKeepAliveInterval);
     speechKeepAliveInterval = setInterval(() => {
       if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
-        window.speechSynthesis.resume();
+        try {
+          if (!isIos) {
+            window.speechSynthesis.pause();
+            window.speechSynthesis.resume();
+          } else {
+            if (window.speechSynthesis.paused) {
+              window.speechSynthesis.resume();
+            }
+          }
+        } catch (e) {}
       }
     }, 3500);
 
-    function next() {
+    function playChunk() {
+      if (watchdogTimer) {
+        clearTimeout(watchdogTimer);
+        watchdogTimer = null;
+      }
+
       if (!isSpeaking || chunkIndex >= chunks.length) {
-        stopAllSpeech();
+        if (!isSequence) {
+          stopAllSpeech();
+        }
         if (onDone) onDone();
         return;
       }
 
-      const textChunk = chunks[chunkIndex++];
-      if (!('speechSynthesis' in window)) {
-        // Fallback sang online audio stream
-        playOnlineAudioStream([textChunk, ...chunks.slice(chunkIndex)], langCode.startsWith('en') ? 'en' : 'vi', onDone);
+      const textChunk = chunks[chunkIndex++].trim();
+      if (!textChunk) {
+        playChunk();
         return;
       }
 
-      const utterance = new SpeechSynthesisUtterance(textChunk);
-      if (voice) {
-        utterance.voice = voice;
-      }
-      utterance.lang = langCode;
-      utterance.rate = rate;
-      utterance.pitch = pitch;
-
-      activeSpeechUtterance = utterance;
-
-      utterance.onend = () => {
-        if (isSpeaking) setTimeout(next, 60);
-      };
-      utterance.onerror = (e) => {
-        console.warn('Speech error on chunk, continuing...', e);
-        if (isSpeaking) setTimeout(next, 60);
-      };
-
       try {
+        const utterance = new SpeechSynthesisUtterance(textChunk);
+        if (voice) utterance.voice = voice;
+        utterance.lang = langCode || 'vi-VN';
+        utterance.rate = rate || 1.15;
+        utterance.pitch = pitch || 1.0;
+
+        // Lưu vào mảng toàn cục để V8 Engine không Garbage Collect giữa chừng
+        activeSpeechUtterances.push(utterance);
+        if (activeSpeechUtterances.length > 8) {
+          activeSpeechUtterances.shift();
+        }
+
+        let hasAdvanced = false;
+        const advance = () => {
+          if (hasAdvanced) return;
+          hasAdvanced = true;
+          if (watchdogTimer) {
+            clearTimeout(watchdogTimer);
+            watchdogTimer = null;
+          }
+          if (isSpeaking) {
+            setTimeout(playChunk, 70);
+          }
+        };
+
+        utterance.onend = () => {
+          advance();
+        };
+
+        utterance.onerror = (e) => {
+          console.warn('[SmartEdu TTS] Utterance error, advancing chunk:', e);
+          advance();
+        };
+
+        // BẢO VỆ TUYỆT ĐỐI (WATCHDOG TIMER):
+        // Trên Chrome Android, sự kiện onend hay bị nuốt chửng sau câu đầu tiên.
+        // Bộ đếm thời gian này sẽ tự động chuyển sang câu tiếp theo nếu sau thời gian dự kiến onend không kích hoạt!
+        const estimatedDurationMs = Math.max(2200, Math.round((textChunk.length * 115) / (rate || 1.15)) + 1800);
+        watchdogTimer = setTimeout(() => {
+          if (isSpeaking && !hasAdvanced) {
+            console.warn('[SmartEdu TTS] Watchdog force advance chunk:', textChunk.slice(0, 25));
+            advance();
+          }
+        }, estimatedDurationMs);
+
+        // Kích hoạt phát âm
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
         window.speechSynthesis.speak(utterance);
-      } catch (e) {
-        console.error('Speech synthesis speak error:', e);
-        // Fallback sang online audio stream nếu Web Speech gặp lỗi
-        playOnlineAudioStream([textChunk, ...chunks.slice(chunkIndex)], langCode.startsWith('en') ? 'en' : 'vi', onDone);
+
+      } catch (err) {
+        console.warn('[SmartEdu TTS] Speak catch error:', err);
+        playChunk();
       }
     }
 
-    next();
+    // Độ trễ 50ms để lệnh cancel() trước đó hoàn tất giải phóng bộ nhớ audio
+    setTimeout(playChunk, 50);
   }
 
   // Phát âm thông minh: MẶC ĐỊNH LÀ TIẾNG VIỆT, chỉ đọc tiếng Anh khi thực sự là văn bản tiếng Anh
-  function playSmartSpeech(title, content, onDone = null) {
-    stopAllSpeech();
+  function playSmartSpeech(title, content, onDone = null, isSequence = false) {
+    if (!isSequence) {
+      stopAllSpeech();
+    }
     isSpeaking = true;
 
     if (dom.btnStopTts) dom.btnStopTts.classList.remove('hidden');
@@ -2423,32 +2726,7 @@ ${state.currentDoc.text.slice(0, 8000)}`;
 
     const cleanedText = isEn ? cleanEnglishForSpeech(rawText) : cleanVietnameseForSpeech(rawText);
     const voice = getBestVoice(lang);
-
-    // Tách văn bản thành các câu hoặc cụm câu ngắn gọn (< 95 ký tự để phát âm mượt nhất)
-    const rawSentences = cleanedText.split(/(?<=[.?!;:\n])\s+/);
-    const chunks = [];
-    
-    rawSentences.forEach(sentence => {
-      const s = sentence.trim();
-      if (!s) return;
-      if (s.length <= 95) {
-        chunks.push(s);
-      } else {
-        const parts = s.split(/(?<=[,])\s+/);
-        let curr = '';
-        parts.forEach(p => {
-          if ((curr + ' ' + p).length > 90) {
-            if (curr.trim()) chunks.push(curr.trim());
-            curr = p;
-          } else {
-            curr += (curr ? ' ' : '') + p;
-          }
-        });
-        if (curr.trim()) chunks.push(curr.trim());
-      }
-    });
-
-    if (chunks.length === 0) chunks.push(cleanedText);
+    const chunks = splitTextIntoSpeechSentences(cleanedText);
 
     const activeMode = voiceModes[state.voiceModeIndex] || voiceModes[0];
 
@@ -2457,28 +2735,28 @@ ${state.currentDoc.text.slice(0, 8000)}`;
       // Ưu tiên 1: Web Speech API nếu thiết bị có sẵn giọng Tiếng Việt
       if (voice) {
         const voiceName = voice.name.replace(/Microsoft |Google /g, '').split(' - ')[0];
-        showToast(`🔊 Đang đọc [${voiceName} - ${activeMode.label}]: "${title.slice(0, 30)}..."`, 'info');
-        speakWithWebSpeech(chunks, voice, 'vi-VN', activeMode.speed, activeMode.pitch, onDone);
+        if (!isSequence) showToast(`🔊 Đang đọc [${voiceName} - ${activeMode.label}]: "${title.slice(0, 30)}..."`, 'info');
+        speakWithWebSpeech(chunks, voice, 'vi-VN', activeMode.speed, activeMode.pitch, onDone, isSequence);
       } else if ('speechSynthesis' in window && (/Android|iPhone|iPad|Macintosh/i.test(navigator.userAgent))) {
         // Trên điện thoại (Android / iOS): Luôn có giọng hệ thống Tiếng Việt chuẩn
-        showToast(`🔊 Đang đọc [Giọng Việt - ${activeMode.label}]: "${title.slice(0, 30)}..."`, 'info');
-        speakWithWebSpeech(chunks, null, 'vi-VN', activeMode.speed, activeMode.pitch, onDone);
+        if (!isSequence) showToast(`🔊 Đang đọc [Giọng Việt - ${activeMode.label}]: "${title.slice(0, 30)}..."`, 'info');
+        speakWithWebSpeech(chunks, null, 'vi-VN', activeMode.speed, activeMode.pitch, onDone, isSequence);
       } else {
         // Trên máy tính hoặc thiết bị không có giọng Việt: dùng audio stream qua /api/tts
-        showToast(`🔊 Đang đọc [Chị Google - ${activeMode.label}]: "${title.slice(0, 30)}..."`, 'info');
-        playOnlineAudioStream(chunks, 'vi', onDone);
+        if (!isSequence) showToast(`🔊 Đang đọc [Chị Google - ${activeMode.label}]: "${title.slice(0, 30)}..."`, 'info');
+        playOnlineAudioStream(chunks, 'vi', onDone, isSequence);
       }
       return;
     }
 
     // TRƯỜNG HỢP 2: BÀI TIẾNG ANH (Thuần tiếng Anh không có dấu)
-    showToast(`🔊 Đang đọc Tiếng Anh bản ngữ: "${title.slice(0, 30)}..."`, 'info');
+    if (!isSequence) showToast(`🔊 Đang đọc Tiếng Anh bản ngữ: "${title.slice(0, 30)}..."`, 'info');
     if (voice) {
-      speakWithWebSpeech(chunks, voice, 'en-US', activeMode.speed, 1.0, onDone);
+      speakWithWebSpeech(chunks, voice, 'en-US', activeMode.speed, 1.0, onDone, isSequence);
     } else {
       speakWithWebSpeech(chunks, null, 'en-US', activeMode.speed, 1.0, () => {
-        playOnlineAudioStream(chunks, 'en', onDone);
-      });
+        playOnlineAudioStream(chunks, 'en', onDone, isSequence);
+      }, isSequence);
     }
   }
 
@@ -2486,11 +2764,16 @@ ${state.currentDoc.text.slice(0, 8000)}`;
 
   // Phát âm một Beam cụ thể (Tự động chuyển ngữ Tiếng Anh / Tiếng Việt)
   function speakBeam(beam) {
+    if (isSpeaking) {
+      stopAllSpeech();
+      showToast('Đã dừng phát âm thẻ.', 'info');
+      return;
+    }
     const isEn = isTextEnglish((beam.title || '') + ' ' + (beam.frontQuestion || '') + ' ' + (beam.backAnswer || ''));
     const title = beam.title || (isEn ? 'Knowledge Card' : 'Thẻ kiến thức');
     const content = isEn
       ? `Question: ${beam.frontQuestion}. Answer: ${beam.backAnswer}. ${beam.takeaway ? 'Key takeaway: ' + beam.takeaway : ''}`
-      : `Câu hỏi: ${beam.frontQuestion}. Lời giải: ${beam.backAnswer}. Trọng tâm ba mươi giây: ${beam.takeaway || ''}`;
+      : `Câu hỏi: ${beam.frontQuestion}. Lời giải: ${beam.backAnswer}. ${beam.takeaway ? 'Ghi nhớ ba mươi giây: ' + beam.takeaway : ''}`;
     playSmartSpeech(title, content);
   }
 
@@ -2523,7 +2806,7 @@ ${state.currentDoc.text.slice(0, 8000)}`;
   }
 
   async function generateBeamsWithAi() {
-    if (!state.currentDoc.text && !state.currentDoc.imageBase64) {
+    if (!state.currentDoc.text && !state.currentDoc.imageBase64 && (!state.currentDoc.images || state.currentDoc.images.length === 0)) {
       showToast('Vui lòng tải lên tài liệu học tập trước!', 'warning');
       return;
     }
@@ -2533,6 +2816,7 @@ Hãy chia nhỏ toàn bộ nội dung bài học cấp 2 sau đây thành 5 đ�
 Mỗi Thẻ học tập gồm thẻ lật Flashcard 3D: Mặt trước là câu hỏi kích thích tư duy / tình huống thực tế đời sống, Mặt sau là câu trả lời cô đọng và điểm cốt lõi trong 30 giây dễ nhớ với học sinh cấp 2.
 
 QUAN TRỌNG VỀ CÔNG THỨC TOÁN & KHOA HỌC: Bắt buộc viết các công thức toán, lý, hóa dưới dạng LaTeX kẹp giữa dấu $ (ví dụ: $ax^2 + bx + c = 0$, $\\Delta = b^2 - 4ac$, $I = \\frac{U}{R}$, $P = U \\cdot I$, $Q = I^2 R t$, $\\begin{cases} ax + by = c \\\\ a'x + b'y = c' \\end{cases}$).
+ĐẶC BIỆT LƯU Ý HÌNH VẼ & SƠ ĐỒ MINH HỌA: Nếu bài học có hình vẽ hình học, sơ đồ mạch điện, thí nghiệm hóa học hoặc đồ thị, hãy tạo ít nhất 1 thẻ học tập xoay quanh cách đọc và vận dụng dữ kiện từ hình vẽ đó.
 Trả về mảng JSON thuần túy theo cấu trúc:
 [
   {
@@ -2551,8 +2835,7 @@ NỘI DUNG BÀI HỌC CẤP 2:
 ${state.currentDoc.text}`;
 
     try {
-      // Tối ưu hóa siêu tốc: Không gửi lại ảnh base64 nặng nếu văn bản bài học đã có sẵn
-      const imgToSend = state.currentDoc.text ? null : state.currentDoc.imageBase64;
+      const imgToSend = getImagesToSend();
       const rawRes = await callGeminiWithRotation(prompt, imgToSend, {
         isJson: true,
         maxTokens: 1800,
@@ -2584,7 +2867,7 @@ ${state.currentDoc.text}`;
     dom.dropZoneContainer.classList.add('hidden');
   });
 
-  // Drag & Drop
+  // Drag & Drop (Hỗ trợ kéo thả một hoặc nhiều file/ảnh cùng lúc)
   dom.dropZone.addEventListener('dragover', (e) => {
     e.preventDefault();
     dom.dropZone.classList.add('border-indigo-600', 'bg-indigo-50');
@@ -2597,23 +2880,30 @@ ${state.currentDoc.text}`;
   dom.dropZone.addEventListener('drop', (e) => {
     e.preventDefault();
     dom.dropZone.classList.remove('border-indigo-600', 'bg-indigo-50');
-    if (e.dataTransfer.files.length > 0) {
-      routeUploadedFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleMultipleUploadedFiles(e.dataTransfer.files);
     }
   });
 
   dom.dropZone.addEventListener('click', () => dom.fileInput.click());
   dom.fileInput.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) {
-      routeUploadedFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      handleMultipleUploadedFiles(e.target.files);
     }
   });
 
   dom.cameraInput.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) {
-      routeUploadedFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      handleMultipleUploadedFiles(e.target.files);
     }
   });
+
+  if (dom.btnAddMoreFiles) {
+    dom.btnAddMoreFiles.addEventListener('click', () => dom.fileInput.click());
+  }
+  if (dom.btnAddMoreCamera) {
+    dom.btnAddMoreCamera.addEventListener('click', () => dom.cameraInput.click());
+  }
 
   // Text Direct Apply
   dom.applyTextBtn.addEventListener('click', () => {
@@ -2629,12 +2919,12 @@ ${state.currentDoc.text}`;
   // OCR button
   dom.btnOcrImage.addEventListener('click', runOcrOnCurrentImage);
 
-  // Clear Doc
+  // Clear Doc (Xóa toàn bộ tài liệu & ảnh đã nạp)
   dom.btnClearDoc.addEventListener('click', () => {
-    state.currentDoc = { title: '', text: '', type: '', imageBase64: null, wordCount: 0 };
-    dom.docPreviewCard.classList.add('hidden');
+    state.uploadedFiles = [];
+    refreshMultiDocumentsState();
     dom.rawTextInput.value = '';
-    showToast('Đã xóa tài liệu hiện tại!', 'info');
+    showToast('Đã xóa toàn bộ tài liệu đã nạp!', 'info');
   });
 
   // View / Edit Extracted Text
@@ -3366,17 +3656,17 @@ ${state.currentDoc.text}`;
       } else {
         speechContent = '';
         if (state.summaryData.coreTakeaways && state.summaryData.coreTakeaways.length > 0) {
-          speechContent += `Điểm cốt lõi: ${state.summaryData.coreTakeaways.join('. ')}. `;
+          speechContent += `Điểm cốt lõi. ${state.summaryData.coreTakeaways.join('. ')}. `;
         }
         if (state.summaryData.terms && state.summaryData.terms.length > 0) {
-          speechContent += `Thuật ngữ chính: ${state.summaryData.terms.map(t => `${t.term}: ${t.definition}`).join('. ')}. `;
+          speechContent += `Thuật ngữ quan trọng. ${state.summaryData.terms.map(t => `${t.term}: ${t.definition}`).join('. ')}. `;
         }
         if (state.summaryData.studyStrategy) {
           if (state.summaryData.studyStrategy.feynmanTechnique) {
-            speechContent += `Mẹo giải thích dễ hiểu: ${state.summaryData.studyStrategy.feynmanTechnique}. `;
+            speechContent += `Mẹo giải thích dễ hiểu. ${state.summaryData.studyStrategy.feynmanTechnique}. `;
           }
           if (state.summaryData.studyStrategy.mnemonics) {
-            speechContent += `Ghi nhớ siêu tốc: ${state.summaryData.studyStrategy.mnemonics}. `;
+            speechContent += `Ghi nhớ siêu tốc. ${state.summaryData.studyStrategy.mnemonics}. `;
           }
         }
       }
@@ -3557,29 +3847,56 @@ ${state.currentDoc.text}`;
 
   if (dom.btnToggleTts) {
     dom.btnToggleTts.addEventListener('click', () => {
+      // Nếu đang đọc thì bấm nút sẽ dừng ngay lập tức
+      if (isReadingAllBeams || isSpeaking) {
+        stopAllSpeech();
+        showToast('Đã dừng nghe đọc thẻ học tập!', 'info');
+        return;
+      }
+
       if (!state.beamData || state.beamData.length === 0) {
         showToast('Chưa có thẻ học tập nào để đọc!', 'warning');
         return;
       }
+
+      isReadingAllBeams = true;
+      isSpeaking = true;
+
+      // Cập nhật giao diện nút đang phát
+      dom.btnToggleTts.classList.remove('bg-white', 'text-slate-700');
+      dom.btnToggleTts.classList.add('bg-indigo-600', 'text-white');
+      const ic = dom.btnToggleTts.querySelector('i');
+      if (ic) ic.className = 'fa-solid fa-volume-high text-white animate-bounce';
+      const span = dom.btnToggleTts.querySelector('span');
+
       let currentIdx = 0;
+
       function playNextBeam() {
-        if (!isSpeaking || currentIdx >= state.beamData.length) {
+        if (!isReadingAllBeams || currentIdx >= state.beamData.length) {
+          stopAllSpeech();
           if (currentIdx >= state.beamData.length) {
-            showToast('Đã đọc xong toàn bộ các thẻ học tập!', 'success');
+            showToast('Đã nghe đọc xong toàn bộ các thẻ học tập!', 'success');
           }
           return;
         }
+
         const b = state.beamData[currentIdx];
         currentIdx++;
+        if (span) span.textContent = `Đang đọc Thẻ ${currentIdx}/${state.beamData.length}`;
         showToast(`🔊 Đang đọc Thẻ ${currentIdx}/${state.beamData.length}: ${b.title}`, 'info');
-        const text = `Thẻ số ${currentIdx}: Câu hỏi: ${b.frontQuestion}. Lời giải: ${b.backAnswer}. ${b.takeaway ? 'Trọng tâm ba mươi giây: ' + b.takeaway : ''}`;
-        playVietnameseText(`Thẻ ${currentIdx}`, text, () => {
-          setTimeout(() => {
-            if (isSpeaking) playNextBeam();
-          }, 600);
-        });
+
+        const isEn = isTextEnglish((b.title || '') + ' ' + (b.frontQuestion || '') + ' ' + (b.backAnswer || ''));
+        const speechText = isEn
+          ? `Card ${currentIdx}. ${b.title}. Question: ${b.frontQuestion}. Answer: ${b.backAnswer}. ${b.takeaway ? 'Key takeaway: ' + b.takeaway : ''}`
+          : `Thẻ số ${currentIdx}. ${b.title}. Câu hỏi: ${b.frontQuestion}. Lời giải: ${b.backAnswer}. ${b.takeaway ? 'Ghi nhớ ba mươi giây: ' + b.takeaway : ''}`;
+
+        playSmartSpeech(`Thẻ ${currentIdx}`, speechText, () => {
+          if (isReadingAllBeams) {
+            setTimeout(playNextBeam, 650);
+          }
+        }, true /* isSequence = true để không bị stopAllSpeech ngắt cờ giữa chừng */);
       }
-      isSpeaking = true;
+
       playNextBeam();
     });
   }
@@ -3806,11 +4123,7 @@ ${state.currentDoc.text}`;
   const androidInstallModal = document.getElementById('android-install-modal');
   const btnCloseAndroidModal = document.getElementById('btn-close-android-modal');
   const zaloBrowserWarning = document.getElementById('zalo-browser-warning');
-
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  const isInAppBrowser = /FBAN|FBAV|Zalo|Line|Instagram|BytedanceWebview/i.test(navigator.userAgent);
+  const iosInappWarning = document.getElementById('ios-inapp-warning');
 
   function showInstallUi() {
     if (isStandalone) return;
@@ -3866,9 +4179,18 @@ ${state.currentDoc.text}`;
       return;
     }
 
-    // 2. Nếu đang dùng thiết bị Apple (iOS Safari)
+    // 2. Nếu đang dùng thiết bị Apple (iPhone / iPad / iOS Safari)
     if (isIos) {
-      if (iosInstallModal) iosInstallModal.classList.remove('hidden');
+      if (iosInstallModal) {
+        if (iosInappWarning) {
+          if (isInAppBrowser) {
+            iosInappWarning.classList.remove('hidden');
+          } else {
+            iosInappWarning.classList.add('hidden');
+          }
+        }
+        iosInstallModal.classList.remove('hidden');
+      }
       return;
     }
 
