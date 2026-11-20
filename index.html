@@ -27,14 +27,21 @@
   <!-- Custom Stylesheet -->
   <link rel="stylesheet" href="styles.css">
   
+  <!-- JSZip for Word (.docx) & Archive Extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
   <!-- Mammoth.js for Word (.docx) Parsing -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   
-  <!-- PDF.js for PDF Parsing -->
+  <!-- PDF.js for PDF Parsing with Vietnamese CMaps -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
     if (window.pdfjsLib) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      try {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      } catch (e) {
+        console.warn('PDF.js worker init fallback:', e);
+      }
     }
   </script>
   
@@ -102,6 +109,10 @@
 
         <!-- Action Buttons for Mobile & Tablet (< lg) -->
         <div class="flex items-center gap-1 sm:gap-1.5 lg:hidden shrink-0">
+          <button id="btn-quick-guide-mobile" onclick="window.toggleUserGuide && window.toggleUserGuide()" class="px-2 py-1 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg flex items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Xem hướng dẫn sử dụng nhanh">
+            <i class="fa-solid fa-circle-question text-indigo-600 text-xs"></i>
+            <span class="text-[11px]">HD</span>
+          </button>
           <button id="btn-install-pwa-mobile" class="hidden px-2 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Cài ứng dụng SmartEdu lên màn hình chính điện thoại">
             <i class="fa-solid fa-download text-indigo-600 text-xs"></i>
             <span class="text-[11px]">Cài</span>
@@ -152,6 +163,12 @@
           <span>Cài ứng dụng</span>
         </button>
 
+        <!-- Desktop-only Guide Button (>= lg) -->
+        <button id="btn-quick-guide" onclick="window.toggleUserGuide && window.toggleUserGuide()" class="hidden lg:flex px-2.5 sm:px-3 py-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg items-center gap-1.5 transition-all shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Xem hướng dẫn sử dụng nhanh">
+          <i class="fa-solid fa-circle-question text-indigo-600 text-xs sm:text-sm"></i>
+          <span>Hướng dẫn</span>
+        </button>
+
         <!-- Desktop-only Share QR Code Button (>= lg) -->
         <button id="btn-share-qr" class="hidden lg:flex px-2.5 sm:px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg items-center gap-1.5 transition-all shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Mã QR chia sẻ & quét trải nghiệm trên điện thoại">
           <i class="fa-solid fa-qrcode text-indigo-600 text-xs sm:text-sm"></i>
@@ -173,6 +190,78 @@
 
   <!-- ================= MAIN CONTAINER ================= -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full flex flex-col gap-6">
+
+    <!-- ================= QUICK USER GUIDE (HƯỚNG DẪN SỬ DỤNG 3 BƯỚC ĐƠN GIẢN) ================= -->
+    <section id="user-guide-section" class="bg-gradient-to-r from-indigo-50/90 via-white to-blue-50/80 rounded-2xl border border-indigo-100 p-4 sm:p-5 shadow-xs transition-all no-print">
+      <div class="flex items-center justify-between pb-3 border-b border-indigo-100">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white flex items-center justify-center text-sm shadow-xs shadow-indigo-200 shrink-0">
+            <i class="fa-solid fa-lightbulb"></i>
+          </div>
+          <div>
+            <h2 class="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-1.5">
+              <span>Hướng Dẫn Sử Dụng Nhanh</span>
+              <span class="text-[10px] font-extrabold px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded-full uppercase">3 Bước Đơn Giản</span>
+            </h2>
+            <p class="text-[11px] text-slate-500 hidden sm:block">Chỉ với 1 phút để làm chủ toàn bộ nền tảng học tập & khảo thí thông minh</p>
+          </div>
+        </div>
+        <button id="btn-toggle-guide" onclick="window.toggleUserGuide && window.toggleUserGuide()" class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-indigo-50 border border-transparent hover:border-indigo-200 transition-all cursor-pointer active:scale-95" title="Đóng / mở khung hướng dẫn">
+          <span id="guide-toggle-text">Thu gọn</span>
+          <i id="guide-toggle-icon" class="fa-solid fa-chevron-up text-[10px]"></i>
+        </button>
+      </div>
+
+      <div id="user-guide-content" class="grid grid-cols-1 md:grid-cols-3 gap-3.5 pt-3.5 transition-all">
+        <!-- Bước 1 -->
+        <div class="bg-white rounded-xl p-3.5 border border-indigo-100 shadow-2xs flex flex-col gap-2 relative overflow-hidden group hover:border-indigo-300 transition-all">
+          <div class="flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-xs">1</span>
+            <h3 class="text-xs font-bold text-slate-900">Nạp bài học</h3>
+          </div>
+          <p class="text-[11px] text-slate-600 leading-relaxed">
+            Chọn <strong>Tải File Word (.docx) / PDF</strong>, <strong>Chụp ảnh sách giáo khoa</strong> bằng camera điện thoại, hoặc bấm ngay các <strong>Bài học mẫu</strong> (Toán 9, KHTN 9, KHTN 8, KHTN 7) trên thanh menu.
+          </p>
+          <div class="mt-auto pt-1.5 flex flex-wrap gap-1 text-[10px] font-semibold">
+            <span class="px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200"><i class="fa-solid fa-file-word"></i> Word & PDF</span>
+            <span class="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded border border-emerald-200"><i class="fa-solid fa-camera"></i> Camera ảnh</span>
+            <span class="px-2 py-0.5 bg-amber-50 text-amber-800 rounded border border-amber-200"><i class="fa-solid fa-star"></i> 4 Bài mẫu</span>
+          </div>
+        </div>
+
+        <!-- Bước 2 -->
+        <div class="bg-white rounded-xl p-3.5 border border-indigo-100 shadow-2xs flex flex-col gap-2 relative overflow-hidden group hover:border-indigo-300 transition-all">
+          <div class="flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-xs">2</span>
+            <h3 class="text-xs font-bold text-slate-900">AI nhận diện & phân tích</h3>
+          </div>
+          <p class="text-[11px] text-slate-600 leading-relaxed">
+            Hệ thống tự động trích xuất toàn bộ <strong>văn bản, công thức Toán - Lý - Hóa</strong> và <strong>phân tích hình vẽ, mạch điện, đồ thị</strong>. Nếu là ảnh chụp hoặc PDF scan, bấm <em>"Nhận diện OCR"</em> để AI phiên giải.
+          </p>
+          <div class="mt-auto pt-1.5 flex flex-wrap gap-1 text-[10px] font-semibold">
+            <span class="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded border border-indigo-200"><i class="fa-solid fa-square-root-variable"></i> Công thức KaTeX</span>
+            <span class="px-2 py-0.5 bg-purple-50 text-purple-700 rounded border border-purple-200"><i class="fa-solid fa-eye"></i> Phân tích sơ đồ & hình vẽ</span>
+          </div>
+        </div>
+
+        <!-- Bước 3 -->
+        <div class="bg-white rounded-xl p-3.5 border border-indigo-100 shadow-2xs flex flex-col gap-2 relative overflow-hidden group hover:border-indigo-300 transition-all">
+          <div class="flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-xs">3</span>
+            <h3 class="text-xs font-bold text-slate-900">Trải nghiệm 4 tính năng ôn luyện</h3>
+          </div>
+          <p class="text-[11px] text-slate-600 leading-relaxed">
+            Bấm nút <strong>"Vào học"</strong> để khám phá 4 Tab công cụ học tập thông minh:
+          </p>
+          <ul class="text-[11px] text-slate-700 space-y-1.5 mt-auto">
+            <li class="flex items-center gap-1.5"><i class="fa-solid fa-diagram-project text-indigo-600 text-xs shrink-0"></i> <span><strong>Tab 1:</strong> Sơ đồ tư duy AI tương tác Markmap</span></li>
+            <li class="flex items-center gap-1.5"><i class="fa-solid fa-book-bookmark text-emerald-600 text-xs shrink-0"></i> <span><strong>Tab 2:</strong> Tóm tắt cốt lõi & Mẹo nhớ Feynman</span></li>
+            <li class="flex items-center gap-1.5"><i class="fa-solid fa-clipboard-question text-purple-600 text-xs shrink-0"></i> <span><strong>Tab 3:</strong> Khảo thí 3 mức độ (chấm điểm tự động)</span></li>
+            <li class="flex items-center gap-1.5"><i class="fa-solid fa-bolt text-amber-500 text-xs shrink-0"></i> <span><strong>Tab 4:</strong> Thẻ học tập Flashcards lật 3D</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
 
     <!-- UPLOAD & CONTENT INPUT SECTION -->
     <section id="upload-section" class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm transition-all no-print">
@@ -203,7 +292,7 @@
       <!-- Mode 1: File & Image Upload Area -->
       <div id="drop-zone-container" class="mt-4">
         <div id="drop-zone" class="border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/30 hover:bg-indigo-50/60 rounded-xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-3">
-          <input type="file" id="file-input" class="hidden" accept=".docx,.doc,.pdf,image/*" multiple>
+          <input type="file" id="file-input" class="hidden" accept=".docx,.doc,.pdf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*" multiple>
           
           <div class="w-14 h-14 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-2xl shadow-inner">
             <i class="fa-solid fa-file-circle-plus"></i>
@@ -271,12 +360,6 @@
             <button id="btn-ocr-image" class="hidden px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 rounded-lg transition-all flex items-center gap-1 active:scale-95 cursor-pointer">
               <i class="fa-solid fa-eye text-xs"></i>
               <span id="ocr-btn-text">Nhận diện OCR tất cả ảnh</span>
-            </button>
-            
-            <!-- Read Doc Voice Assistant button -->
-            <button id="btn-read-doc" class="px-2.5 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-all flex items-center gap-1 active:scale-95 cursor-pointer" title="Nghe trợ lý AI đọc bài học">
-              <i class="fa-solid fa-volume-high text-xs text-indigo-600"></i>
-              <span>Nghe đọc</span>
             </button>
             
             <!-- View raw text modal trigger -->

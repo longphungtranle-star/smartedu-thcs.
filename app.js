@@ -879,6 +879,126 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // 1. Trích xuất DOCX bằng JSZip (bắt trọn hộp văn bản w:txbxContent, bảng w:tc, và đoạn văn w:p)
+  async function parseDocxWithJsZip(arrayBuffer) {
+    if (!window.JSZip) return null;
+    try {
+      const zip = await window.JSZip.loadAsync(arrayBuffer);
+      const docXmlFile = zip.file("word/document.xml");
+      if (!docXmlFile) return null;
+      const xmlText = await docXmlFile.async("string");
+
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlText, "application/xml");
+
+      // Trích xuất toàn bộ các đoạn văn bản trong w:p
+      // (Bao gồm cả text nằm trong hộp văn bản w:txbxContent, bảng biểu w:tc, hình vẽ w:drawing)
+      const paragraphs = xmlDoc.getElementsByTagName("w:p");
+      const lines = [];
+
+      for (let i = 0; i < paragraphs.length; i++) {
+        const p = paragraphs[i];
+        const tTags = p.getElementsByTagName("w:t");
+        let pStr = '';
+        for (let j = 0; j < tTags.length; j++) {
+          pStr += tTags[j].textContent || '';
+        }
+        const trimmed = pStr.trim();
+        if (trimmed) {
+          lines.push(trimmed);
+        }
+      }
+
+      // Đọc thêm ghi chú (footnotes/endnotes) nếu có
+      const extraFiles = zip.file(/^word\/(footnotes|endnotes|header\d+|footer\d+)\.xml$/);
+      for (const f of extraFiles) {
+        try {
+          const extraXml = await f.async("string");
+          const extraDoc = parser.parseFromString(extraXml, "application/xml");
+          const extraPs = extraDoc.getElementsByTagName("w:p");
+          for (let i = 0; i < extraPs.length; i++) {
+            const tTags = extraPs[i].getElementsByTagName("w:t");
+            let pStr = '';
+            for (let j = 0; j < tTags.length; j++) pStr += tTags[j].textContent || '';
+            const trimmed = pStr.trim();
+            if (trimmed && !lines.includes(trimmed)) {
+              lines.push(trimmed);
+            }
+          }
+        } catch (e) {}
+      }
+
+      const merged = lines.join('\n\n').trim();
+      return merged || null;
+    } catch (err) {
+      console.warn('JSZip DOCX parse error:', err);
+      return null;
+    }
+  }
+
+  // 2. Trích xuất file .doc (Word 97-2003 hoặc HTML/MHTML/RTF xuất từ vnEdu/SMAS/Word)
+  function parseDocBinaryOrHtml(arrayBuffer) {
+    try {
+      const decoderUtf8 = new TextDecoder('utf-8', { fatal: false });
+      const rawText = decoderUtf8.decode(arrayBuffer);
+
+      // Trường hợp A: File .doc thực chất là HTML/MHTML/XML
+      if (/<!DOCTYPE\s+html|<html|<body|<table|<\?xml|<w:wordDocument/i.test(rawText)) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(rawText, 'text/html');
+        const bodyText = doc.body ? (doc.body.innerText || doc.body.textContent || '') : '';
+        if (bodyText && countWords(bodyText) > 10) {
+          return bodyText.trim();
+        }
+      }
+
+      // Trường hợp B: File RTF (Rich Text Format) mang đuôi .doc
+      if (rawText.startsWith('{\\rtf')) {
+        const rtfClean = rawText
+          .replace(/\\par[d]?/g, '\n')
+          .replace(/\\[a-z0-9\-]+ ?/gi, '')
+          .replace(/[{}]/g, '')
+          .trim();
+        if (rtfClean && countWords(rtfClean) > 10) return rtfClean;
+      }
+
+      // Trường hợp C: File Word 97-2003 nhị phân (CFB / OLE2)
+      // Quét chuỗi Unicode (UTF-16LE) và ASCII
+      const uint8 = new Uint8Array(arrayBuffer);
+      let extractedStrings = [];
+      let currentUnicode = [];
+
+      for (let i = 0; i < uint8.length - 1; i += 2) {
+        const code = uint8[i] | (uint8[i + 1] << 8);
+        if ((code >= 32 && code <= 126) || (code >= 192 && code <= 0x1EF9) || code === 10 || code === 13) {
+          currentUnicode.push(String.fromCharCode(code));
+        } else {
+          if (currentUnicode.length >= 8) {
+            const str = currentUnicode.join('').trim();
+            if (str.length > 5 && /[a-zA-Z0-9à-ỹÀ-Ỹ]/.test(str)) {
+              extractedStrings.push(str);
+            }
+          }
+          currentUnicode = [];
+        }
+      }
+      if (currentUnicode.length >= 8) {
+        const str = currentUnicode.join('').trim();
+        if (str.length > 5 && /[a-zA-Z0-9à-ỹÀ-Ỹ]/.test(str)) {
+          extractedStrings.push(str);
+        }
+      }
+
+      if (extractedStrings.length > 0) {
+        const merged = extractedStrings.join('\n');
+        if (countWords(merged) > 15) return merged;
+      }
+    } catch (e) {
+      console.warn('Doc binary/html parse error:', e);
+    }
+    return null;
+  }
+
   // Phân tích từng file đơn lẻ (Word, PDF, hoặc Ảnh)
   async function parseSingleFile(file) {
     const name = file.name || 'Tai_lieu';
@@ -889,20 +1009,53 @@ document.addEventListener('DOMContentLoaded', () => {
     if (lowerName.endsWith('.docx') || lowerName.endsWith('.doc')) {
       try {
         const arrayBuffer = await file.arrayBuffer();
-        const result = await window.mammoth.extractRawText({ arrayBuffer: arrayBuffer });
-        const text = result.value ? result.value.trim() : '';
+        let extractedText = '';
+
+        // Bước A: Thử trích xuất chuyên sâu bằng JSZip (Hỗ trợ hộp văn bản Text Box, Bảng và Hình vẽ)
+        const zipText = await parseDocxWithJsZip(arrayBuffer);
+
+        // Bước B: Thử trích xuất bằng Mammoth
+        let mammothText = '';
+        if (window.mammoth) {
+          try {
+            const result = await window.mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+            mammothText = result.value ? result.value.trim() : '';
+          } catch (mErr) {
+            console.warn('Mammoth parse error:', mErr);
+          }
+        }
+
+        // Ưu tiên bản trích xuất có nội dung đầy đủ nhất (nhiều từ hơn)
+        if (zipText && (!mammothText || countWords(zipText) >= countWords(mammothText))) {
+          extractedText = zipText;
+        } else if (mammothText) {
+          extractedText = mammothText;
+        }
+
+        // Bước C: Nếu cả 2 đều không ra văn bản (hoặc file .doc nhị phân/HTML), dùng bộ giải mã nhị phân/HTML
+        if (!extractedText || countWords(extractedText) < 15) {
+          const docFallback = parseDocBinaryOrHtml(arrayBuffer);
+          if (docFallback && countWords(docFallback) > countWords(extractedText)) {
+            extractedText = docFallback;
+          }
+        }
+
+        const cleanText = extractedText ? extractedText.trim() : '';
+        const wordCount = countWords(cleanText);
+
         return {
           id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
           name: name,
           type: 'word',
-          text: text || `[File Word: ${name} (Không có văn bản trích xuất được)]`,
-          wordCount: countWords(text),
+          text: cleanText || `[File Word: ${name} (Không có văn bản trích xuất được)]`,
+          wordCount: wordCount,
           size: file.size,
           imageBase64: null,
+          images: [],
           isOcrDone: true
         };
       } catch (err) {
-        console.warn('Mammoth parse error:', err);
+        console.warn('Word parse error:', err);
         return {
           id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
           name: name,
@@ -911,33 +1064,108 @@ document.addEventListener('DOMContentLoaded', () => {
           wordCount: 0,
           size: file.size,
           imageBase64: null,
+          images: [],
           isOcrDone: true
         };
       }
     }
 
-    // 2. File PDF
+    // 2. File PDF (Hỗ trợ tiếng Việt đầy đủ CMaps và tự động Render ảnh nét cao cho PDF scan)
     if (lowerName.endsWith('.pdf')) {
       try {
         const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        let fullText = '';
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const textContent = await page.getTextContent();
-          const pageStrings = textContent.items.map(item => item.str);
-          fullText += `\n--- TRANG ${i} ---\n` + pageStrings.join(' ');
+        if (!window.pdfjsLib) {
+          throw new Error('Thư viện PDF.js chưa sẵn sàng.');
         }
-        const cleanText = fullText.trim();
+
+        // Cấu hình CMaps để giải mã font tiếng Việt đầy đủ
+        const loadingTask = pdfjsLib.getDocument({
+          data: arrayBuffer,
+          cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+          cMapPacked: true,
+          standardFontDataUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/standard_fonts/',
+          isEvalSupported: false
+        });
+
+        const pdf = await loadingTask.promise;
+        const totalPages = pdf.numPages;
+        const pageTextList = [];
+        let totalRealWords = 0;
+
+        for (let i = 1; i <= totalPages; i++) {
+          try {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent({ normalizeWhitespace: true });
+            const pageStrings = textContent.items
+              .map(item => item.str)
+              .filter(s => s && s.trim());
+            const pText = pageStrings.join(' ').trim();
+            if (pText) {
+              pageTextList.push(`--- TRANG ${i} ---\n` + pText);
+              totalRealWords += countWords(pText);
+            }
+          } catch (pageErr) {
+            console.warn(`Lỗi đọc văn bản trang ${i}:`, pageErr);
+          }
+        }
+
+        const fullText = pageTextList.join('\n\n').trim();
+
+        // Render ảnh các trang (tối đa 6 trang) qua Canvas để hỗ trợ AI Multimodal Vision đọc chi tiết công thức & hình vẽ
+        let pageImages = [];
+        const pagesToRender = Math.min(totalPages, 6);
+        for (let i = 1; i <= pagesToRender; i++) {
+          try {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale: 1.5 });
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.min(viewport.width, 1400);
+            canvas.height = Math.min(viewport.height, 2000);
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            pageImages.push(dataUrl);
+          } catch (renderErr) {
+            console.warn(`Lỗi render canvas trang ${i}:`, renderErr);
+          }
+        }
+
+        // Nhận diện file PDF dạng scan ảnh hoặc văn bản quá ít (< 35 từ trên toàn tài liệu)
+        const isScannedPdf = totalRealWords < 35 || (totalPages > 1 && (totalRealWords / totalPages) < 15);
+
+        if (isScannedPdf && pageImages.length > 0) {
+          const scanNotice = `[Tài liệu PDF ảnh scan / Sách giáo khoa: ${name} (${totalPages} trang)]\n` +
+            (fullText ? `${fullText}\n\n` : '') +
+            `(Hệ thống đã tự động kết xuất ${pageImages.length} trang ảnh chất lượng cao. Hãy bấm "Nhận diện OCR bằng AI" để AI Vision trích xuất toàn bộ công thức Toán - Lý - Hóa, văn bản và hình vẽ chi tiết!)`;
+
+          return {
+            id: 'pdf_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+            name: name,
+            type: 'pdf',
+            text: scanNotice,
+            wordCount: totalRealWords > 15 ? totalRealWords : 0,
+            size: file.size,
+            imageBase64: pageImages[0],
+            images: pageImages,
+            isOcrDone: false, // Để hiện nút "Nhận diện OCR bằng AI"
+            isScannedPdf: true
+          };
+        }
+
+        // PDF có đầy đủ văn bản số
         return {
           id: 'pdf_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
           name: name,
           type: 'pdf',
-          text: cleanText || `[File PDF scan ảnh: ${name}]`,
-          wordCount: countWords(cleanText),
+          text: fullText || `[File PDF: ${name} (Không tìm thấy văn bản trích xuất)]`,
+          wordCount: totalRealWords,
           size: file.size,
-          imageBase64: null,
-          isOcrDone: true
+          imageBase64: pageImages[0] || null,
+          images: pageImages,
+          isOcrDone: true,
+          isScannedPdf: false
         };
       } catch (err) {
         console.warn('PDF.js parse error:', err);
@@ -949,6 +1177,7 @@ document.addEventListener('DOMContentLoaded', () => {
           wordCount: 0,
           size: file.size,
           imageBase64: null,
+          images: [],
           isOcrDone: true
         };
       }
@@ -966,6 +1195,7 @@ document.addEventListener('DOMContentLoaded', () => {
         wordCount: countWords(text),
         size: file.size,
         imageBase64: base64,
+        images: [base64],
         isOcrDone: false
       };
     }
@@ -985,15 +1215,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const totalFiles = state.uploadedFiles.length;
-    const allImages = state.uploadedFiles.filter(f => f.imageBase64).map(f => f.imageBase64);
+    const allImages = state.uploadedFiles.flatMap(f => (f.images && f.images.length > 0) ? f.images : (f.imageBase64 ? [f.imageBase64] : []));
 
     if (totalFiles === 1) {
       const single = state.uploadedFiles[0];
       state.currentDoc.title = single.name;
       state.currentDoc.text = single.text;
       state.currentDoc.type = single.type;
-      state.currentDoc.imageBase64 = single.imageBase64;
-      state.currentDoc.images = single.imageBase64 ? [single.imageBase64] : [];
+      state.currentDoc.imageBase64 = single.imageBase64 || (single.images && single.images[0]) || null;
+      state.currentDoc.images = (single.images && single.images.length > 0) ? single.images : (single.imageBase64 ? [single.imageBase64] : []);
       state.currentDoc.wordCount = single.wordCount;
     } else {
       // Gộp nội dung của tất cả các tài liệu / ảnh thành một bài học hoàn chỉnh
@@ -1044,14 +1274,14 @@ document.addEventListener('DOMContentLoaded', () => {
       dom.docIconBadge.innerHTML = `<i class="fa-solid ${cls.split(' ')[0]}"></i>`;
     }
 
-    // Nút Nhận diện OCR: Hiện lên nếu có ít nhất 1 ảnh
+    // Nút Nhận diện OCR: Hiện lên nếu có ít nhất 1 ảnh bài học hoặc trang PDF scan
     if (dom.btnOcrImage) {
       if (imageCount > 0) {
         dom.btnOcrImage.classList.remove('hidden');
         if (dom.ocrBtnText) {
-          const unOcrCount = state.uploadedFiles.filter(f => f.imageBase64 && !f.isOcrDone).length;
+          const unOcrCount = state.uploadedFiles.filter(f => (f.imageBase64 || (f.images && f.images.length > 0)) && !f.isOcrDone).length;
           dom.ocrBtnText.textContent = unOcrCount > 0 
-            ? (totalFiles > 1 ? `Nhận diện OCR ${unOcrCount} ảnh bài học` : 'Nhận diện OCR ảnh & hình vẽ')
+            ? (totalFiles > 1 ? `Nhận diện OCR ${unOcrCount} tài liệu / ảnh` : 'Nhận diện OCR bằng AI Vision')
             : 'Đã nhận diện OCR xong';
         }
       } else {
@@ -1090,6 +1320,30 @@ document.addEventListener('DOMContentLoaded', () => {
     state.uploadedFiles = state.uploadedFiles.filter(f => f.id !== id);
     refreshMultiDocumentsState();
     showToast('Đã bỏ bớt tài liệu khỏi danh sách gộp!', 'info');
+  };
+
+  // Đóng / mở khung hướng dẫn sử dụng nhanh
+  window.toggleUserGuide = function() {
+    const guideSection = document.getElementById('user-guide-section');
+    const guideContent = document.getElementById('user-guide-content');
+    const toggleText = document.getElementById('guide-toggle-text');
+    const toggleIcon = document.getElementById('guide-toggle-icon');
+
+    if (!guideContent) return;
+
+    const isHidden = guideContent.classList.contains('hidden');
+    if (isHidden) {
+      guideContent.classList.remove('hidden');
+      if (toggleText) toggleText.textContent = 'Thu gọn';
+      if (toggleIcon) toggleIcon.className = 'fa-solid fa-chevron-up text-[10px]';
+      if (guideSection) {
+        guideSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    } else {
+      guideContent.classList.add('hidden');
+      if (toggleText) toggleText.textContent = 'Mở rộng';
+      if (toggleIcon) toggleIcon.className = 'fa-solid fa-chevron-down text-[10px]';
+    }
   };
 
   // Hàm xử lý nạp nhiều file cùng một lúc (Word, PDF, Ảnh bài học)
@@ -1137,22 +1391,52 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ================= OCR WITH GEMINI VISION (NHẬN DIỆN CÔNG THỨC TOÁN - LÝ - HÓA & HÌNH VẼ CHI TIẾT) =================
   async function runOcrOnCurrentImage() {
-    const unOcrImages = state.uploadedFiles.filter(f => f.imageBase64 && !f.isOcrDone);
-    const targetImages = unOcrImages.length > 0 ? unOcrImages : state.uploadedFiles.filter(f => f.imageBase64);
+    const unOcrFiles = state.uploadedFiles.filter(f => (f.imageBase64 || (f.images && f.images.length > 0)) && !f.isOcrDone);
+    const targetFiles = unOcrFiles.length > 0 ? unOcrFiles : state.uploadedFiles.filter(f => f.imageBase64 || (f.images && f.images.length > 0));
 
-    if (targetImages.length === 0 && !state.currentDoc.imageBase64) {
-      showToast('Không tìm thấy ảnh bài học nào để nhận diện OCR!', 'warning');
+    if (targetFiles.length === 0 && !state.currentDoc.imageBase64 && (!state.currentDoc.images || state.currentDoc.images.length === 0)) {
+      showToast('Không tìm thấy ảnh hoặc trang tài liệu nào để nhận diện OCR!', 'warning');
       return;
     }
 
-    const itemsToProcess = targetImages.length > 0 ? targetImages : [{
-      id: 'single_img',
-      name: state.currentDoc.title || 'Ảnh bài học',
-      imageBase64: state.currentDoc.imageBase64
-    }];
+    // Thu thập tất cả các trang ảnh bài học cần OCR (bao gồm các trang PDF scan đã render)
+    let itemsToProcess = [];
+    if (targetFiles.length > 0) {
+      targetFiles.forEach(f => {
+        if (f.images && f.images.length > 0) {
+          f.images.forEach((imgBase64, pageIdx) => {
+            itemsToProcess.push({
+              fileId: f.id,
+              name: `${f.name} (Trang ${pageIdx + 1})`,
+              imageBase64: imgBase64
+            });
+          });
+        } else if (f.imageBase64) {
+          itemsToProcess.push({
+            fileId: f.id,
+            name: f.name,
+            imageBase64: f.imageBase64
+          });
+        }
+      });
+    } else if (state.currentDoc.images && state.currentDoc.images.length > 0) {
+      state.currentDoc.images.forEach((imgBase64, pageIdx) => {
+        itemsToProcess.push({
+          fileId: 'currentDoc',
+          name: `${state.currentDoc.title || 'Tài liệu'} (Trang ${pageIdx + 1})`,
+          imageBase64: imgBase64
+        });
+      });
+    } else {
+      itemsToProcess.push({
+        fileId: 'single_img',
+        name: state.currentDoc.title || 'Ảnh bài học',
+        imageBase64: state.currentDoc.imageBase64
+      });
+    }
 
     try {
-      showLoading(`Đang nhận diện OCR qua AI...`, `Đang trích xuất công thức Toán - Lý - Hóa và phân tích hình vẽ từ ${itemsToProcess.length} ảnh bài học...`);
+      showLoading(`Đang nhận diện OCR qua AI...`, `Đang trích xuất công thức Toán - Lý - Hóa và phân tích hình vẽ từ ${itemsToProcess.length} trang ảnh bài học...`);
 
       const prompt = `Bạn là chuyên gia nhận diện văn bản (OCR) và phiên giải tài liệu học tập ĐẶC BIỆT LÀ TOÁN HỌC, VẬT LÝ, HÓA HỌC & KHOA HỌC TỰ NHIÊN (Cả Cấp 2 THCS & Cấp 3 THPT).
 Hãy đọc cẩn thận bức ảnh bài học này và trích xuất TOÀN BỘ nội dung ra văn bản tiếng Việt rõ ràng, mạch lạc, giữ nguyên tiêu đề và cấu trúc bài học:
@@ -1174,9 +1458,11 @@ Hãy đọc cẩn thận bức ảnh bài học này và trích xuất TOÀN B�
 
 Chỉ trả về nội dung bài học và phần phân tích hình vẽ đã nhận diện, không kèm lời chào.`;
 
-      // TỐI ƯU HÓA ĐỘT PHÁ: Nếu có từ 2 đến 6 ảnh, gộp nhận diện đồng thời (Multi-Image Batching) trong 1 request duy nhất
+      let extractedFull = '';
+
+      // TỐI ƯU HÓA: Nếu có từ 2 đến 6 ảnh, gộp nhận diện đồng thời (Multi-Image Batching) trong 1 request duy nhất
       if (itemsToProcess.length > 1 && itemsToProcess.length <= 6) {
-        showLoading(`Đang nhận diện đồng thời ${itemsToProcess.length} ảnh bài học...`, `Gộp xử lý song song siêu tốc qua Gemini Vision...`);
+        showLoading(`Đang nhận diện đồng thời ${itemsToProcess.length} trang ảnh...`, `Gộp xử lý song song siêu tốc qua Gemini Vision...`);
         const allImages = itemsToProcess.map(it => it.imageBase64).filter(Boolean);
         const batchPrompt = `${prompt}
 
@@ -1186,62 +1472,63 @@ LƯU Ý ĐẶC BIỆT KHI NHẬN DIỆN ĐỒNG THỜI NHIỀU ẢNH:
 - Giữ nguyên toàn bộ tiêu đề, công thức Toán - Lý - Hóa dưới dạng KaTeX ($...$ hoặc $$...$$) và phần phân tích hình vẽ/mạch điện nếu có.`;
 
         try {
-          const extracted = await callGeminiWithRotation(batchPrompt, allImages, {
+          extractedFull = await callGeminiWithRotation(batchPrompt, allImages, {
             isJson: false,
             maxTokens: 4000,
-            taskName: `Đang nhận diện siêu tốc ${itemsToProcess.length} ảnh cùng lúc...`
+            taskName: `Đang nhận diện siêu tốc ${itemsToProcess.length} trang ảnh cùng lúc...`
           });
-
-          itemsToProcess.forEach((it, idx) => {
-            it.isOcrDone = true;
-            it.text = idx === 0 ? extracted : `[Đã gộp nội dung bài học hoàn chỉnh vào Trang 1]`;
-            it.wordCount = idx === 0 ? countWords(extracted) : 0;
-          });
-          state.currentDoc.text = extracted;
-          state.currentDoc.wordCount = countWords(extracted);
         } catch (batchErr) {
           console.warn('Lỗi nhận diện gộp nhiều ảnh, tự động chuyển về chế độ từng ảnh:', batchErr);
           // Fallback tuần tự an toàn nếu gộp gặp lỗi
+          const parts = [];
           for (let i = 0; i < itemsToProcess.length; i++) {
             const item = itemsToProcess[i];
-            showLoading(`Đang nhận diện ảnh ${i + 1}/${itemsToProcess.length}...`, item.name);
-            const extracted = await callGeminiWithRotation(prompt, item.imageBase64, {
+            showLoading(`Đang nhận diện trang ${i + 1}/${itemsToProcess.length}...`, item.name);
+            const extractedPart = await callGeminiWithRotation(prompt, item.imageBase64, {
               isJson: false,
               maxTokens: 3500,
-              taskName: `Đang nhận diện OCR ảnh ${i + 1}/${itemsToProcess.length}: ${item.name}...`
+              taskName: `Đang nhận diện OCR trang ${i + 1}/${itemsToProcess.length}: ${item.name}...`
             });
-            item.text = extracted;
-            item.wordCount = countWords(extracted);
-            item.isOcrDone = true;
+            parts.push(`=== [TRANG ${i + 1}: ${item.name}] ===\n` + extractedPart);
           }
+          extractedFull = parts.join('\n\n');
         }
       } else {
-        // Nhận diện 1 ảnh đơn lẻ
+        // Nhận diện 1 ảnh đơn lẻ hoặc nhiều hơn 6 ảnh (tuần tự)
+        const parts = [];
         for (let i = 0; i < itemsToProcess.length; i++) {
           const item = itemsToProcess[i];
-          showLoading(`Đang nhận diện ảnh ${i + 1}/${itemsToProcess.length}...`, item.name);
+          showLoading(`Đang nhận diện trang ${i + 1}/${itemsToProcess.length}...`, item.name);
 
-          const extracted = await callGeminiWithRotation(prompt, item.imageBase64, {
+          const extractedPart = await callGeminiWithRotation(prompt, item.imageBase64, {
             isJson: false,
             maxTokens: 3500,
-            taskName: `Đang nhận diện OCR ảnh ${i + 1}/${itemsToProcess.length}: ${item.name}...`
+            taskName: `Đang nhận diện OCR trang ${i + 1}/${itemsToProcess.length}: ${item.name}...`
           });
 
-          item.text = extracted;
-          item.wordCount = countWords(extracted);
-          item.isOcrDone = true;
+          parts.push(itemsToProcess.length > 1 ? `=== [TRANG ${i + 1}: ${item.name}] ===\n` + extractedPart : extractedPart);
         }
+        extractedFull = parts.join('\n\n');
       }
+
+      // Cập nhật trạng thái cho tất cả file nguồn
+      targetFiles.forEach(f => {
+        f.isOcrDone = true;
+        f.text = extractedFull;
+        f.wordCount = countWords(extractedFull);
+      });
+      state.currentDoc.text = extractedFull;
+      state.currentDoc.wordCount = countWords(extractedFull);
 
       hideLoading();
       refreshMultiDocumentsState();
 
-      // Show in extracted text modal for verification
+      // Hiển thị ngay hộp thoại xác nhận nội dung trích xuất
       dom.extractedTextArea.value = state.currentDoc.text;
       dom.extractedWordCount.textContent = `${state.currentDoc.wordCount} từ`;
       dom.extractedTextModal.classList.remove('hidden');
 
-      showToast(`Đã nhận diện OCR thành công ${itemsToProcess.length} ảnh (${state.currentDoc.wordCount} từ)!`, 'success');
+      showToast(`Đã nhận diện OCR thành công ${itemsToProcess.length} trang ảnh (${state.currentDoc.wordCount} từ)!`, 'success');
     } catch (e) {
       hideLoading();
       showToast(e.message, 'error');
