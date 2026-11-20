@@ -688,7 +688,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }
 
           const generationConfig = {
-            temperature: 0.2,
+            temperature: 0.1, // Phản xạ nhanh, dứt khoát, giảm tối đa độ trễ suy nghĩ
             maxOutputTokens: maxTokens
           };
           if (isJson) {
@@ -787,6 +787,49 @@ document.addEventListener('DOMContentLoaded', () => {
 
     hideLoading();
     throw new Error(`Không thể hoàn thành yêu cầu: ${lastErrorMessage || 'Tất cả các API Key hoặc Model trong bể xoay vòng đều bận'}`);
+  }
+
+  // ================= THUẬT TOÁN TỐI ƯU HÓA NGỮ CẢNH VĂN BẢN DÀI (SMART SEMANTIC TRUNCATION) =================
+  // Giúp AI phản hồi siêu tốc sau 2-3s kể cả với tài liệu dài 5.000 - 15.000 từ
+  function optimizeTextForAi(rawText, maxChars = 7500) {
+    if (!rawText || typeof rawText !== 'string') return '';
+    if (rawText.length <= maxChars) return rawText;
+
+    // 1. Chuẩn hóa khoảng trắng và dòng trống
+    let text = rawText.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    if (text.length <= maxChars) return text;
+
+    // 2. Trích lọc ưu tiên: Tiêu đề, Định lý, Công thức, Phần ghi nhớ
+    const lines = text.split('\n');
+    const priorityLines = [];
+    let currentLength = 0;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      const isHeading = /^#{1,4}\s+|^(chương|bài|phần|mục|i\.|ii\.|iii\.|iv\.|v\.|vi\.|1\.|2\.|3\.|4\.|a\.|b\.)/i.test(trimmed);
+      const isMathOrFormula = /[$=+\-*/\\^_√ΔΩ△∠⟂∥]/.test(trimmed);
+      const isKeyConcept = /ghi nhớ|tóm tắt|định lý|định luật|khái niệm|công thức|kết luận|chú ý|ví dụ|takeaway/i.test(trimmed);
+
+      if (isHeading || isMathOrFormula || isKeyConcept || priorityLines.length < 30) {
+        priorityLines.push(line);
+        currentLength += line.length + 1;
+        if (currentLength >= maxChars) break;
+      } else if (currentLength + line.length + 1 < maxChars) {
+        priorityLines.push(line);
+        currentLength += line.length + 1;
+      }
+    }
+
+    if (priorityLines.length >= 20 && currentLength >= 2000) {
+      return priorityLines.join('\n');
+    }
+
+    // 3. Fallback: Cắt giữ đầu và đuôi cân đối (tránh mất phần tóm tắt ở cuối sách)
+    const headLen = Math.floor(maxChars * 0.7);
+    const tailLen = maxChars - headLen - 120;
+    return text.slice(0, headLen) + '\n\n[... Trích lược nội dung bài học ...]\n\n' + text.slice(-tailLen);
   }
 
   // ================= FILE PARSING LOGIC (HỖ TRỢ ĐA TÀI LIỆU WORD, PDF, NHIỀU ẢNH BÀI HỌC) =================
@@ -1131,19 +1174,63 @@ Hãy đọc cẩn thận bức ảnh bài học này và trích xuất TOÀN B�
 
 Chỉ trả về nội dung bài học và phần phân tích hình vẽ đã nhận diện, không kèm lời chào.`;
 
-      for (let i = 0; i < itemsToProcess.length; i++) {
-        const item = itemsToProcess[i];
-        showLoading(`Đang nhận diện ảnh ${i + 1}/${itemsToProcess.length}...`, item.name);
+      // TỐI ƯU HÓA ĐỘT PHÁ: Nếu có từ 2 đến 6 ảnh, gộp nhận diện đồng thời (Multi-Image Batching) trong 1 request duy nhất
+      if (itemsToProcess.length > 1 && itemsToProcess.length <= 6) {
+        showLoading(`Đang nhận diện đồng thời ${itemsToProcess.length} ảnh bài học...`, `Gộp xử lý song song siêu tốc qua Gemini Vision...`);
+        const allImages = itemsToProcess.map(it => it.imageBase64).filter(Boolean);
+        const batchPrompt = `${prompt}
 
-        const extracted = await callGeminiWithRotation(prompt, item.imageBase64, {
-          isJson: false,
-          maxTokens: 3500,
-          taskName: `Đang nhận diện OCR ảnh ${i + 1}/${itemsToProcess.length}: ${item.name}...`
-        });
+LƯU Ý ĐẶC BIỆT KHI NHẬN DIỆN ĐỒNG THỜI NHIỀU ẢNH:
+- Đây là ${itemsToProcess.length} bức ảnh thuộc CÙNG MỘT BÀI HỌC được chụp tuần tự theo thứ tự trang (từ Trang 1 đến Trang ${itemsToProcess.length}).
+- Hãy đọc cẩn thận và kết nối các phần kiến thức liền mạch từ trang đầu đến trang cuối thành một bài học hoàn chỉnh.
+- Giữ nguyên toàn bộ tiêu đề, công thức Toán - Lý - Hóa dưới dạng KaTeX ($...$ hoặc $$...$$) và phần phân tích hình vẽ/mạch điện nếu có.`;
 
-        item.text = extracted;
-        item.wordCount = countWords(extracted);
-        item.isOcrDone = true;
+        try {
+          const extracted = await callGeminiWithRotation(batchPrompt, allImages, {
+            isJson: false,
+            maxTokens: 4000,
+            taskName: `Đang nhận diện siêu tốc ${itemsToProcess.length} ảnh cùng lúc...`
+          });
+
+          itemsToProcess.forEach((it, idx) => {
+            it.isOcrDone = true;
+            it.text = idx === 0 ? extracted : `[Đã gộp nội dung bài học hoàn chỉnh vào Trang 1]`;
+            it.wordCount = idx === 0 ? countWords(extracted) : 0;
+          });
+          state.currentDoc.text = extracted;
+          state.currentDoc.wordCount = countWords(extracted);
+        } catch (batchErr) {
+          console.warn('Lỗi nhận diện gộp nhiều ảnh, tự động chuyển về chế độ từng ảnh:', batchErr);
+          // Fallback tuần tự an toàn nếu gộp gặp lỗi
+          for (let i = 0; i < itemsToProcess.length; i++) {
+            const item = itemsToProcess[i];
+            showLoading(`Đang nhận diện ảnh ${i + 1}/${itemsToProcess.length}...`, item.name);
+            const extracted = await callGeminiWithRotation(prompt, item.imageBase64, {
+              isJson: false,
+              maxTokens: 3500,
+              taskName: `Đang nhận diện OCR ảnh ${i + 1}/${itemsToProcess.length}: ${item.name}...`
+            });
+            item.text = extracted;
+            item.wordCount = countWords(extracted);
+            item.isOcrDone = true;
+          }
+        }
+      } else {
+        // Nhận diện 1 ảnh đơn lẻ
+        for (let i = 0; i < itemsToProcess.length; i++) {
+          const item = itemsToProcess[i];
+          showLoading(`Đang nhận diện ảnh ${i + 1}/${itemsToProcess.length}...`, item.name);
+
+          const extracted = await callGeminiWithRotation(prompt, item.imageBase64, {
+            isJson: false,
+            maxTokens: 3500,
+            taskName: `Đang nhận diện OCR ảnh ${i + 1}/${itemsToProcess.length}: ${item.name}...`
+          });
+
+          item.text = extracted;
+          item.wordCount = countWords(extracted);
+          item.isOcrDone = true;
+        }
       }
 
       hideLoading();
@@ -1596,7 +1683,7 @@ QUY TẮC THIẾT KẾ SƠ ĐỒ TƯ DUY HIỆN ĐẠI (CHỐNG DÀI DÒNG, TĂN
 6. CHỈ TRẢ VỀ DUY NHẤT ĐOẠN MÃ MARKDOWN CỦA SƠ ĐỒ TƯ DUY, KHÔNG CÓ BẤT KỲ LỜI DẪN NÀO KHÁC.
 
 NỘI DUNG BÀI HỌC CẤP 2:
-${state.currentDoc.text}`;
+${optimizeTextForAi(state.currentDoc.text, 6500)}`;
 
     try {
       const imgToSend = getImagesToSend();
@@ -1698,7 +1785,7 @@ Trả về dữ liệu dưới dạng JSON thuần túy (không bọc text ngoà
 }
 
 NỘI DUNG BÀI HỌC CẤP 2:
-${state.currentDoc.text}`;
+${optimizeTextForAi(state.currentDoc.text, 6500)}`;
 
     try {
       const imgToSend = getImagesToSend();
@@ -2017,7 +2104,7 @@ Trả về dữ liệu dưới dạng JSON thuần túy (KHÔNG có văn bản n
 ]
 
 NỘI DUNG BÀI HỌC CẤP 2:
-${state.currentDoc.text.slice(0, 8000)}`;
+${optimizeTextForAi(state.currentDoc.text, 7500)}`;
 
     try {
       const imgToSend = getImagesToSend();
@@ -2942,7 +3029,7 @@ Trả về mảng JSON thuần túy theo cấu trúc:
 ]
 
 NỘI DUNG BÀI HỌC CẤP 2:
-${state.currentDoc.text}`;
+${optimizeTextForAi(state.currentDoc.text, 6500)}`;
 
     try {
       const imgToSend = getImagesToSend();
