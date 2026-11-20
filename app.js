@@ -332,7 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Xử lý triệt để ký tự gạch chéo ngược \:
       // - Giữ nguyên: \" (escaped quote), \\ (escaped backslash), \/ (escaped slash)
       // - Giữ nguyên unicode chuẩn: \u[0-9a-fA-F]{4}
-      // - Giữ nguyên escape ký tự điều khiển chuẩn đơn lẻ: \n, \r, \t
+      // - Giữ nguyên escape ký tự điều khiển chuẩn: \n, \r, \t, \b, \f
       // - Tất cả các từ LaTeX (\frac, \sqrt, \Delta, \times, \right, \text, \begin, \underline, \Omega, \pm, \cdot, v.v.):
       //   BẮT BUỘC biến thành \\ (double backslash) để JSON.parse hợp lệ 100%!
       s = s.replace(/\\(?:([a-zA-Z]+)|([^"\\/]))/g, (match, word, char) => {
@@ -340,7 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (/^u[0-9a-fA-F]{4}$/.test(word)) {
             return '\\' + word;
           }
-          if (word === 'n' || word === 'r' || word === 't') {
+          if (/^[nrtbf]$/.test(word)) {
             return '\\' + word;
           }
           return '\\\\' + word;
@@ -350,6 +350,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return match;
       });
+
+      // Xóa các dấu phẩy thừa trước dấu đóng ngoặc (trailing comma): , } hoặc , ]
+      s = s.replace(/,\s*([}\]])/g, '$1');
 
       return s;
     }
@@ -379,23 +382,47 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (e4) {}
     }
 
-    // 6. Cứu hộ trường hợp JSON mảng bị cắt ngang ở câu cuối (Truncated JSON do giới hạn token)
+    // 6. Cứu hộ trường hợp JSON mảng bị cắt ngang ở câu cuối (Truncated JSON do tài liệu dài vượt token limit)
+    // Dò lùi tìm các dấu } hợp lệ và đóng mảng ] an toàn
     if (firstBracket !== -1) {
       let partial = cleaned.substring(firstBracket);
-      const lastObjClose = partial.lastIndexOf('}');
-      if (lastObjClose !== -1) {
-        partial = partial.substring(0, lastObjClose + 1) + ']';
+      let lastObjClose = partial.lastIndexOf('}');
+      while (lastObjClose !== -1 && lastObjClose > 0) {
+        let candidate = partial.substring(0, lastObjClose + 1);
+        candidate = candidate.replace(/,\s*$/, '') + ']';
         try {
-          const res = JSON.parse(fixJsonEscapes(partial));
+          const res = JSON.parse(fixJsonEscapes(candidate));
           if (Array.isArray(res) && res.length > 0) {
-            console.warn(`JSON đã được giải cứu từ phản hồi dở dang (${res.length} câu hoàn chỉnh).`);
+            console.warn(`JSON mảng đã được giải cứu thành công từ phản hồi dở dang (${res.length} phần tử hoàn chỉnh).`);
             return res;
           }
-        } catch (e5) {}
+        } catch (e5) {
+          // Lùi lại tìm dấu } trước đó
+          lastObjClose = partial.lastIndexOf('}', lastObjClose - 1);
+        }
       }
     }
 
-    // 7. Cứu nguy cuối cùng: làm sạch ký tự điều khiển và parse
+    // 7. Cứu hộ nếu là Object { ... bị cắt ngang
+    if (firstBrace !== -1) {
+      let partialObj = cleaned.substring(firstBrace);
+      let lastObjEnd = partialObj.lastIndexOf('}');
+      while (lastObjEnd !== -1 && lastObjEnd > 0) {
+        let candidateObj = partialObj.substring(0, lastObjEnd + 1);
+        candidateObj = candidateObj.replace(/,\s*$/, '') + '}';
+        try {
+          const resObj = JSON.parse(fixJsonEscapes(candidateObj));
+          if (resObj && typeof resObj === 'object') {
+            console.warn('JSON Object đã được giải cứu thành công.');
+            return resObj;
+          }
+        } catch (e6) {
+          lastObjEnd = partialObj.lastIndexOf('}', lastObjEnd - 1);
+        }
+      }
+    }
+
+    // 8. Cứu nguy cuối cùng: làm sạch ký tự điều khiển và parse
     const superCleaned = fixJsonEscapes(cleaned);
     return JSON.parse(superCleaned);
   }
@@ -2475,7 +2502,21 @@ ${optimizeTextForAi(state.currentDoc.text, 7500)}`;
   }
 
   // ================= TAB 4: BEAM HỌC TẬP (FLASHCARDS) =================
-  function renderBeams(beamsArray) {
+  function renderBeams(rawBeams) {
+    if (!rawBeams) return;
+    let beamsArray = rawBeams;
+    if (!Array.isArray(beamsArray)) {
+      if (typeof beamsArray === 'object') {
+        const extracted = beamsArray.flashcards || beamsArray.cards || beamsArray.beams || beamsArray.items || beamsArray.data || Object.values(beamsArray).find(v => Array.isArray(v));
+        if (Array.isArray(extracted)) {
+          beamsArray = extracted;
+        } else {
+          beamsArray = [beamsArray];
+        }
+      } else {
+        beamsArray = [];
+      }
+    }
     state.beamData = beamsArray;
     dom.beamEmptyState.classList.add('hidden');
     dom.beamCardsGrid.classList.remove('hidden');
@@ -3365,6 +3406,12 @@ Mỗi Thẻ học tập gồm thẻ lật Flashcard 3D: Mặt trước là câu 
 
 QUAN TRỌNG VỀ CÔNG THỨC TOÁN & KHOA HỌC: Bắt buộc viết các công thức toán, lý, hóa dưới dạng LaTeX kẹp giữa dấu $ (ví dụ: $ax^2 + bx + c = 0$, $\\Delta = b^2 - 4ac$, $I = \\frac{U}{R}$, $P = U \\cdot I$, $Q = I^2 R t$, $\\begin{cases} ax + by = c \\\\ a'x + b'y = c' \\end{cases}$).
 ĐẶC BIỆT LƯU Ý HÌNH VẼ & SƠ ĐỒ MINH HỌA: Nếu bài học có hình vẽ hình học, sơ đồ mạch điện, thí nghiệm hóa học hoặc đồ thị, hãy tạo ít nhất 1 thẻ học tập xoay quanh cách đọc và vận dụng dữ kiện từ hình vẽ đó.
+
+QUY TẮC CẤU TRÚC JSON BẮT BUỘC (CHỐNG LỖI KHI TÀI LIỆU CÓ DUNG LƯỢNG LỚN & NHIỀU CHỮ):
+- Trả về đúng mảng JSON gồm 5 đến 7 thẻ học tập cô đọng.
+- Các trường "takeaway", "frontQuestion", "backAnswer", "actionPrompt" viết câu văn súc tích (dưới 50 từ/trường), tuyệt đối không ngắt dòng ngang thô sơ trong chuỗi string (dùng \\n nếu cần xuống dòng).
+- Bắt buộc đóng ngoặc vuông ] kết thúc mảng JSON hợp lệ.
+
 Trả về mảng JSON thuần túy theo cấu trúc:
 [
   {
@@ -3386,12 +3433,12 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
       const imgToSend = getImagesToSend();
       const rawRes = await callGeminiWithRotation(prompt, imgToSend, {
         isJson: true,
-        maxTokens: 1800,
+        maxTokens: 4000,
         taskName: 'Đang tạo bộ Thẻ học tập Flashcards AI...'
       });
       const parsed = safeParseJson(rawRes);
       renderBeams(parsed);
-      showToast('Đã tạo xong Bộ Thẻ học tập AI!', 'success');
+      showToast(`Đã tạo xong Bộ ${state.beamData.length} Thẻ học tập AI!`, 'success');
     } catch (e) {
       console.error(e);
       showToast('Lỗi khi tạo Thẻ học tập: ' + e.message, 'error');
