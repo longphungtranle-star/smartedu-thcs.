@@ -300,6 +300,33 @@ body {
   }
 }
 
+/* Tablet Optimizations (iPad, Galaxy Tab, 641px - 1024px) */
+@media (min-width: 641px) and (max-width: 1024px) {
+  main {
+    padding-left: 1.25rem !important;
+    padding-right: 1.25rem !important;
+    gap: 1.25rem !important;
+  }
+
+  /* Mindmap balanced height on tablet */
+  .markmap-container svg, #markmap-svg {
+    min-height: 480px !important;
+    height: 480px !important;
+  }
+
+  /* Flashcard 3D perspective height on tablet */
+  .perspective-1000 {
+    height: 380px !important;
+  }
+
+  /* Modals on tablet */
+  #key-modal > div, #extracted-text-modal > div {
+    max-height: 88vh !important;
+    width: 90% !important;
+    max-width: 680px !important;
+  }
+}
+
 /* KaTeX Formula Enhancements */
 .katex {
   font-size: 1.05em;
