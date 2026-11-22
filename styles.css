@@ -475,3 +475,25 @@ body {
   color: #4f46e5 !important;
   border-bottom-color: #4f46e5 !important;
 }
+
+/* ================= TỐI ƯU HIỂN THỊ SƠ ĐỒ TƯ DUY MARKMAP & PHÒNG CHỐNG TRÀN KATEX ================= */
+#markmap-svg {
+  overflow: hidden;
+  touch-action: pan-x pan-y pinch-zoom;
+}
+#markmap-svg .markmap-foreign {
+  display: inline-block;
+  line-height: normal;
+}
+#markmap-svg text {
+  font-family: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* Đảm bảo nếu có bất kỳ thẻ katex nào lọt vào SVG cũng không bao giờ bị dồn cục ở toạ độ (0, 0) */
+#markmap-svg .katex,
+#markmap-svg .katex-display {
+  display: inline-block !important;
+  position: static !important;
+  max-width: 100%;
+}

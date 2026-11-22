@@ -1661,24 +1661,129 @@ LƯU Ý ĐẶC BIỆT KHI NHẬN DIỆN CỤM TRANG BÀI HỌC (TỪ TRANG ${chk
     });
   });
 
+  // ================= BỘ CHUẨN HÓA CÔNG THỨC KHOA HỌC CHO SƠ ĐỒ TƯ DUY =================
+  // Chuyển đổi công thức LaTeX trong Markdown sang dạng Unicode khoa học rõ đẹp trên các nhánh Sơ đồ tư duy
+  // Giúp các nhánh sơ đồ hiển thị liền mạch, tránh vỡ layout và dồn cục công thức lên đỉnh (0, 0) của SVG
+  function formatMathForMindmap(text) {
+    if (!text || typeof text !== 'string') return '';
+    let s = text;
+
+    // 1. Khử môi trường cases (hệ phương trình)
+    s = s.replace(/\\begin\{cases\}([\s\S]*?)\\end\{cases\}/g, (_, inner) => {
+      return '{ ' + inner.replace(/\\\\/g, '; ').replace(/&/g, ' ').replace(/\s+/g, ' ').trim() + ' }';
+    });
+
+    // 2. Khử ma trận / array nếu có
+    s = s.replace(/\\begin\{[a-zA-Z]+\}([\s\S]*?)\\end\{[a-zA-Z]+\}/g, '$1');
+
+    // 3. Phân số: \frac{a}{b} -> (a / b)
+    s = s.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '($1 / $2)');
+    s = s.replace(/\\dfrac\{([^{}]+)\}\{([^{}]+)\}/g, '($1 / $2)');
+
+    // 4. Căn bậc hai: \sqrt{a} -> √(a), \sqrt[n]{a} -> ⁿ√(a)
+    s = s.replace(/\\sqrt\[([^\]]+)\]\{([^{}]+)\}/g, '$1√($2)');
+    s = s.replace(/\\sqrt\{([^{}]+)\}/g, '√($1)');
+
+    // 5. Nội dung text trong công thức: \text{...}, \mathrm{...}, \mathbf{...}
+    s = s.replace(/\\(text|mathrm|mathbf|mathit|textbf|textit)\{([^{}]+)\}/g, '$2');
+
+    // 6. Ký hiệu Hy Lạp, Toán học & Khoa học thông dụng
+    const mathSymbols = {
+      '\\\\Delta': 'Δ', '\\\\pi': 'π', '\\\\alpha': 'α', '\\\\beta': 'β', '\\\\gamma': 'γ',
+      '\\\\theta': 'θ', '\\\\lambda': 'λ', '\\\\omega': 'ω', '\\\\Omega': 'Ω', '\\\\mu': 'μ',
+      '\\\\sigma': 'σ', '\\\\phi': 'φ', '\\\\varphi': 'φ', '\\\\AA': 'Å',
+      '\\\\cdot': '·', '\\\\times': '×', '\\\\div': '÷',
+      '\\\\neq': '≠', '\\\\ne': '≠', '\\\\leq': '≤', '\\\\le': '≤', '\\\\geq': '≥', '\\\\ge': '≥',
+      '\\\\approx': '≈', '\\\\pm': '±', '\\\\mp': '∓', '\\\\infty': '∞',
+      '\\\\degree': '°', '\\\\circ': '°',
+      '\\\\Rightarrow': '⇒', '\\\\rightarrow': '→', '\\\\to': '→',
+      '\\\\Leftarrow': '⇐', '\\\\leftarrow': '←',
+      '\\\\leftrightarrow': '↔', '\\\\Leftrightarrow': '⇔',
+      '\\\\parallel': '∥', '\\\\perp': '⊥', '\\\\angle': '∠',
+      '\\\\in': '∈', '\\\\notin': '∉', '\\\\subset': '⊂', '\\\\cup': '∪', '\\\\cap': '∩'
+    };
+    for (const [pattern, repl] of Object.entries(mathSymbols)) {
+      s = s.replace(new RegExp(pattern, 'g'), repl);
+    }
+
+    // 7. Chuyển đổi chỉ số dưới (Subscript) và số mũ (Superscript) sang Unicode
+    const subMap = { '0':'₀','1':'₁','2':'₂','3':'₃','4':'₄','5':'₅','6':'₆','7':'₇','8':'₈','9':'₉' };
+    const supMap = { '0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹','+':'⁺','-':'⁻','n':'ⁿ','m':'ᵐ','x':'ˣ' };
+
+    s = s.replace(/_\{([0-9])\}/g, (_, d) => subMap[d] || d);
+    s = s.replace(/_([0-9])/g, (_, d) => subMap[d] || d);
+    s = s.replace(/\^\{([0-9+\-nmx])\}/g, (_, d) => supMap[d] || d);
+    s = s.replace(/\^([0-9])/g, (_, d) => supMap[d] || d);
+
+    // 8. Dọn dẹp các lệnh định dạng khoảng trắng & ngoặc của LaTeX
+    s = s.replace(/\\[,;:!]/g, ' ');
+    s = s.replace(/\\(left|right|quad|qquad|limits)/g, '');
+
+    // 9. Bóc tách dấu $ và $$ để không còn kích hoạt auto-render KaTeX trên SVG
+    s = s.replace(/\$\$([^\$]+)\$\$/g, '$1');
+    s = s.replace(/\$([^\$]+)\$/g, '$1');
+
+    return s;
+  }
+
   // ================= KATEX TOÁN HỌC & CÔNG THỨC KHOA HỌC =================
   function renderAllMath(targetEl) {
-    const el = targetEl || document.body;
+    // 1. Chặn tuyệt đối nếu phần tử đích là SVG, nằm trong container Sơ đồ tư duy hoặc có class no-katex
+    if (targetEl) {
+      const isSvgOrMindmap = (
+        (targetEl.tagName && targetEl.tagName.toLowerCase() === 'svg') ||
+        (targetEl.id && targetEl.id.includes('markmap')) ||
+        (targetEl.classList && (targetEl.classList.contains('markmap') || targetEl.classList.contains('no-katex'))) ||
+        (typeof targetEl.closest === 'function' && targetEl.closest('#markmap-svg, .markmap-container, #mindmap-svg-container, .no-katex'))
+      );
+      if (isSvgOrMindmap) return;
+    }
+
+    const doRenderOnElement = (container) => {
+      if (!container || !window.renderMathInElement) return;
+      if (container.tagName && container.tagName.toLowerCase() === 'svg') return;
+      if (typeof container.closest === 'function' && container.closest('#markmap-svg, .no-katex')) return;
+
+      try {
+        window.renderMathInElement(container, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '$', right: '$', display: false },
+            { left: '\\(', right: '\\)', display: false },
+            { left: '\\[', right: '\\]', display: true }
+          ],
+          ignoredTags: [
+            'script', 'noscript', 'style', 'textarea', 'pre', 'code', 'annotation', 'annotation-xml',
+            'svg', 'foreignObject', 'text', 'tspan', 'g', 'path', 'circle', 'rect', 'line'
+          ],
+          ignoredClasses: [
+            'katex', 'markmap', 'markmap-svg', 'markmap-node', 'markmap-foreign', 'mm-tree', 'no-katex'
+          ],
+          throwOnError: false
+        });
+      } catch (e) {
+        console.warn('KaTeX render warning:', e);
+      }
+    };
+
     const doRender = () => {
-      if (window.renderMathInElement) {
-        try {
-          window.renderMathInElement(el, {
-            delimiters: [
-              { left: '$$', right: '$$', display: true },
-              { left: '$', right: '$', display: false },
-              { left: '\\(', right: '\\)', display: false },
-              { left: '\\[', right: '\\]', display: true }
-            ],
-            throwOnError: false
-          });
-        } catch (e) {
-          console.warn('KaTeX render warning:', e);
-        }
+      if (targetEl) {
+        doRenderOnElement(targetEl);
+      } else {
+        // Chỉ quét các container học tập thực sự cần công thức Toán / Lý / Hóa, tuyệt đối KHÔNG quét document.body
+        const targets = [
+          dom.tabSummary,
+          dom.quizQuestionsList,
+          dom.beamCardsGrid,
+          dom.beamFocusModal,
+          dom.printableExamContainer,
+          dom.printableBeamsContainer,
+          document.getElementById('practice-workspace-modal'),
+          document.getElementById('exam-modal'),
+          document.getElementById('modal-detail')
+        ].filter(Boolean);
+
+        targets.forEach(tgt => doRenderOnElement(tgt));
       }
     };
 
@@ -1980,6 +2085,10 @@ LƯU Ý ĐẶC BIỆT KHI NHẬN DIỆN CỤM TRANG BÀI HỌC (TỪ TRANG ${chk
     state.mindmapMarkdown = markdown;
     if (dom.markdownInput) dom.markdownInput.value = markdown;
 
+    // Chuẩn hóa toàn bộ công thức toán học sang dạng Unicode khoa học chuẩn cho Sơ đồ tư duy
+    // Vừa hiển thị siêu đẹp, vừa ngăn chặn 100% hiện tượng KaTeX HTML dồn cục lên toạ độ (0, 0) của SVG!
+    const displayMarkdown = formatMathForMindmap(markdown);
+
     // Luôn ẩn hộp rỗng khi có nội dung sơ đồ tư duy
     if (dom.mindmapEmptyState) dom.mindmapEmptyState.classList.add('hidden');
 
@@ -1990,7 +2099,7 @@ LƯU Ý ĐẶC BIỆT KHI NHẬN DIỆN CỤM TRANG BÀI HỌC (TỪ TRANG ${chk
       try {
         const MarkmapClass = window.markmap.Markmap || window.Markmap;
         const transformer = new window.markmap.Transformer();
-        const res = transformer.transform(markdown);
+        const res = transformer.transform(displayMarkdown);
         if (res && res.root) {
           const modernPalette = ['#4f46e5', '#0284c7', '#059669', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#ea580c'];
           const options = {
@@ -2028,7 +2137,7 @@ LƯU Ý ĐẶC BIỆT KHI NHẬN DIỆN CỤM TRANG BÀI HỌC (TỪ TRANG ${chk
 
     // NẾU MARKMAP CHƯA RENDER ĐƯỢC -> DÙNG NGAY BỘ VẼ PURE-SVG TỰ THÂN ĐẢM BẢO 100% HIỂN THỊ!
     if (!markmapDrawn) {
-      const tree = markdownToMarkmapTree(markdown);
+      const tree = markdownToMarkmapTree(displayMarkdown);
       renderBuiltInSvgMindmap(tree, dom.markmapSvg);
       if (dom.mindmapEmptyState) dom.mindmapEmptyState.classList.add('hidden');
     }
