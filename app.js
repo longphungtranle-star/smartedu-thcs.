@@ -136,6 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
     mindmapLibraryStatus: document.getElementById('mindmap-library-status'),
 
     // Tab 2: Summary
+    tabSummary: document.getElementById('tab-summary'),
     generateSummaryBtn: document.getElementById('generate-summary-btn'),
     summaryEmptyState: document.getElementById('summary-empty-state'),
     sectionTakeaways: document.getElementById('section-takeaways'),
@@ -1658,6 +1659,15 @@ LƯU Ý ĐẶC BIỆT KHI NHẬN DIỆN CỤM TRANG BÀI HỌC (TỪ TRANG ${chk
         setTimeout(() => state.markmapInstance.fit(), 250);
         setTimeout(() => state.markmapInstance.fit(), 450);
       }
+
+      // If switched to Summary, trigger KaTeX math rendering immediately
+      if (targetId === 'tab-summary') {
+        const sumEl = dom.tabSummary || document.getElementById('tab-summary');
+        if (sumEl) {
+          setTimeout(() => renderAllMath(sumEl), 40);
+          setTimeout(() => renderAllMath(sumEl), 200);
+        }
+      }
     });
   });
 
@@ -1772,7 +1782,11 @@ LƯU Ý ĐẶC BIỆT KHI NHẬN DIỆN CỤM TRANG BÀI HỌC (TỪ TRANG ${chk
       } else {
         // Chỉ quét các container học tập thực sự cần công thức Toán / Lý / Hóa, tuyệt đối KHÔNG quét document.body
         const targets = [
-          dom.tabSummary,
+          dom.tabSummary || document.getElementById('tab-summary'),
+          dom.listTakeaways || document.getElementById('list-takeaways'),
+          dom.sectionTakeaways || document.getElementById('section-takeaways'),
+          dom.sectionTerms || document.getElementById('section-terms'),
+          dom.sectionStrategies || document.getElementById('section-strategies'),
           dom.quizQuestionsList,
           dom.beamCardsGrid,
           dom.beamFocusModal,
@@ -2239,9 +2253,18 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     }
 
     // Render KaTeX cho công thức toán & khoa học trong phần Tóm tắt
+    const sumTab = dom.tabSummary || document.getElementById('tab-summary');
+    const takeawaysList = dom.listTakeaways || document.getElementById('list-takeaways');
+    if (takeawaysList) renderAllMath(takeawaysList);
+    if (sumTab) renderAllMath(sumTab);
     setTimeout(() => {
-      renderAllMath(dom.tabSummary);
-    }, 50);
+      if (takeawaysList) renderAllMath(takeawaysList);
+      if (sumTab) renderAllMath(sumTab);
+    }, 60);
+    setTimeout(() => {
+      if (takeawaysList) renderAllMath(takeawaysList);
+      if (sumTab) renderAllMath(sumTab);
+    }, 250);
   }
 
   async function generateSummaryWithAi() {

@@ -1,5 +1,5 @@
 // sw.js - Service Worker cho SmartEdu THCS (Hỗ trợ PWA & Bộ nhớ đệm Ngoại tuyến)
-const CACHE_NAME = 'smartedu-thcs-v15-iphone-camera-perfect';
+const CACHE_NAME = 'smartedu-thcs-v16-katex-summary-perfect';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
