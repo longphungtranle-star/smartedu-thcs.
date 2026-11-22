@@ -3642,17 +3642,42 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     }
   });
 
-  const btnCameraAction = document.getElementById('btn-camera-action');
-  if (btnCameraAction) {
-    btnCameraAction.addEventListener('click', (e) => {
+  // Nút 1: Chụp ảnh bằng Camera ngay (capture="environment")
+  const btnCameraCapture = document.getElementById('btn-camera-capture');
+  const cameraCaptureInput = document.getElementById('camera-capture-input');
+  if (btnCameraCapture && cameraCaptureInput) {
+    btnCameraCapture.addEventListener('click', (e) => {
       e.stopPropagation();
       e.preventDefault();
-      dom.cameraInput.click();
+      cameraCaptureInput.click();
+    });
+    cameraCaptureInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        handleMultipleUploadedFiles(e.target.files);
+      }
+      e.target.value = '';
+    });
+  }
+
+  // Nút 2: Chọn ảnh từ Bộ sưu tập / Album (Google Photos / iOS Album)
+  const btnGalleryPick = document.getElementById('btn-gallery-pick');
+  const galleryPickInput = document.getElementById('gallery-pick-input');
+  if (btnGalleryPick && galleryPickInput) {
+    btnGalleryPick.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      galleryPickInput.click();
+    });
+    galleryPickInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        handleMultipleUploadedFiles(e.target.files);
+      }
+      e.target.value = '';
     });
   }
 
   dom.dropZone.addEventListener('click', (e) => {
-    if (e.target.closest('#camera-input') || e.target.closest('#btn-camera-action') || e.target.closest('label[for="camera-input"]')) {
+    if (e.target.closest('#btn-camera-capture') || e.target.closest('#btn-gallery-pick') || e.target.closest('#camera-capture-input') || e.target.closest('#gallery-pick-input') || e.target.closest('#btn-camera-action') || e.target.closest('#camera-input')) {
       return;
     }
     if (e.target === dom.fileInput) return;
@@ -3666,18 +3691,23 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     e.target.value = '';
   });
 
-  dom.cameraInput.addEventListener('change', (e) => {
-    if (e.target.files && e.target.files.length > 0) {
-      handleMultipleUploadedFiles(e.target.files);
-    }
-    e.target.value = '';
-  });
+  if (dom.cameraInput) {
+    dom.cameraInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        handleMultipleUploadedFiles(e.target.files);
+      }
+      e.target.value = '';
+    });
+  }
 
   if (dom.btnAddMoreFiles) {
     dom.btnAddMoreFiles.addEventListener('click', () => dom.fileInput.click());
   }
   if (dom.btnAddMoreCamera) {
-    dom.btnAddMoreCamera.addEventListener('click', () => dom.cameraInput.click());
+    dom.btnAddMoreCamera.addEventListener('click', () => {
+      if (cameraCaptureInput) cameraCaptureInput.click();
+      else if (dom.cameraInput) dom.cameraInput.click();
+    });
   }
 
   // Text Direct Apply

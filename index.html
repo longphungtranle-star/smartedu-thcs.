@@ -396,13 +396,19 @@
             </p>
           </div>
 
-          <!-- Mobile Camera Quick Action -->
-          <div class="pt-2 flex items-center gap-2" onclick="event.stopPropagation()">
-            <button type="button" id="btn-camera-action" class="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95">
+          <!-- Quick Action Buttons: Chụp Camera ngay hoặc Chọn Album -->
+          <div class="pt-2 flex flex-wrap items-center justify-center gap-2" onclick="event.stopPropagation()">
+            <button type="button" id="btn-camera-capture" class="px-3 py-1.5 text-xs font-bold text-indigo-700 bg-white border border-indigo-200 hover:bg-indigo-50 rounded-lg cursor-pointer flex items-center gap-1.5 shadow-2xs active:scale-95" title="Bật trực tiếp máy ảnh để chụp trang sách bài tập">
               <i class="fa-solid fa-camera text-indigo-600"></i>
-              <span>Chụp ảnh bài học / hình vẽ ngay</span>
+              <span>Chụp ảnh bài học ngay</span>
             </button>
-            <input type="file" id="camera-input" class="hidden" accept="image/*">
+            <input type="file" id="camera-capture-input" class="hidden" accept="image/*" capture="environment">
+
+            <button type="button" id="btn-gallery-pick" class="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg cursor-pointer flex items-center gap-1.5 shadow-2xs active:scale-95" title="Mở Bộ sưu tập ảnh hoặc Google Photos để chọn ảnh có sẵn">
+              <i class="fa-solid fa-images text-emerald-600"></i>
+              <span>Chọn ảnh từ Bộ sưu tập</span>
+            </button>
+            <input type="file" id="gallery-pick-input" class="hidden" accept="image/*" multiple>
           </div>
         </div>
       </div>
@@ -2343,6 +2349,6 @@
   </footer>
 
   <!-- Main App Script -->
-  <script src="app.js?v=20261122_29"></script>
+  <script src="app.js?v=20261122_30"></script>
 </body>
 </html>
