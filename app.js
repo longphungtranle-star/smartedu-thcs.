@@ -13,6 +13,10 @@ document.addEventListener('DOMContentLoaded', () => {
     currentKeyIndex: 0,
     selectedModel: 'gemini-3.5-flash-lite',
 
+    // User Accounts & Progress Tracking
+    accounts: [],
+    activeAccountId: null,
+
     // Document Data
     currentDoc: {
       title: '',
@@ -53,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || isIos;
   const isInAppBrowser = /FBAN|FBAV|Zalo|Line|Instagram|BytedanceWebview/i.test(navigator.userAgent);
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator && window.navigator.standalone === true);
 
   // ================= DOM ELEMENTS =================
   const dom = {
@@ -2386,23 +2390,33 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
       window.confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 } });
     }
 
-    // Save quiz attempt to history (Learning Analytics & Progress)
-    try {
-      const historyRecord = {
-        id: Date.now(),
-        date: new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
+    // Save quiz attempt to active user account profile (Learning Analytics & Progress)
+    if (typeof recordQuizScoreToAccount === 'function') {
+      recordQuizScoreToAccount({
         title: state.currentDoc.title || 'Bài tập khảo thí',
         score: parseFloat(finalScore),
         correctTotal: correctTotal,
         totalQ: totalQ,
-        percentage: Math.round((correctTotal / totalQ) * 100)
-      };
-      const existingHistory = JSON.parse(localStorage.getItem('smartedu_quiz_history') || '[]');
-      existingHistory.unshift(historyRecord);
-      if (existingHistory.length > 50) existingHistory.length = 50; // Lưu tối đa 50 lần gần nhất
-      localStorage.setItem('smartedu_quiz_history', JSON.stringify(existingHistory));
-    } catch (e) {
-      console.warn('Không thể lưu lịch sử khảo thí vào localStorage:', e);
+        percentage: Math.round((correctTotal / totalQ) * 100),
+        tierBreakdown: {
+          easy: `${tierScores.easy.correct}/${tierScores.easy.total}`,
+          medium: `${tierScores.medium.correct}/${tierScores.medium.total}`,
+          hard: `${tierScores.hard.correct}/${tierScores.hard.total}`
+        }
+      });
+    } else if (state.currentUser && typeof window.recordQuizScoreToAccount === 'function') {
+      window.recordQuizScoreToAccount({
+        title: state.currentDoc.title || 'Bài tập khảo thí',
+        score: parseFloat(finalScore),
+        correctTotal: correctTotal,
+        totalQ: totalQ,
+        percentage: Math.round((correctTotal / totalQ) * 100),
+        tierBreakdown: {
+          easy: `${tierScores.easy.correct}/${tierScores.easy.total}`,
+          medium: `${tierScores.medium.correct}/${tierScores.medium.total}`,
+          hard: `${tierScores.hard.correct}/${tierScores.hard.total}`
+        }
+      });
     }
   }
 
@@ -3998,166 +4012,10 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     }
   });
 
-  // ================= THƯ VIỆN SƠ ĐỒ TƯ DUY CÁ NHÂN =================
-  function getSavedMindmaps() {
-    try {
-      return JSON.parse(localStorage.getItem('smartedu_saved_mindmaps') || '[]');
-    } catch (e) {
-      return [];
-    }
-  }
-
-  function setSavedMindmaps(list) {
-    try {
-      localStorage.setItem('smartedu_saved_mindmaps', JSON.stringify(list));
-    } catch (e) {
-      console.error('Không thể lưu vào localStorage:', e);
-    }
-  }
-
-  function updateSavedMindmapsCount() {
-    const list = getSavedMindmaps();
-    if (dom.savedMindmapsCount) {
-      dom.savedMindmapsCount.textContent = list.length;
-    }
-    if (dom.mindmapLibraryStatus) {
-      dom.mindmapLibraryStatus.textContent = `Đã lưu ${list.length} sơ đồ trong máy`;
-    }
-  }
-
-  function saveCurrentMindmap() {
-    if (!state.mindmapMarkdown || !state.mindmapMarkdown.trim()) {
-      showToast('Chưa có nội dung sơ đồ tư duy để lưu!', 'warning');
-      return;
-    }
-
-    const title = (state.currentDoc.title && state.currentDoc.title !== 'Chưa tải tài liệu') 
-      ? state.currentDoc.title 
-      : 'Sơ đồ tư duy ' + new Date().toLocaleDateString('vi-VN');
-
-    const lines = state.mindmapMarkdown.split('\n');
-    const branchCount = lines.filter(l => l.trim().startsWith('#') || l.trim().startsWith('-')).length;
-
-    const newEntry = {
-      id: 'mm_' + Date.now(),
-      title: title,
-      markdown: state.mindmapMarkdown,
-      savedAt: new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
-      branchCount: branchCount
-    };
-
-    let list = getSavedMindmaps();
-    const existingIndex = list.findIndex(item => item.title === title);
-    if (existingIndex >= 0) {
-      list[existingIndex] = newEntry; // Ghi đè phiên bản mới nhất
-    } else {
-      list.unshift(newEntry);
-    }
-
-    setSavedMindmaps(list);
-    updateSavedMindmapsCount();
-    showToast(`Đã lưu "${title}" vào Thư viện sơ đồ cá nhân!`, 'success');
-  }
-
-  function renderMindmapLibrary() {
-    const list = getSavedMindmaps();
-    if (!dom.mindmapLibraryList) return;
-
-    dom.mindmapLibraryList.innerHTML = '';
-
-    if (list.length === 0) {
-      if (dom.mindmapLibraryEmpty) dom.mindmapLibraryEmpty.classList.remove('hidden');
-      return;
-    }
-
-    if (dom.mindmapLibraryEmpty) dom.mindmapLibraryEmpty.classList.add('hidden');
-
-    list.forEach(item => {
-      const card = document.createElement('div');
-      card.className = 'p-3.5 sm:p-4 hover:bg-slate-50 transition-colors flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3';
-      card.innerHTML = `
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-2">
-            <span class="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold shrink-0">
-              <i class="fa-solid fa-diagram-project"></i>
-            </span>
-            <h4 class="font-bold text-xs sm:text-sm text-slate-900 truncate">${item.title}</h4>
-          </div>
-          <div class="flex items-center gap-3 text-[11px] text-slate-500 mt-1 pl-9">
-            <span><i class="fa-regular fa-clock text-slate-400"></i> ${item.savedAt}</span>
-            <span>•</span>
-            <span><i class="fa-solid fa-code-branch text-indigo-500"></i> ${item.branchCount} nhánh kiến thức</span>
-          </div>
-        </div>
-        <div class="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
-          <button data-id="${item.id}" class="btn-load-saved-mm px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-xs cursor-pointer active:scale-95" title="Mở sơ đồ này trên màn hình">
-            <i class="fa-solid fa-eye text-xs"></i>
-            <span>Mở xem</span>
-          </button>
-          <button data-id="${item.id}" class="btn-download-saved-md px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium flex items-center gap-1 cursor-pointer" title="Tải về máy file Markdown (.md)">
-            <i class="fa-solid fa-download text-xs"></i>
-            <span class="hidden sm:inline">.md</span>
-          </button>
-          <button data-id="${item.id}" class="btn-delete-saved-mm p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg text-xs transition-colors cursor-pointer" title="Xóa sơ đồ này khỏi thư viện">
-            <i class="fa-regular fa-trash-can text-xs"></i>
-          </button>
-        </div>
-      `;
-      dom.mindmapLibraryList.appendChild(card);
-    });
-
-    // Gắn sự kiện cho các nút trong danh sách thư viện
-    dom.mindmapLibraryList.querySelectorAll('.btn-load-saved-mm').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const id = btn.getAttribute('data-id');
-        const found = list.find(m => m.id === id);
-        if (found) {
-          renderMindmap(found.markdown);
-          setActiveDocument(found.title, found.markdown, 'text');
-          closeMindmapLibraryModal();
-          showToast(`Đã mở sơ đồ: ${found.title}!`, 'success');
-        }
-      });
-    });
-
-    dom.mindmapLibraryList.querySelectorAll('.btn-download-saved-md').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const id = btn.getAttribute('data-id');
-        const found = list.find(m => m.id === id);
-        if (found) {
-          const blob = new Blob([found.markdown], { type: 'text/markdown;charset=utf-8' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${found.title.replace(/[^a-zA-Z0-9_\u00C0-\u024F\u1E00-\u1EFF]/g, '_')}_mindmap.md`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-          showToast(`Đã tải file Markdown của sơ đồ!`, 'info');
-        }
-      });
-    });
-
-    dom.mindmapLibraryList.querySelectorAll('.btn-delete-saved-mm').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const id = btn.getAttribute('data-id');
-        const found = list.find(m => m.id === id);
-        if (found && confirm(`Bạn có chắc muốn xóa sơ đồ "${found.title}" khỏi thư viện không?`)) {
-          const updated = list.filter(m => m.id !== id);
-          setSavedMindmaps(updated);
-          updateSavedMindmapsCount();
-          renderMindmapLibrary();
-          showToast('Đã xóa sơ đồ khỏi thư viện!', 'info');
-        }
-      });
-    });
-  }
-
+  // ================= THƯ VIỆN SƠ ĐỒ TƯ DUY CÁ NHÂN (ĐỒNG BỘ TÀI KHOẢN ĐÁM MÂY) =================
   function openMindmapLibraryModal() {
-    renderMindmapLibrary();
-    if (dom.modalMindmapLibrary) {
-      dom.modalMindmapLibrary.classList.remove('hidden');
+    if (btnOpenMindmapLibrary) {
+      btnOpenMindmapLibrary.click();
     }
   }
 
@@ -4167,8 +4025,14 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     }
   }
 
-  if (dom.btnSaveMindmap) dom.btnSaveMindmap.addEventListener('click', saveCurrentMindmap);
-  if (dom.btnOpenMindmapLibrary) dom.btnOpenMindmapLibrary.addEventListener('click', openMindmapLibraryModal);
+  if (dom.btnSaveMindmap) {
+    dom.btnSaveMindmap.addEventListener('click', () => {
+      if (btnSaveMindmap) btnSaveMindmap.click();
+    });
+  }
+  if (dom.btnOpenMindmapLibrary) {
+    dom.btnOpenMindmapLibrary.addEventListener('click', openMindmapLibraryModal);
+  }
   if (dom.btnCloseMindmapLibrary) dom.btnCloseMindmapLibrary.addEventListener('click', closeMindmapLibraryModal);
   if (dom.btnDoneMindmapLibrary) dom.btnDoneMindmapLibrary.addEventListener('click', closeMindmapLibraryModal);
   if (dom.modalMindmapLibrary) {
@@ -4895,101 +4759,2449 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     });
   }
 
-  // ================= QUIZ HISTORY & PROGRESS MODAL =================
+  // ================= CLOUD WEB STORAGE & AUTHENTICATION GATE =================
+  const AVATAR_OPTIONS = ['👨‍🎓', '👩‍🎓', '🧑‍💻', '🦊', '🦁', '🚀', '🌟', '🎯', '💡', '🏆'];
+
+  // DOM Elements for Auth Gate
+  const modalAuthGate = document.getElementById('modal-auth-gate');
+  const authTabBtnLogin = document.getElementById('auth-tab-btn-login');
+  const authTabBtnRegister = document.getElementById('auth-tab-btn-register');
+  const formAuthLogin = document.getElementById('form-auth-login');
+  const formAuthRegister = document.getElementById('form-auth-register');
+  const loginUsernameInput = document.getElementById('login-username');
+  const loginPasswordInput = document.getElementById('login-password');
+  const loginRememberMe = document.getElementById('login-remember-me');
+  const regFullname = document.getElementById('reg-fullname');
+  const regGrade = document.getElementById('reg-grade');
+  const regClass = document.getElementById('reg-class');
+  const regSchool = document.getElementById('reg-school');
+  const regUsername = document.getElementById('reg-username');
+  const regPassword = document.getElementById('reg-password');
+  const regAvatar = document.getElementById('reg-avatar');
+  const regAvatarPicker = document.getElementById('reg-avatar-picker');
+  const authCloudStatusText = document.getElementById('auth-cloud-status-text');
+
+  // DOM Elements for Header Profile
+  const btnUserAccountMobile = document.getElementById('btn-user-account-mobile');
+  const btnUserAccountDesktop = document.getElementById('btn-user-account-desktop');
+  const userAvatarMobile = document.getElementById('user-avatar-mobile');
+  const userNameMobile = document.getElementById('user-name-mobile');
+  const userAvatarDesktop = document.getElementById('user-avatar-desktop');
+  const userNameDesktop = document.getElementById('user-name-desktop');
+  const userSubtextDesktop = document.getElementById('user-subtext-desktop');
+  const userBadgeCountDesktop = document.getElementById('user-badge-count-desktop');
+  const btnLogoutHeader = document.getElementById('btn-logout-header');
+  const btnLogoutMobile = document.getElementById('btn-logout-mobile');
+
+  // DOM Elements for User Account Modal
+  const modalUserAccount = document.getElementById('modal-user-account');
+  const btnCloseUserAccount = document.getElementById('btn-close-user-account-modal');
+  const btnDoneUserAccount = document.getElementById('btn-done-user-account');
+  const tabBtnAccountProgress = document.getElementById('tab-btn-account-progress');
+  const tabBtnAccountManage = document.getElementById('tab-btn-account-manage');
+  const paneAccountProgress = document.getElementById('pane-account-progress');
+  const paneAccountManage = document.getElementById('pane-account-manage');
+
+  const modalUserAvatarLarge = document.getElementById('modal-user-avatar-large');
+  const modalUserFullname = document.getElementById('modal-user-fullname');
+  const modalUserGradeBadge = document.getElementById('modal-user-grade-badge');
+  const modalUserSchoolClass = document.getElementById('modal-user-school-class');
+  const btnEditCurrentProfile = document.getElementById('btn-edit-current-profile');
+
+  const accStatTotalTests = document.getElementById('acc-stat-total-tests');
+  const accStatMaxScore = document.getElementById('acc-stat-max-score');
+  const accStatAvgScore = document.getElementById('acc-stat-avg-score');
+  const accStatRatingBadge = document.getElementById('acc-stat-rating-badge');
+  const accStatTotalCorrect = document.getElementById('acc-stat-total-correct');
+  const accTrendComment = document.getElementById('acc-trend-comment');
+  const accChartContainer = document.getElementById('acc-chart-container');
+  const accBadgeUnlockedText = document.getElementById('acc-badge-unlocked-text');
+  const accBadgesList = document.getElementById('acc-badges-list');
+  const accFilterSubject = document.getElementById('acc-filter-subject');
+  const accHistoryTableBody = document.getElementById('acc-history-table-body');
+  const accHistoryEmpty = document.getElementById('acc-history-empty');
+  const btnPrintStudentReport = document.getElementById('btn-print-student-report');
+
+  const accFormContainer = document.getElementById('acc-form-container');
+  const accFormTitle = document.getElementById('acc-form-title');
+  const accFormUsernameDisplay = document.getElementById('acc-form-username-display');
+  const formUserAccount = document.getElementById('form-user-account');
+  const inputAccountId = document.getElementById('input-account-id');
+  const inputAccountName = document.getElementById('input-account-name');
+  const inputAccountSchool = document.getElementById('input-account-school');
+  const inputAccountGrade = document.getElementById('input-account-grade');
+  const inputAccountClass = document.getElementById('input-account-class');
+  const inputAccountNewPassword = document.getElementById('input-account-new-password');
+  const inputAccountAvatar = document.getElementById('input-account-avatar');
+  const accAvatarPicker = document.getElementById('acc-avatar-picker');
+  const btnExportAccountData = document.getElementById('btn-export-account-data');
+  const inputImportAccountData = document.getElementById('input-import-account-data');
+
+  // DOM Elements for Learning Libraries (Mindmap, Summary, Flashcards)
+  const btnSaveMindmap = document.getElementById('btn-save-mindmap');
+  const btnOpenMindmapLibrary = document.getElementById('btn-open-mindmap-library');
+  const modalMindmapLibrary = document.getElementById('modal-mindmap-library');
+  const btnCloseMindmapLibrary = document.getElementById('btn-close-mindmap-library');
+  const btnDoneMindmapLibrary = document.getElementById('btn-done-mindmap-library');
+  const mindmapLibraryList = document.getElementById('mindmap-library-list');
+  const mindmapLibraryEmpty = document.getElementById('mindmap-library-empty');
+  const mindmapLibraryStatus = document.getElementById('mindmap-library-status');
+
+  const btnSaveSummary = document.getElementById('btn-save-summary');
+  const btnOpenSummaryLibrary = document.getElementById('btn-open-summary-library');
+  const modalSummaryLibrary = document.getElementById('modal-summary-library');
+  const btnCloseSummaryLibrary = document.getElementById('btn-close-summary-library');
+  const btnDoneSummaryLibrary = document.getElementById('btn-done-summary-library');
+  const summaryLibraryList = document.getElementById('summary-library-list');
+  const summaryLibraryEmpty = document.getElementById('summary-library-empty');
+  const summaryLibraryStatus = document.getElementById('summary-library-status');
+
+  const btnSaveBeams = document.getElementById('btn-save-beams');
+  const btnOpenBeamsLibrary = document.getElementById('btn-open-beams-library');
+  const modalBeamsLibrary = document.getElementById('modal-beams-library');
+  const btnCloseBeamsLibrary = document.getElementById('btn-close-beams-library');
+  const btnDoneBeamsLibrary = document.getElementById('btn-done-beams-library');
+  const beamsLibraryList = document.getElementById('beams-library-list');
+  const beamsLibraryEmpty = document.getElementById('beams-library-empty');
+  const beamsLibraryStatus = document.getElementById('beams-library-status');
+
+  const modalFirebaseSettings = document.getElementById('modal-firebase-settings');
+  const btnCloseFirebaseSettings = document.getElementById('btn-close-firebase-settings');
+  const btnCancelFirebaseSettings = document.getElementById('btn-cancel-firebase-settings');
+  const btnSaveFirebaseConfig = document.getElementById('btn-save-firebase-config');
+  const btnResetFirebaseConfig = document.getElementById('btn-reset-firebase-config');
+  const inputFirebaseConfigJson = document.getElementById('input-firebase-config-json');
+
   const btnQuizHistory = document.getElementById('btn-quiz-history');
-  const modalQuizHistory = document.getElementById('modal-quiz-history');
-  const btnCloseQuizHistory = document.getElementById('btn-close-quiz-history-modal');
-  const btnDoneQuizHistory = document.getElementById('btn-done-quiz-history');
-  const btnClearQuizHistory = document.getElementById('btn-clear-quiz-history');
-  const quizHistoryTableBody = document.getElementById('quiz-history-table-body');
-  const quizHistoryEmpty = document.getElementById('quiz-history-empty');
 
-  const statTotalTests = document.getElementById('quiz-stat-total-tests');
-  const statMaxScore = document.getElementById('quiz-stat-max-score');
-  const statAvgScore = document.getElementById('quiz-stat-avg-score');
-  const statTotalCorrect = document.getElementById('quiz-stat-total-correct');
+  // Helper: Nhận diện môn học từ tiêu đề tài liệu
+  function detectSubjectFromTitle(title) {
+    if (!title) return 'Khác';
+    const t = title.toLowerCase();
+    if (t.includes('toán') || t.includes('hình học') || t.includes('đại số') || t.includes('phương trình')) return 'Toán';
+    if (t.includes('khtn') || t.includes('khoa học tự nhiên') || t.includes('vật lí') || t.includes('hóa học') || t.includes('sinh học') || t.includes('điện') || t.includes('ôm')) return 'KHTN';
+    if (t.includes('văn') || t.includes('ngữ văn') || t.includes('tiếng việt') || t.includes('thơ') || t.includes('truyện')) return 'Ngữ văn';
+    if (t.includes('sử') || t.includes('địa') || t.includes('lịch sử')) return 'Lịch sử - Địa lí';
+    if (t.includes('anh') || t.includes('english')) return 'Tiếng Anh';
+    return 'Khác';
+  }
 
-  function renderQuizHistory() {
-    if (!quizHistoryTableBody) return;
-    const history = JSON.parse(localStorage.getItem('smartedu_quiz_history') || '[]');
-    
-    if (history.length === 0) {
-      quizHistoryTableBody.innerHTML = '';
-      if (quizHistoryEmpty) quizHistoryEmpty.classList.remove('hidden');
-      if (statTotalTests) statTotalTests.textContent = '0';
-      if (statMaxScore) statMaxScore.textContent = '0.0';
-      if (statAvgScore) statAvgScore.textContent = '0.0';
-      if (statTotalCorrect) statTotalCorrect.textContent = '0';
+  // ================= CÔ LẬP VÀ ĐỒNG BỘ DỮ LIỆU RIÊNG TỪNG TÀI KHOẢN =================
+
+  // Nạp toàn bộ dữ liệu CỦA RIÊNG HỌC SINH ĐANG ĐĂNG NHẬP lên giao diện (không lẫn lộn người khác)
+  function applyUserSession(user) {
+    if (!user) return;
+    state.currentUser = user;
+
+    // Đóng Auth Gate NGAY LẬP TỨC ở đầu hàm
+    const authGate = document.getElementById('modal-auth-gate');
+    if (authGate) {
+      authGate.style.display = 'none';
+      authGate.classList.add('hidden');
+      authGate.classList.remove('flex');
+    }
+    user.scores = user.scores || [];
+    user.mindmaps = user.mindmaps || [];
+    user.summaries = user.summaries || [];
+    user.flashcards = user.flashcards || [];
+
+    // 1. Cập nhật thanh tiêu đề Header
+    updateHeaderAccountUI();
+
+    // 2. Cập nhật các bộ đếm thư viện
+    updateSavedMindmapsCount();
+    updateSavedSummariesCount();
+    updateSavedBeamsCount();
+
+    // 3. Khởi tạo/Hiển thị dữ liệu CỦA RIÊNG HỌC SINH NÀY lên các Tab:
+    // Tab 1: Sơ đồ tư duy
+    if (user.mindmaps.length > 0) {
+      const latestMm = user.mindmaps[0];
+      state.mindmapMarkdown = latestMm.markdownContent;
+      renderMindmap(latestMm.markdownContent);
+      if (dom.mindmapEmptyState) dom.mindmapEmptyState.classList.add('hidden');
+    } else {
+      state.mindmapMarkdown = '';
+      if (dom.markmapSvg) dom.markmapSvg.innerHTML = '';
+      if (dom.mindmapEmptyState) dom.mindmapEmptyState.classList.remove('hidden');
+    }
+
+    // Tab 2: Tóm tắt & Gợi ý học tập
+    if (user.summaries.length > 0) {
+      const latestSum = user.summaries[0];
+      renderSummary(latestSum.summaryData);
+    } else {
+      state.summaryData = null;
+      if (dom.summaryEmptyState) dom.summaryEmptyState.classList.remove('hidden');
+      if (dom.sectionTakeaways) dom.sectionTakeaways.classList.add('hidden');
+      if (dom.sectionTerms) dom.sectionTerms.classList.add('hidden');
+      if (dom.sectionStrategies) dom.sectionStrategies.classList.add('hidden');
+    }
+
+    // Tab 3: Khảo thí & Chấm điểm (Xóa trắng kết quả phiên trước, sẵn sàng cho bài thi mới)
+    state.quizData = [];
+    if (dom.interactiveQuizContainer) dom.interactiveQuizContainer.classList.add('hidden');
+    if (dom.quizResultCard) dom.quizResultCard.classList.add('hidden');
+    if (dom.quizSubmitBar) dom.quizSubmitBar.classList.add('hidden');
+    if (dom.quizEmptyState) dom.quizEmptyState.classList.remove('hidden');
+
+    // Tab 4: Thẻ lật thông minh
+    if (user.flashcards.length > 0) {
+      const latestBm = user.flashcards[0];
+      renderBeams(latestBm.cards);
+    } else {
+      state.beamData = [];
+      if (dom.beamCardsGrid) dom.beamCardsGrid.classList.add('hidden');
+      if (dom.beamEmptyState) dom.beamEmptyState.classList.remove('hidden');
+    }
+
+    // Reset tài liệu tải lên tạm thời
+    state.currentDoc = { title: '', text: '', type: 'text', imageBase64: null, images: [] };
+
+    // Đóng Auth Gate
+    if (modalAuthGate) {
+      modalAuthGate.style.display = 'none';
+      modalAuthGate.classList.add('hidden');
+      modalAuthGate.classList.remove('flex');
+    }
+  }
+
+  // Xóa trắng toàn bộ giao diện và dữ liệu trên màn hình khi khách chưa đăng nhập / khi đăng xuất
+  function resetUIForGuest() {
+    state.currentUser = null;
+    state.mindmapMarkdown = '';
+    state.summaryData = null;
+    state.quizData = [];
+    state.beamData = [];
+    state.currentDoc = { title: '', text: '', type: 'text', imageBase64: null, images: [] };
+
+    // Tab 1
+    if (dom.markmapSvg) dom.markmapSvg.innerHTML = '';
+    if (dom.mindmapEmptyState) dom.mindmapEmptyState.classList.remove('hidden');
+    updateSavedMindmapsCount();
+
+    // Tab 2
+    if (dom.summaryEmptyState) dom.summaryEmptyState.classList.remove('hidden');
+    if (dom.sectionTakeaways) dom.sectionTakeaways.classList.add('hidden');
+    if (dom.sectionTerms) dom.sectionTerms.classList.add('hidden');
+    if (dom.sectionStrategies) dom.sectionStrategies.classList.add('hidden');
+    updateSavedSummariesCount();
+
+    // Tab 3
+    if (dom.interactiveQuizContainer) dom.interactiveQuizContainer.classList.add('hidden');
+    if (dom.quizResultCard) dom.quizResultCard.classList.add('hidden');
+    if (dom.quizSubmitBar) dom.quizSubmitBar.classList.add('hidden');
+    if (dom.quizEmptyState) dom.quizEmptyState.classList.remove('hidden');
+
+    // Tab 4
+    if (dom.beamCardsGrid) dom.beamCardsGrid.classList.add('hidden');
+    if (dom.beamEmptyState) dom.beamEmptyState.classList.remove('hidden');
+    updateSavedBeamsCount();
+
+    // Header
+    updateHeaderAccountUI();
+  }
+
+  // Khởi tạo tài khoản người dùng và kiểm tra phiên đăng nhập
+  async function initUserAccounts() {
+    // Render avatar pickers
+    renderAvatarPicker('👨‍🎓');
+    renderRegisterAvatarPicker('👨‍🎓');
+
+    // Cập nhật trạng thái Firebase Cloud
+    if (authCloudStatusText && window.SmartEduCloud) {
+      const st = window.SmartEduCloud.getStatus();
+      if (st.isFirebase) {
+        authCloudStatusText.textContent = `Google Firebase: ${st.projectId}`;
+      } else {
+        authCloudStatusText.textContent = `Lưu Trữ Web Cloud (Sẵn Sàng)`;
+      }
+    }
+
+    // Kiểm tra xem máy này có phiên đăng nhập đã ghi nhớ không
+    const rememberedUsername = localStorage.getItem('smartedu_active_cloud_username');
+    if (rememberedUsername && window.SmartEduCloud) {
+      const localUsers = window.SmartEduCloud._getLocalUsers();
+      let existingUser = localUsers[rememberedUsername.toLowerCase()];
+      if (rememberedUsername.toLowerCase() === 'admin' && !existingUser) {
+        window.SmartEduCloud._ensureSuperAdminAccount();
+        existingUser = window.SmartEduCloud._getLocalUsers()['admin'];
+      }
+      if (existingUser) {
+        applyUserSession(existingUser);
+        return;
+      }
+    }
+
+    // Nếu chưa có phiên đăng nhập -> Xóa dữ liệu tạm và hiển thị Khung Đăng Nhập
+    resetUIForGuest();
+    if (modalAuthGate) {
+      modalAuthGate.style.display = 'flex';
+      modalAuthGate.classList.remove('hidden');
+      modalAuthGate.classList.add('flex');
+      window.switchAuthTab('login');
+    }
+  }
+
+  // Chuyển đổi giữa Đăng Nhập và Đăng Ký
+  window.switchAuthTab = function(tab) {
+    const lBtn = document.getElementById('auth-tab-btn-login');
+    const rBtn = document.getElementById('auth-tab-btn-register');
+    const lForm = document.getElementById('form-auth-login');
+    const rForm = document.getElementById('form-auth-register');
+    const uInp = document.getElementById('login-username');
+    const fInp = document.getElementById('reg-fullname');
+
+    if (tab === 'login') {
+      if (lBtn) lBtn.className = 'py-2 rounded-lg bg-white text-indigo-600 shadow-xs flex items-center justify-center gap-1.5 cursor-pointer font-bold transition-all';
+      if (rBtn) rBtn.className = 'py-2 rounded-lg text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1.5 cursor-pointer transition-all';
+      if (lForm) lForm.classList.remove('hidden');
+      if (rForm) rForm.classList.add('hidden');
+      if (uInp) uInp.focus();
+    } else {
+      if (rBtn) rBtn.className = 'py-2 rounded-lg bg-white text-indigo-600 shadow-xs flex items-center justify-center gap-1.5 cursor-pointer font-bold transition-all';
+      if (lBtn) lBtn.className = 'py-2 rounded-lg text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1.5 cursor-pointer transition-all';
+      if (rForm) rForm.classList.remove('hidden');
+      if (lForm) lForm.classList.add('hidden');
+      if (fInp) fInp.focus();
+    }
+  };
+
+  if (authTabBtnLogin) {
+    authTabBtnLogin.addEventListener('click', () => window.switchAuthTab('login'));
+  }
+  if (authTabBtnRegister) {
+    authTabBtnRegister.addEventListener('click', () => window.switchAuthTab('register'));
+  }
+
+  // Nạp tài khoản mẫu cho giám khảo/học sinh trải nghiệm nhanh 1 chạm
+  window.fillDemoAccount = async function() {
+    const demoUser = {
+      username: 'longphung9a13',
+      password: '123',
+      profile: {
+        name: 'Trần Lê Long Phụng',
+        grade: '9',
+        className: '9A13',
+        school: 'THCS Long Cang',
+        avatar: '👨‍🎓',
+        createdAt: '22/11/2026',
+        lastLogin: new Date().toLocaleString('vi-VN')
+      },
+      scores: [
+        {
+          id: 1732230001,
+          date: '22/11/2026 08:30',
+          title: 'Bài mẫu Toán 9: Hệ hai phương trình bậc nhất hai ẩn',
+          subject: 'Toán',
+          score: 9.0,
+          correctTotal: 9,
+          totalQ: 10,
+          percentage: 90
+        },
+        {
+          id: 1732230002,
+          date: '22/11/2026 09:15',
+          title: 'Bài mẫu KHTN 9: Định luật Ôm & Điện năng',
+          subject: 'KHTN',
+          score: 10.0,
+          correctTotal: 10,
+          totalQ: 10,
+          percentage: 100
+        }
+      ],
+      mindmaps: [],
+      summaries: [],
+      flashcards: []
+    };
+
+    if (window.SmartEduCloud) {
+      window.SmartEduCloud._saveLocalUser(demoUser);
+    }
+    localStorage.setItem('smartedu_active_cloud_username', demoUser.username);
+    applyUserSession(demoUser);
+    showToast('Đã đăng nhập bằng tài khoản mẫu: Trần Lê Long Phụng (9A13)!', 'success');
+  };
+
+  // Nạp tài khoản Super Admin 1 chạm (admin / 123) - TỨC THÌ 100%
+  window.fillSuperAdminAccount = function() {
+    const uInput = document.getElementById('login-username');
+    const pInput = document.getElementById('login-password');
+    if (uInput) uInput.value = 'admin';
+    if (pInput) pInput.value = '123';
+
+    const adminUser = {
+      username: 'admin',
+      password: '123',
+      profile: {
+        name: 'Thầy/Cô Quản Trị Viên (Super Admin)',
+        role: 'superadmin',
+        grade: 'Quản Lý',
+        className: 'Ban Giám Hiệu / Quản Trị',
+        school: 'Hệ Thống Giáo Dục THCS',
+        avatar: '👑',
+        createdAt: '22/11/2026',
+        lastLogin: new Date().toLocaleString('vi-VN')
+      },
+      scores: [],
+      mindmaps: [],
+      summaries: [],
+      flashcards: []
+    };
+
+    if (window.SmartEduCloud) {
+      window.SmartEduCloud._saveLocalUser(adminUser);
+      if (window.SmartEduCloud.isFirebaseReady && window.SmartEduCloud.db) {
+        window.SmartEduCloud.db.collection('users').doc('admin').set(adminUser, { merge: true }).catch(() => {});
+      }
+    }
+    localStorage.setItem('smartedu_active_cloud_username', 'admin');
+
+    applyUserSession(adminUser);
+    showToast('Kính chào Thầy/Cô Quản Trị Viên (Super Admin) đã đăng nhập thành công!', 'success');
+
+    setTimeout(() => {
+      if (typeof window.openSuperAdminModal === 'function') {
+        window.openSuperAdminModal('users');
+      }
+    }, 200);
+  };
+
+  // Hàm xử lý Đăng Nhập an toàn toàn cục
+  window.handleLoginSubmit = async function(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    const uInput = document.getElementById('login-username');
+    const pInput = document.getElementById('login-password');
+    const remInput = document.getElementById('login-remember-me');
+    const u = (uInput?.value || '').trim();
+    const p = (pInput?.value || '').trim();
+
+    if (!u || !p) {
+      showToast('Vui lòng nhập tên tài khoản và mật khẩu!', 'warning');
+      return false;
+    }
+
+    // Xử lý tức thì cho Super Admin admin / 123
+    if (u.toLowerCase() === 'admin' && p === '123') {
+      window.fillSuperAdminAccount();
+      return false;
+    }
+
+    const submitBtn = document.getElementById('btn-submit-login');
+    const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> <span>Đang xác thực trên Web...</span>`;
+    }
+
+    try {
+      const res = await window.SmartEduCloud.loginUser(u, p);
+      if (res.success && res.user) {
+        if (remInput && remInput.checked) {
+          localStorage.setItem('smartedu_active_cloud_username', res.user.username);
+        } else {
+          localStorage.removeItem('smartedu_active_cloud_username');
+        }
+
+        applyUserSession(res.user);
+        const isSuperAdmin = (res.user.username === 'admin' || res.user.profile?.role === 'superadmin');
+        const welcomePrefix = isSuperAdmin ? 'Kính chào Thầy/Cô' : 'Chào mừng em';
+        showToast(`${welcomePrefix} ${res.user.profile?.name || res.user.username} đã đăng nhập thành công!`, 'success');
+
+        if (isSuperAdmin) {
+          setTimeout(() => {
+            if (typeof window.openSuperAdminModal === 'function') {
+              window.openSuperAdminModal('users');
+            }
+          }, 200);
+        }
+      } else {
+        showToast(res.message || 'Đăng nhập không thành công!', 'error');
+      }
+    } catch (err) {
+      showToast('Lỗi kết nối máy chủ: ' + err.message, 'error');
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnText;
+      }
+    }
+    return false;
+  };
+
+  // Gắn sự kiện submit cho form đăng nhập
+  if (formAuthLogin) {
+    formAuthLogin.addEventListener('submit', (e) => {
+      e.preventDefault();
+      window.handleLoginSubmit(e);
+    });
+  }
+
+  // Xử lý gửi Form Đăng Ký (tạo tài khoản mới hoàn toàn sạch sẽ, không chứa dữ liệu người khác)
+  window.handleRegisterSubmit = async function(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    const name = (document.getElementById('reg-fullname')?.value || '').trim();
+    const grade = document.getElementById('reg-grade')?.value || '9';
+    const className = (document.getElementById('reg-class')?.value || '').trim();
+    const school = (document.getElementById('reg-school')?.value || '').trim();
+    const u = (document.getElementById('reg-username')?.value || '').trim();
+    const p = (document.getElementById('reg-password')?.value || '').trim();
+    const avatar = document.getElementById('reg-avatar')?.value || '👨‍🎓';
+
+    if (!name || !u || !p) {
+      showToast('Vui lòng điền đầy đủ các thông tin có dấu sao (*)!', 'warning');
+      return false;
+    }
+
+    const submitBtn = document.getElementById('btn-submit-register');
+    const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> <span>Đang khởi tạo tài khoản Web...</span>`;
+    }
+
+    try {
+      const res = await window.SmartEduCloud.registerUser(u, p, {
+        name, grade, className, school, avatar
+      });
+
+      if (res.success && res.user) {
+        localStorage.setItem('smartedu_active_cloud_username', res.user.username);
+        applyUserSession(res.user);
+        showToast(`Chúc mừng em ${name} đã tạo tài khoản Web thành công!`, 'success');
+      } else {
+        showToast(res.message || 'Đăng ký không thành công!', 'error');
+      }
+    } catch (err) {
+      showToast('Lỗi đăng ký: ' + err.message, 'error');
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnText;
+      }
+    }
+    return false;
+  };
+
+  if (formAuthRegister) {
+    formAuthRegister.addEventListener('submit', (e) => {
+      e.preventDefault();
+      window.handleRegisterSubmit(e);
+    });
+  }
+
+  // Đăng xuất tài khoản an toàn & đưa về ngay khung Đăng Nhập
+  window.logoutUser = function() {
+    localStorage.removeItem('smartedu_active_cloud_username');
+    resetUIForGuest();
+
+    // 1. Đóng toàn bộ các modal tài khoản / quản trị
+    const mUser = document.getElementById('modal-user-account');
+    if (mUser) {
+      mUser.style.display = 'none';
+      mUser.classList.add('hidden');
+      mUser.classList.remove('flex');
+    }
+    const mAdmin = document.getElementById('modal-super-admin');
+    if (mAdmin) {
+      mAdmin.style.display = 'none';
+      mAdmin.classList.add('hidden');
+      mAdmin.classList.remove('flex');
+    }
+
+    // 2. Mở lại ngay khung Đăng Nhập (bỏ display: none, set display: flex)
+    const authGate = document.getElementById('modal-auth-gate');
+    if (authGate) {
+      authGate.style.display = 'flex';
+      authGate.classList.remove('hidden');
+      authGate.classList.add('flex');
+    }
+
+    // 3. Reset form đăng nhập về tab Login
+    if (typeof window.switchAuthTab === 'function') {
+      window.switchAuthTab('login');
+    }
+    const pInp = document.getElementById('login-password');
+    if (pInp) pInp.value = '';
+
+    showToast('Đã đăng xuất tài khoản an toàn! Vui lòng đăng nhập để tiếp tục.', 'info');
+  };
+
+  // Cập nhật giao diện Header (Desktop + Mobile)
+  function updateHeaderAccountUI() {
+    const user = state.currentUser;
+    if (!user) {
+      if (userNameMobile) userNameMobile.textContent = 'Đăng nhập';
+      if (userAvatarMobile) userAvatarMobile.textContent = '👤';
+      if (userNameDesktop) userNameDesktop.textContent = 'Đăng nhập';
+      if (userSubtextDesktop) userSubtextDesktop.textContent = 'Đồng bộ Web';
+      if (userBadgeCountDesktop) userBadgeCountDesktop.classList.add('hidden');
+      if (btnLogoutHeader) btnLogoutHeader.classList.add('hidden');
+      if (btnLogoutMobile) btnLogoutMobile.classList.add('hidden');
+      const btnSuperAdminMobile = document.getElementById('btn-super-admin-mobile');
+      const btnSuperAdminDesktop = document.getElementById('btn-super-admin-desktop');
+      if (btnSuperAdminMobile) btnSuperAdminMobile.classList.add('hidden');
+      if (btnSuperAdminDesktop) btnSuperAdminDesktop.classList.add('hidden');
       return;
     }
 
-    if (quizHistoryEmpty) quizHistoryEmpty.classList.add('hidden');
+    const p = user.profile || {};
+    const scoresCount = (user.scores && user.scores.length) || 0;
+
+    // Mobile Header
+    if (userAvatarMobile) userAvatarMobile.textContent = p.avatar || '👨‍🎓';
+    if (userNameMobile) {
+      const shortName = p.name ? p.name.trim().split(' ').slice(-2).join(' ') : 'Hồ sơ';
+      userNameMobile.textContent = shortName;
+    }
+    if (btnLogoutMobile) btnLogoutMobile.classList.remove('hidden');
+
+    // Desktop Header
+    if (userAvatarDesktop) userAvatarDesktop.textContent = p.avatar || '👨‍🎓';
+    if (userNameDesktop) userNameDesktop.textContent = p.name || user.username;
+    if (userSubtextDesktop) {
+      const cls = p.className ? `Lớp ${p.className}` : `Khối ${p.grade || 9}`;
+      userSubtextDesktop.textContent = `${cls} • ${scoresCount} bài đã thi`;
+    }
+    if (userBadgeCountDesktop) {
+      userBadgeCountDesktop.textContent = `${scoresCount} bài`;
+      userBadgeCountDesktop.classList.remove('hidden');
+    }
+    if (btnLogoutHeader) btnLogoutHeader.classList.remove('hidden');
+
+    // Hiển thị nút Super Admin nếu là admin
+    const isSuperAdmin = (user.username === 'admin' || (user.profile && user.profile.role === 'superadmin'));
+    const btnSuperAdminMobile = document.getElementById('btn-super-admin-mobile');
+    const btnSuperAdminDesktop = document.getElementById('btn-super-admin-desktop');
+    if (btnSuperAdminMobile) {
+      if (isSuperAdmin) btnSuperAdminMobile.classList.remove('hidden');
+      else btnSuperAdminMobile.classList.add('hidden');
+    }
+    if (btnSuperAdminDesktop) {
+      if (isSuperAdmin) btnSuperAdminDesktop.classList.remove('hidden');
+      else btnSuperAdminDesktop.classList.add('hidden');
+    }
+    if (isSuperAdmin && userSubtextDesktop) {
+      userSubtextDesktop.textContent = '👑 Super Admin';
+    }
+  }
+
+  // Render Avatar Picker cho Modal Hồ sơ
+  function renderAvatarPicker(selectedAvatar) {
+    if (!accAvatarPicker) return;
+    accAvatarPicker.innerHTML = AVATAR_OPTIONS.map(av => {
+      const isSel = (av === selectedAvatar);
+      return `
+        <button type="button" class="avatar-option-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-100 hover:bg-indigo-50 border-2 ${isSel ? 'border-indigo-600 bg-indigo-50 font-bold scale-110 shadow-sm' : 'border-slate-200'} flex items-center justify-center text-lg sm:text-xl transition-all cursor-pointer" data-avatar="${av}">
+          ${av}
+        </button>
+      `;
+    }).join('');
+
+    accAvatarPicker.querySelectorAll('.avatar-option-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const av = btn.dataset.avatar;
+        if (inputAccountAvatar) inputAccountAvatar.value = av;
+        renderAvatarPicker(av);
+      });
+    });
+  }
+
+  // Render Avatar Picker cho Form Đăng Ký
+  function renderRegisterAvatarPicker(selectedAvatar) {
+    if (!regAvatarPicker) return;
+    regAvatarPicker.innerHTML = AVATAR_OPTIONS.map(av => {
+      const isSel = (av === selectedAvatar);
+      return `
+        <button type="button" class="reg-avatar-btn w-8 h-8 rounded-lg bg-slate-100 hover:bg-indigo-50 border-2 ${isSel ? 'border-indigo-600 bg-indigo-50 font-bold scale-110 shadow-2xs' : 'border-slate-200'} flex items-center justify-center text-base transition-all cursor-pointer" data-avatar="${av}">
+          ${av}
+        </button>
+      `;
+    }).join('');
+
+    regAvatarPicker.querySelectorAll('.reg-avatar-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const av = btn.dataset.avatar;
+        if (regAvatar) regAvatar.value = av;
+        renderRegisterAvatarPicker(av);
+      });
+    });
+  }
+
+  // ================= 4 TRỤ CỘT HỌC TẬP ĐỒNG BỘ ĐÁM MÂY =================
+
+  // TRỤ CỘT 1: LƯU & XEM SƠ ĐỒ TƯ DUY TRÊN WEB
+  if (btnSaveMindmap) {
+    btnSaveMindmap.addEventListener('click', async () => {
+      if (!state.currentUser) {
+        showToast('Vui lòng đăng nhập để lưu sơ đồ vào tài khoản Web!', 'warning');
+        if (modalAuthGate) modalAuthGate.classList.remove('hidden');
+        return;
+      }
+      if (!state.mindmapMarkdown || state.mindmapMarkdown.trim() === '') {
+        showToast('Chưa có nội dung sơ đồ tư duy để lưu!', 'warning');
+        return;
+      }
+
+      const title = state.currentDoc.title || 'Sơ đồ tư duy bài học';
+      const subject = detectSubjectFromTitle(title);
+      const mindmapItem = {
+        id: 'mm_' + Date.now(),
+        title: title,
+        subject: subject,
+        date: new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
+        markdownContent: state.mindmapMarkdown
+      };
+
+      if (!state.currentUser.mindmaps) state.currentUser.mindmaps = [];
+      state.currentUser.mindmaps.unshift(mindmapItem);
+      if (state.currentUser.mindmaps.length > 50) state.currentUser.mindmaps.length = 50;
+
+      await window.SmartEduCloud.syncUserData(state.currentUser);
+      updateSavedMindmapsCount();
+      showToast('Đã lưu sơ đồ tư duy vào tài khoản Web thành công!', 'success');
+    });
+  }
+
+  function renderMindmapLibrary() {
+    if (!mindmapLibraryList) return;
+    const user = state.currentUser;
+    const mindmaps = (user && user.mindmaps) || [];
+
+    if (mindmapLibraryStatus) {
+      mindmapLibraryStatus.textContent = `Đã lưu ${mindmaps.length} sơ đồ`;
+    }
+
+    if (mindmaps.length === 0) {
+      mindmapLibraryList.innerHTML = '';
+      if (mindmapLibraryEmpty) mindmapLibraryEmpty.classList.remove('hidden');
+      return;
+    }
+
+    if (mindmapLibraryEmpty) mindmapLibraryEmpty.classList.add('hidden');
+    mindmapLibraryList.innerHTML = mindmaps.map((mm, idx) => `
+      <div class="p-3 hover:bg-slate-50 transition-colors flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">${mm.subject || 'Sơ đồ'}</span>
+            <h5 class="text-xs sm:text-sm font-bold text-slate-900 truncate" title="${mm.title}">${mm.title}</h5>
+          </div>
+          <span class="text-[11px] text-slate-400 font-mono mt-0.5 block">${mm.date}</span>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button onclick="window.loadSavedMindmapById && window.loadSavedMindmapById('${mm.id}')" class="px-2.5 py-1 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg cursor-pointer shadow-2xs active:scale-95">
+            Mở xem
+          </button>
+          <button onclick="window.deleteSavedMindmapById && window.deleteSavedMindmapById('${mm.id}')" class="p-1 text-slate-400 hover:text-rose-600 cursor-pointer" title="Xóa sơ đồ này">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  window.loadSavedMindmapById = function(id) {
+    if (!state.currentUser || !state.currentUser.mindmaps) return;
+    const item = state.currentUser.mindmaps.find(m => m.id === id);
+    if (item && item.markdownContent) {
+      state.mindmapMarkdown = item.markdownContent;
+      renderMindmap(item.markdownContent);
+      if (modalMindmapLibrary) modalMindmapLibrary.classList.add('hidden');
+      switchTab('tab-mindmap');
+      showToast(`Đã mở sơ đồ: "${item.title}"!`, 'info');
+    }
+  };
+
+  window.deleteSavedMindmapById = async function(id) {
+    if (!state.currentUser || !state.currentUser.mindmaps) return;
+    if (confirm('Bạn có chắc muốn xóa sơ đồ này khỏi tài khoản Web không?')) {
+      state.currentUser.mindmaps = state.currentUser.mindmaps.filter(m => m.id !== id);
+      await window.SmartEduCloud.syncUserData(state.currentUser);
+      renderMindmapLibrary();
+      updateSavedMindmapsCount();
+      showToast('Đã xóa sơ đồ!', 'info');
+    }
+  };
+
+  function updateSavedMindmapsCount() {
+    const user = state.currentUser;
+    const count = (user && user.mindmaps && user.mindmaps.length) || 0;
+    const el = document.getElementById('saved-mindmaps-count');
+    if (el) el.textContent = count;
+    if (dom.savedMindmapsCount) dom.savedMindmapsCount.textContent = count;
+    if (mindmapLibraryStatus) mindmapLibraryStatus.textContent = `Đã lưu ${count} sơ đồ`;
+  }
+
+  if (btnOpenMindmapLibrary) {
+    btnOpenMindmapLibrary.addEventListener('click', () => {
+      renderMindmapLibrary();
+      if (modalMindmapLibrary) modalMindmapLibrary.classList.remove('hidden');
+    });
+  }
+  if (btnCloseMindmapLibrary) btnCloseMindmapLibrary.addEventListener('click', () => modalMindmapLibrary?.classList.add('hidden'));
+  if (btnDoneMindmapLibrary) btnDoneMindmapLibrary.addEventListener('click', () => modalMindmapLibrary?.classList.add('hidden'));
+
+  // TRỤ CỘT 2: LƯU & XEM TÓM TẮT & GỢI Ý HỌC TẬP TRÊN WEB
+  if (btnSaveSummary) {
+    btnSaveSummary.addEventListener('click', async () => {
+      if (!state.currentUser) {
+        showToast('Vui lòng đăng nhập để lưu bài tóm tắt vào tài khoản Web!', 'warning');
+        if (modalAuthGate) modalAuthGate.classList.remove('hidden');
+        return;
+      }
+      if (!state.summaryData) {
+        showToast('Chưa có nội dung tóm tắt để lưu. Hãy tạo tóm tắt bằng AI trước!', 'warning');
+        return;
+      }
+
+      const title = state.currentDoc.title || 'Tóm tắt bài học';
+      const subject = detectSubjectFromTitle(title);
+      const summaryItem = {
+        id: 'sum_' + Date.now(),
+        title: title,
+        subject: subject,
+        date: new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
+        summaryData: state.summaryData
+      };
+
+      if (!state.currentUser.summaries) state.currentUser.summaries = [];
+      state.currentUser.summaries.unshift(summaryItem);
+      if (state.currentUser.summaries.length > 50) state.currentUser.summaries.length = 50;
+
+      await window.SmartEduCloud.syncUserData(state.currentUser);
+      updateSavedSummariesCount();
+      showToast('Đã lưu bài tóm tắt & gợi ý học tập vào tài khoản Web!', 'success');
+    });
+  }
+
+  function renderSummaryLibrary() {
+    if (!summaryLibraryList) return;
+    const user = state.currentUser;
+    const summaries = (user && user.summaries) || [];
+
+    if (summaryLibraryStatus) {
+      summaryLibraryStatus.textContent = `Đã lưu ${summaries.length} bài tóm tắt`;
+    }
+
+    if (summaries.length === 0) {
+      summaryLibraryList.innerHTML = '';
+      if (summaryLibraryEmpty) summaryLibraryEmpty.classList.remove('hidden');
+      return;
+    }
+
+    if (summaryLibraryEmpty) summaryLibraryEmpty.classList.add('hidden');
+    summaryLibraryList.innerHTML = summaries.map(sm => `
+      <div class="p-3 hover:bg-slate-50 transition-colors flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">${sm.subject || 'Tóm tắt'}</span>
+            <h5 class="text-xs sm:text-sm font-bold text-slate-900 truncate" title="${sm.title}">${sm.title}</h5>
+          </div>
+          <span class="text-[11px] text-slate-400 font-mono mt-0.5 block">${sm.date}</span>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button onclick="window.loadSavedSummaryById && window.loadSavedSummaryById('${sm.id}')" class="px-2.5 py-1 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg cursor-pointer shadow-2xs active:scale-95">
+            Xem lại
+          </button>
+          <button onclick="window.deleteSavedSummaryById && window.deleteSavedSummaryById('${sm.id}')" class="p-1 text-slate-400 hover:text-rose-600 cursor-pointer" title="Xóa bài tóm tắt này">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  window.loadSavedSummaryById = function(id) {
+    if (!state.currentUser || !state.currentUser.summaries) return;
+    const item = state.currentUser.summaries.find(s => s.id === id);
+    if (item && item.summaryData) {
+      state.summaryData = item.summaryData;
+      renderSummary(item.summaryData);
+      if (modalSummaryLibrary) modalSummaryLibrary.classList.add('hidden');
+      switchTab('tab-summary');
+      showToast(`Đã mở bài tóm tắt: "${item.title}"!`, 'info');
+    }
+  };
+
+  window.deleteSavedSummaryById = async function(id) {
+    if (!state.currentUser || !state.currentUser.summaries) return;
+    if (confirm('Bạn có chắc muốn xóa bài tóm tắt này khỏi tài khoản Web không?')) {
+      state.currentUser.summaries = state.currentUser.summaries.filter(s => s.id !== id);
+      await window.SmartEduCloud.syncUserData(state.currentUser);
+      renderSummaryLibrary();
+      updateSavedSummariesCount();
+      showToast('Đã xóa bài tóm tắt!', 'info');
+    }
+  };
+
+  function updateSavedSummariesCount() {
+    const user = state.currentUser;
+    const count = (user && user.summaries && user.summaries.length) || 0;
+    const el = document.getElementById('saved-summaries-count');
+    if (el) el.textContent = count;
+    if (summaryLibraryStatus) summaryLibraryStatus.textContent = `Đã lưu ${count} bài tóm tắt`;
+  }
+
+  if (btnOpenSummaryLibrary) {
+    btnOpenSummaryLibrary.addEventListener('click', () => {
+      renderSummaryLibrary();
+      if (modalSummaryLibrary) modalSummaryLibrary.classList.remove('hidden');
+    });
+  }
+  if (btnCloseSummaryLibrary) btnCloseSummaryLibrary.addEventListener('click', () => modalSummaryLibrary?.classList.add('hidden'));
+  if (btnDoneSummaryLibrary) btnDoneSummaryLibrary.addEventListener('click', () => modalSummaryLibrary?.classList.add('hidden'));
+
+  // TRỤ CỘT 3: LƯU ĐIỂM SỐ & THEO DÕI TIẾN BỘ KHẢO THÍ TRÊN WEB
+  async function recordQuizScoreToAccount(scoreData) {
+    if (!state.currentUser) {
+      if (modalAuthGate) modalAuthGate.classList.remove('hidden');
+      return;
+    }
+
+    if (!state.currentUser.scores) state.currentUser.scores = [];
+    const detectedSubject = detectSubjectFromTitle(scoreData.title);
+
+    const newRecord = {
+      id: Date.now(),
+      date: new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
+      title: scoreData.title || 'Bài tập khảo thí',
+      subject: detectedSubject,
+      score: parseFloat(scoreData.score) || 0,
+      correctTotal: scoreData.correctTotal || 0,
+      totalQ: scoreData.totalQ || 10,
+      percentage: scoreData.percentage || 0,
+      tierBreakdown: scoreData.tierBreakdown || null
+    };
+
+    state.currentUser.scores.unshift(newRecord);
+    if (state.currentUser.scores.length > 100) state.currentUser.scores.length = 100;
+
+    await window.SmartEduCloud.syncUserData(state.currentUser);
+    updateHeaderAccountUI();
+
+    const p = state.currentUser.profile || {};
+    showToast(`Đã lưu ${scoreData.score.toFixed(1)} điểm vào tài khoản Web của ${p.name}!`, 'success');
+
+    if (dom.quizResultSummary) {
+      dom.quizResultSummary.innerHTML = `
+        <span>Làm đúng <strong>${scoreData.correctTotal}/${scoreData.totalQ}</strong> câu (${scoreData.percentage}%)</span>
+        <div class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 border border-indigo-200 rounded-full text-xs text-indigo-900 font-bold">
+          <span>${p.avatar || '👨‍🎓'}</span>
+          <span>Điểm số đã được lưu lên Web vào tài khoản <strong>${p.name}</strong></span>
+        </div>
+      `;
+    }
+  }
+
+  // TRỤ CỘT 4: LƯU & ÔN TẬP BỘ THẺ HỌC TẬP (FLASHCARDS) TRÊN WEB
+  if (btnSaveBeams) {
+    btnSaveBeams.addEventListener('click', async () => {
+      if (!state.currentUser) {
+        showToast('Vui lòng đăng nhập để lưu bộ thẻ vào tài khoản Web!', 'warning');
+        if (modalAuthGate) modalAuthGate.classList.remove('hidden');
+        return;
+      }
+      if (!state.beamData || state.beamData.length === 0) {
+        showToast('Chưa có thẻ học tập nào để lưu. Hãy tạo bộ thẻ AI trước!', 'warning');
+        return;
+      }
+
+      const title = state.currentDoc.title || 'Bộ thẻ học tập';
+      const subject = detectSubjectFromTitle(title);
+      const beamsItem = {
+        id: 'bm_' + Date.now(),
+        title: title,
+        subject: subject,
+        date: new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
+        cards: state.beamData
+      };
+
+      if (!state.currentUser.flashcards) state.currentUser.flashcards = [];
+      state.currentUser.flashcards.unshift(beamsItem);
+      if (state.currentUser.flashcards.length > 50) state.currentUser.flashcards.length = 50;
+
+      await window.SmartEduCloud.syncUserData(state.currentUser);
+      updateSavedBeamsCount();
+      showToast('Đã lưu bộ thẻ học tập vào tài khoản Web thành công!', 'success');
+    });
+  }
+
+  function renderBeamsLibrary() {
+    if (!beamsLibraryList) return;
+    const user = state.currentUser;
+    const flashcards = (user && user.flashcards) || [];
+
+    if (beamsLibraryStatus) {
+      beamsLibraryStatus.textContent = `Đã lưu ${flashcards.length} bộ thẻ`;
+    }
+
+    if (flashcards.length === 0) {
+      beamsLibraryList.innerHTML = '';
+      if (beamsLibraryEmpty) beamsLibraryEmpty.classList.remove('hidden');
+      return;
+    }
+
+    if (beamsLibraryEmpty) beamsLibraryEmpty.classList.add('hidden');
+    beamsLibraryList.innerHTML = flashcards.map(bm => `
+      <div class="p-3 hover:bg-slate-50 transition-colors flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">${bm.subject || 'Thẻ'}</span>
+            <h5 class="text-xs sm:text-sm font-bold text-slate-900 truncate" title="${bm.title}">${bm.title}</h5>
+          </div>
+          <span class="text-[11px] text-slate-500 mt-0.5 block">${bm.date} • <strong>${bm.cards ? bm.cards.length : 0} thẻ</strong></span>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button onclick="window.loadSavedBeamsById && window.loadSavedBeamsById('${bm.id}')" class="px-2.5 py-1 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg cursor-pointer shadow-2xs active:scale-95">
+            Luyện tập
+          </button>
+          <button onclick="window.deleteSavedBeamsById && window.deleteSavedBeamsById('${bm.id}')" class="p-1 text-slate-400 hover:text-rose-600 cursor-pointer" title="Xóa bộ thẻ này">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  window.loadSavedBeamsById = function(id) {
+    if (!state.currentUser || !state.currentUser.flashcards) return;
+    const item = state.currentUser.flashcards.find(b => b.id === id);
+    if (item && item.cards) {
+      state.beamData = item.cards;
+      renderBeams(item.cards);
+      if (modalBeamsLibrary) modalBeamsLibrary.classList.add('hidden');
+      switchTab('tab-beam');
+      showToast(`Đã mở bộ thẻ: "${item.title}"!`, 'info');
+    }
+  };
+
+  window.deleteSavedBeamsById = async function(id) {
+    if (!state.currentUser || !state.currentUser.flashcards) return;
+    if (confirm('Bạn có chắc muốn xóa bộ thẻ này khỏi tài khoản Web không?')) {
+      state.currentUser.flashcards = state.currentUser.flashcards.filter(b => b.id !== id);
+      await window.SmartEduCloud.syncUserData(state.currentUser);
+      renderBeamsLibrary();
+      updateSavedBeamsCount();
+      showToast('Đã xóa bộ thẻ!', 'info');
+    }
+  };
+
+  function updateSavedBeamsCount() {
+    const user = state.currentUser;
+    const count = (user && user.flashcards && user.flashcards.length) || 0;
+    const el = document.getElementById('saved-beams-count');
+    if (el) el.textContent = count;
+    if (beamsLibraryStatus) beamsLibraryStatus.textContent = `Đã lưu ${count} bộ thẻ`;
+  }
+
+  if (btnOpenBeamsLibrary) {
+    btnOpenBeamsLibrary.addEventListener('click', () => {
+      renderBeamsLibrary();
+      if (modalBeamsLibrary) modalBeamsLibrary.classList.remove('hidden');
+    });
+  }
+  if (btnCloseBeamsLibrary) btnCloseBeamsLibrary.addEventListener('click', () => modalBeamsLibrary?.classList.add('hidden'));
+  if (btnDoneBeamsLibrary) btnDoneBeamsLibrary.addEventListener('click', () => modalBeamsLibrary?.classList.add('hidden'));
+
+  // ================= CÀI ĐẶT CẤU HÌNH FIREBASE TÙY CHỈNH =================
+  window.openFirebaseSettingsModal = function() {
+    if (inputFirebaseConfigJson) {
+      try {
+        const saved = localStorage.getItem('smartedu_firebase_custom_config');
+        if (saved) {
+          inputFirebaseConfigJson.value = JSON.stringify(JSON.parse(saved), null, 2);
+        } else {
+          inputFirebaseConfigJson.value = JSON.stringify(window.FIREBASE_CONFIG, null, 2);
+        }
+      } catch (e) {}
+    }
+    if (modalFirebaseSettings) modalFirebaseSettings.classList.remove('hidden');
+  };
+
+  if (btnCloseFirebaseSettings) btnCloseFirebaseSettings.addEventListener('click', () => modalFirebaseSettings?.classList.add('hidden'));
+  if (btnCancelFirebaseSettings) btnCancelFirebaseSettings.addEventListener('click', () => modalFirebaseSettings?.classList.add('hidden'));
+
+  if (btnSaveFirebaseConfig) {
+    btnSaveFirebaseConfig.addEventListener('click', () => {
+      const val = (inputFirebaseConfigJson?.value || '').trim();
+      if (!val) {
+        showToast('Vui lòng nhập JSON cấu hình Firebase!', 'warning');
+        return;
+      }
+      try {
+        const parsed = JSON.parse(val);
+        if (!parsed.projectId) {
+          showToast('JSON phải chứa ít nhất trường "projectId"!', 'warning');
+          return;
+        }
+        localStorage.setItem('smartedu_firebase_custom_config', JSON.stringify(parsed));
+        window.FIREBASE_CONFIG = parsed;
+        if (window.SmartEduCloud) window.SmartEduCloud.init();
+        if (modalFirebaseSettings) modalFirebaseSettings.classList.add('hidden');
+        showToast('Đã lưu cấu hình Firebase! Kết nối thành công.', 'success');
+      } catch (err) {
+        showToast('Lỗi cú pháp JSON cấu hình: ' + err.message, 'error');
+      }
+    });
+  }
+
+  if (btnResetFirebaseConfig) {
+    btnResetFirebaseConfig.addEventListener('click', () => {
+      if (confirm('Bạn có muốn xóa cấu hình Firebase tùy chỉnh và quay về mặc định?')) {
+        localStorage.removeItem('smartedu_firebase_custom_config');
+        if (inputFirebaseConfigJson) inputFirebaseConfigJson.value = '';
+        if (modalFirebaseSettings) modalFirebaseSettings.classList.add('hidden');
+        showToast('Đã đặt lại cấu hình Firebase mặc định!', 'info');
+      }
+    });
+  }
+
+  // ================= BẢNG TIẾN ĐỘ & BẢNG ĐIỂM (MODAL USER ACCOUNT) =================
+
+  // Vẽ biểu đồ tiến độ học tập bằng SVG
+  function renderProgressChart(scores) {
+    if (!accChartContainer) return;
+    if (!scores || scores.length === 0) {
+      accChartContainer.innerHTML = `
+        <div class="flex flex-col items-center justify-center text-center p-4">
+          <i class="fa-solid fa-chart-line text-2xl text-slate-300 mb-1"></i>
+          <span class="text-xs text-slate-400">Chưa đủ dữ liệu để vẽ biểu đồ (Cần ít nhất 1 bài thi ở Tab 3)</span>
+        </div>
+      `;
+      if (accTrendComment) {
+        accTrendComment.textContent = 'Chưa có bài thi';
+        accTrendComment.className = 'text-[11px] font-bold text-slate-400';
+      }
+      return;
+    }
+
+    const chronological = [...scores].reverse().slice(-10);
+
+    if (accTrendComment) {
+      if (chronological.length === 1) {
+        accTrendComment.textContent = '🌟 Khởi đầu xuất sắc';
+        accTrendComment.className = 'text-[11px] font-bold text-indigo-600';
+      } else {
+        const firstScore = chronological[0].score;
+        const lastScore = chronological[chronological.length - 1].score;
+        const diff = lastScore - firstScore;
+        if (diff > 0.5) {
+          accTrendComment.textContent = `📈 Tiến bộ vượt bậc (+${diff.toFixed(1)}đ)`;
+          accTrendComment.className = 'text-[11px] font-bold text-emerald-600';
+        } else if (diff < -0.5) {
+          accTrendComment.textContent = `📉 Cần rèn luyện thêm (${diff.toFixed(1)}đ)`;
+          accTrendComment.className = 'text-[11px] font-bold text-amber-600';
+        } else {
+          accTrendComment.textContent = `⭐ Phong độ ổn định (${lastScore.toFixed(1)}đ)`;
+          accTrendComment.className = 'text-[11px] font-bold text-blue-600';
+        }
+      }
+    }
+
+    if (chronological.length === 1) {
+      const s = chronological[0].score;
+      accChartContainer.innerHTML = `
+        <div class="flex flex-col items-center justify-center text-center p-3">
+          <span class="text-xs text-slate-500">Bài thi đầu tiên: <strong>${chronological[0].title}</strong></span>
+          <div class="mt-1 text-2xl font-black text-indigo-600">${s.toFixed(1)} / 10 Điểm</div>
+          <span class="text-[11px] text-emerald-600 font-semibold mt-1">
+            <i class="fa-solid fa-sparkles"></i> Hãy làm thêm bài thi ở Tab 3 để hiển thị đường cong tiến bộ!
+          </span>
+        </div>
+      `;
+      return;
+    }
+
+    const width = 640;
+    const height = 135;
+    const paddingLeft = 38;
+    const paddingRight = 25;
+    const paddingTop = 22;
+    const paddingBottom = 26;
+
+    const chartW = width - paddingLeft - paddingRight;
+    const chartH = height - paddingTop - paddingBottom;
+
+    const points = chronological.map((item, idx) => {
+      const x = paddingLeft + (idx / (chronological.length - 1)) * chartW;
+      const y = paddingTop + chartH - ((item.score / 10) * chartH);
+      return { x, y, score: item.score, title: item.title, date: item.date };
+    });
+
+    const pathD = points.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+    const areaD = `${pathD} L ${points[points.length - 1].x.toFixed(1)} ${(paddingTop + chartH).toFixed(1)} L ${points[0].x.toFixed(1)} ${(paddingTop + chartH).toFixed(1)} Z`;
+
+    const y10 = paddingTop;
+    const y5 = paddingTop + chartH / 2;
+    const y0 = paddingTop + chartH;
+
+    const svg = `
+      <svg viewBox="0 0 ${width} ${height}" class="w-full h-full" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#4f46e5" stop-opacity="0.32"/>
+            <stop offset="100%" stop-color="#4f46e5" stop-opacity="0.01"/>
+          </linearGradient>
+        </defs>
+
+        <line x1="${paddingLeft}" y1="${y10}" x2="${width - paddingRight}" y2="${y10}" stroke="#e2e8f0" stroke-dasharray="3 3" />
+        <line x1="${paddingLeft}" y1="${y5}" x2="${width - paddingRight}" y2="${y5}" stroke="#e2e8f0" stroke-dasharray="3 3" />
+        <line x1="${paddingLeft}" y1="${y0}" x2="${width - paddingRight}" y2="${y0}" stroke="#cbd5e1" stroke-width="1.2" />
+
+        <text x="${paddingLeft - 8}" y="${y10 + 4}" font-size="10" fill="#94a3b8" text-anchor="end" font-weight="bold">10đ</text>
+        <text x="${paddingLeft - 8}" y="${y5 + 4}" font-size="10" fill="#94a3b8" text-anchor="end">5đ</text>
+        <text x="${paddingLeft - 8}" y="${y0 + 4}" font-size="10" fill="#94a3b8" text-anchor="end">0đ</text>
+
+        <path d="${areaD}" fill="url(#chartGrad)" />
+        <path d="${pathD}" fill="none" stroke="#4f46e5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+
+        ${points.map((p, i) => `
+          <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4.5" fill="#ffffff" stroke="#4f46e5" stroke-width="2.5">
+            <title>Lần ${i + 1}: ${p.score.toFixed(1)}đ - ${p.title} (${p.date})</title>
+          </circle>
+          <text x="${p.x.toFixed(1)}" y="${(p.y - 8).toFixed(1)}" font-size="10" font-weight="extrabold" fill="#312e81" text-anchor="middle">${p.score.toFixed(1)}</text>
+          <text x="${p.x.toFixed(1)}" y="${(height - 8)}" font-size="9" font-weight="500" fill="#64748b" text-anchor="middle">Lần ${i + 1}</text>
+        `).join('')}
+      </svg>
+    `;
+
+    accChartContainer.innerHTML = svg;
+  }
+
+  // Hiển thị huy hiệu khích lệ học sinh
+  function renderAchievementBadges(scores) {
+    if (!accBadgesList) return;
+    const scoresCount = (scores && scores.length) || 0;
+    
+    let hasBreakthrough = false;
+    if (scoresCount >= 2) {
+      for (let i = scores.length - 1; i >= 1; i--) {
+        if (scores[i - 1].score - scores[i].score >= 1.5) {
+          hasBreakthrough = true;
+          break;
+        }
+      }
+    }
+
+    const totalScore = scores ? scores.reduce((sum, item) => sum + item.score, 0) : 0;
+    const avgScore = scoresCount > 0 ? (totalScore / scoresCount) : 0;
+
+    const badges = [
+      {
+        id: 'b1',
+        icon: '🌟',
+        name: 'Khởi đầu nan',
+        desc: 'Làm bài kiểm tra đầu tiên',
+        unlocked: scoresCount >= 1
+      },
+      {
+        id: 'b2',
+        icon: '⚡',
+        name: 'Chăm chỉ',
+        desc: 'Hoàn thành từ 3 bài khảo thí',
+        unlocked: scoresCount >= 3
+      },
+      {
+        id: 'b3',
+        icon: '🏆',
+        name: 'Thủ khoa 10đ',
+        desc: 'Đạt điểm 10 tuyệt đối',
+        unlocked: scores ? scores.some(s => s.score >= 10) : false
+      },
+      {
+        id: 'b4',
+        icon: '📈',
+        name: 'Đột phá',
+        desc: 'Tăng ≥ 1.5đ so với bài trước',
+        unlocked: hasBreakthrough
+      },
+      {
+        id: 'b5',
+        icon: '🎯',
+        name: 'Bậc thầy THCS',
+        desc: '≥ 5 bài thi & Điểm TB ≥ 8.0',
+        unlocked: scoresCount >= 5 && avgScore >= 8.0
+      }
+    ];
+
+    const unlockedCount = badges.filter(b => b.unlocked).length;
+    if (accBadgeUnlockedText) {
+      accBadgeUnlockedText.textContent = `Đã đạt ${unlockedCount}/${badges.length}`;
+    }
+
+    accBadgesList.innerHTML = badges.map(b => {
+      if (b.unlocked) {
+        return `
+          <div class="p-2 sm:p-2.5 rounded-xl bg-white border border-amber-300 shadow-2xs flex flex-col items-center text-center transition-all hover:scale-105">
+            <span class="text-2xl sm:text-3xl mb-1">${b.icon}</span>
+            <span class="font-extrabold text-[11px] text-amber-950 truncate max-w-full">${b.name}</span>
+            <span class="text-[9px] text-slate-500 line-clamp-1 mt-0.5">${b.desc}</span>
+            <span class="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded-full mt-1">Đã mở</span>
+          </div>
+        `;
+      } else {
+        return `
+          <div class="p-2 sm:p-2.5 rounded-xl bg-slate-100/80 border border-slate-200/80 flex flex-col items-center text-center opacity-60">
+            <span class="text-2xl sm:text-3xl mb-1 grayscale">${b.icon}</span>
+            <span class="font-bold text-[11px] text-slate-600 truncate max-w-full">${b.name}</span>
+            <span class="text-[9px] text-slate-400 line-clamp-1 mt-0.5">${b.desc}</span>
+            <span class="text-[9px] text-slate-400 mt-1"><i class="fa-solid fa-lock text-[8px]"></i> Khóa</span>
+          </div>
+        `;
+      }
+    }).join('');
+  }
+
+  // Render toàn bộ giao diện Tab "Tiến độ học tập & Bảng điểm"
+  function renderAccountProgressUI(filterSubject = 'all') {
+    const user = state.currentUser;
+    if (!user) return;
+    const p = user.profile || {};
+
+    if (modalUserAvatarLarge) modalUserAvatarLarge.textContent = p.avatar || '👨‍🎓';
+    if (modalUserFullname) modalUserFullname.textContent = p.name || user.username;
+    if (modalUserGradeBadge) modalUserGradeBadge.textContent = `Khối ${p.grade || '9'}`;
+    if (modalUserSchoolClass) {
+      const cls = p.className ? `Lớp ${p.className}` : `Khối ${p.grade || '9'}`;
+      const sch = p.school ? p.school : 'Trường THCS';
+      modalUserSchoolClass.textContent = `${cls} • ${sch} (Tài khoản: ${user.username})`;
+    }
+
+    const scores = user.scores || [];
+    const totalTests = scores.length;
 
     let totalScore = 0;
     let maxScore = 0;
     let totalCorrect = 0;
 
-    quizHistoryTableBody.innerHTML = history.map(item => {
-      const scoreNum = parseFloat(item.score) || 0;
-      totalScore += scoreNum;
-      if (scoreNum > maxScore) maxScore = scoreNum;
+    scores.forEach(item => {
+      const s = parseFloat(item.score) || 0;
+      totalScore += s;
+      if (s > maxScore) maxScore = s;
       totalCorrect += (item.correctTotal || 0);
+    });
 
-      const scoreBadgeColor = scoreNum >= 8 
-        ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
-        : (scoreNum >= 5 ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-rose-100 text-rose-800 border-rose-300');
+    const avgScore = totalTests > 0 ? (totalScore / totalTests).toFixed(1) : '0.0';
 
-      return `
-        <tr class="hover:bg-slate-50/80 transition-colors">
-          <td class="p-2.5 sm:px-3 text-slate-500 font-mono text-[11px] whitespace-nowrap">${item.date}</td>
-          <td class="p-2.5 sm:px-3 font-medium text-slate-800 max-w-[180px] sm:max-w-xs truncate" title="${item.title}">${item.title}</td>
-          <td class="p-2.5 sm:px-3 text-center font-semibold text-slate-700">${item.correctTotal}/${item.totalQ} (${item.percentage}%)</td>
-          <td class="p-2.5 sm:px-3 text-right">
-            <span class="inline-block px-2 py-0.5 rounded-md font-bold text-xs border ${scoreBadgeColor}">
-              ${scoreNum.toFixed(1)} đ
-            </span>
-          </td>
-        </tr>
-      `;
-    }).join('');
+    if (accStatTotalTests) accStatTotalTests.textContent = totalTests;
+    if (accStatMaxScore) accStatMaxScore.textContent = maxScore.toFixed(1);
+    if (accStatAvgScore) accStatAvgScore.textContent = avgScore;
+    if (accStatTotalCorrect) accStatTotalCorrect.textContent = totalCorrect;
 
-    const avgScore = (totalScore / history.length).toFixed(1);
+    if (accStatRatingBadge) {
+      const avgNum = parseFloat(avgScore);
+      if (totalTests === 0) {
+        accStatRatingBadge.textContent = 'Chưa có bài';
+        accStatRatingBadge.className = 'inline-block text-[9px] px-1.5 py-0.2 rounded font-bold bg-slate-100 text-slate-600 mt-0.5';
+      } else if (avgNum >= 9.0) {
+        accStatRatingBadge.textContent = 'Xuất sắc';
+        accStatRatingBadge.className = 'inline-block text-[9px] px-1.5 py-0.2 rounded font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 mt-0.5';
+      } else if (avgNum >= 8.0) {
+        accStatRatingBadge.textContent = 'Giỏi';
+        accStatRatingBadge.className = 'inline-block text-[9px] px-1.5 py-0.2 rounded font-bold bg-indigo-100 text-indigo-800 border border-indigo-300 mt-0.5';
+      } else if (avgNum >= 6.5) {
+        accStatRatingBadge.textContent = 'Khá';
+        accStatRatingBadge.className = 'inline-block text-[9px] px-1.5 py-0.2 rounded font-bold bg-blue-100 text-blue-800 border border-blue-300 mt-0.5';
+      } else if (avgNum >= 5.0) {
+        accStatRatingBadge.textContent = 'Đạt';
+        accStatRatingBadge.className = 'inline-block text-[9px] px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-800 border border-amber-300 mt-0.5';
+      } else {
+        accStatRatingBadge.textContent = 'Cần cố gắng';
+        accStatRatingBadge.className = 'inline-block text-[9px] px-1.5 py-0.2 rounded font-bold bg-rose-100 text-rose-800 border border-rose-300 mt-0.5';
+      }
+    }
 
-    if (statTotalTests) statTotalTests.textContent = history.length;
-    if (statMaxScore) statMaxScore.textContent = maxScore.toFixed(1);
-    if (statAvgScore) statAvgScore.textContent = avgScore;
-    if (statTotalCorrect) statTotalCorrect.textContent = totalCorrect;
+    renderProgressChart(scores);
+    renderAchievementBadges(scores);
+
+    const filteredScores = scores.filter(item => {
+      if (filterSubject === 'all') return true;
+      return (item.subject === filterSubject);
+    });
+
+    if (accHistoryTableBody) {
+      if (filteredScores.length === 0) {
+        accHistoryTableBody.innerHTML = '';
+        if (accHistoryEmpty) accHistoryEmpty.classList.remove('hidden');
+      } else {
+        if (accHistoryEmpty) accHistoryEmpty.classList.add('hidden');
+        accHistoryTableBody.innerHTML = filteredScores.map((item, idx) => {
+          const s = parseFloat(item.score) || 0;
+          const badgeClass = s >= 8 
+            ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
+            : (s >= 5 ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-rose-100 text-rose-800 border-rose-300');
+          
+          const subjectColor = item.subject === 'Toán'
+            ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+            : (item.subject === 'KHTN' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-700 border-slate-200');
+
+          return `
+            <tr class="hover:bg-slate-50/80 transition-colors">
+              <td class="p-2 sm:px-3 text-slate-500 font-mono text-[11px] whitespace-nowrap">${item.date}</td>
+              <td class="p-2 sm:px-3 font-semibold text-slate-900 max-w-[180px] sm:max-w-xs truncate" title="${item.title}">${item.title}</td>
+              <td class="p-2 sm:px-3 text-center whitespace-nowrap">
+                <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold border ${subjectColor}">${item.subject || 'Khác'}</span>
+              </td>
+              <td class="p-2 sm:px-3 text-center font-medium text-slate-700 whitespace-nowrap">${item.correctTotal}/${item.totalQ} (${item.percentage}%)</td>
+              <td class="p-2 sm:px-3 text-right whitespace-nowrap">
+                <span class="inline-block px-2 py-0.5 rounded-md font-bold text-xs border ${badgeClass}">
+                  ${s.toFixed(1)} đ
+                </span>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
   }
 
-  function openQuizHistoryModal() {
-    renderQuizHistory();
-    if (modalQuizHistory) modalQuizHistory.classList.remove('hidden');
+  // Nạp thông tin hồ sơ của chính người dùng hiện tại vào form
+  function fillCurrentProfileForm() {
+    const user = state.currentUser;
+    if (!user) return;
+    const p = user.profile || {};
+    if (inputAccountId) inputAccountId.value = user.username;
+    if (accFormUsernameDisplay) accFormUsernameDisplay.textContent = `@${user.username}`;
+    if (inputAccountName) inputAccountName.value = p.name || '';
+    if (inputAccountSchool) inputAccountSchool.value = p.school || '';
+    if (inputAccountGrade) inputAccountGrade.value = p.grade || '9';
+    if (inputAccountClass) inputAccountClass.value = p.className || '';
+    if (inputAccountAvatar) inputAccountAvatar.value = p.avatar || '👨‍🎓';
+    if (inputAccountNewPassword) inputAccountNewPassword.value = '';
+    renderAvatarPicker(p.avatar || '👨‍🎓');
   }
 
-  function closeQuizHistoryModal() {
-    if (modalQuizHistory) modalQuizHistory.classList.add('hidden');
+  // Mở Modal Hồ Sơ Cá Nhân (chỉ nạp dữ liệu của người dùng hiện tại)
+  function openUserAccountModal(tab = 'progress') {
+    if (!state.currentUser) {
+      if (modalAuthGate) modalAuthGate.classList.remove('hidden');
+      return;
+    }
+    renderAccountProgressUI();
+    fillCurrentProfileForm();
+    switchAccountModalTab(tab);
+    if (modalUserAccount) modalUserAccount.classList.remove('hidden');
   }
 
-  if (btnQuizHistory) btnQuizHistory.addEventListener('click', openQuizHistoryModal);
-  if (btnCloseQuizHistory) btnCloseQuizHistory.addEventListener('click', closeQuizHistoryModal);
-  if (btnDoneQuizHistory) btnDoneQuizHistory.addEventListener('click', closeQuizHistoryModal);
-  if (modalQuizHistory) {
-    modalQuizHistory.addEventListener('click', (e) => {
-      if (e.target === modalQuizHistory) closeQuizHistoryModal();
+  // Đóng Modal Hồ Sơ Cá Nhân
+  function closeUserAccountModal() {
+    if (modalUserAccount) modalUserAccount.classList.add('hidden');
+  }
+
+  function switchAccountModalTab(tab) {
+    if (tab === 'progress') {
+      if (tabBtnAccountProgress) {
+        tabBtnAccountProgress.className = 'account-tab-btn active px-3 py-2 text-indigo-600 border-b-2 border-indigo-600 flex items-center gap-1.5 cursor-pointer font-bold';
+      }
+      if (tabBtnAccountManage) {
+        tabBtnAccountManage.className = 'account-tab-btn px-3 py-2 text-slate-500 hover:text-slate-800 border-b-2 border-transparent flex items-center gap-1.5 cursor-pointer font-bold';
+      }
+      if (paneAccountProgress) paneAccountProgress.classList.remove('hidden');
+      if (paneAccountManage) paneAccountManage.classList.add('hidden');
+    } else {
+      if (tabBtnAccountManage) {
+        tabBtnAccountManage.className = 'account-tab-btn active px-3 py-2 text-indigo-600 border-b-2 border-indigo-600 flex items-center gap-1.5 cursor-pointer font-bold';
+      }
+      if (tabBtnAccountProgress) {
+        tabBtnAccountProgress.className = 'account-tab-btn px-3 py-2 text-slate-500 hover:text-slate-800 border-b-2 border-transparent flex items-center gap-1.5 cursor-pointer font-bold';
+      }
+      if (paneAccountManage) paneAccountManage.classList.remove('hidden');
+      if (paneAccountProgress) paneAccountProgress.classList.add('hidden');
+    }
+  }
+
+  // Lưu chỉnh sửa hồ sơ cá nhân và đổi mật khẩu cho chính mình
+  if (formUserAccount) {
+    formUserAccount.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const user = state.currentUser;
+      if (!user) {
+        showToast('Vui lòng đăng nhập trước!', 'warning');
+        return;
+      }
+
+      const name = (inputAccountName?.value || '').trim();
+      if (!name) {
+        showToast('Vui lòng nhập họ và tên học sinh!', 'warning');
+        return;
+      }
+
+      user.profile = user.profile || {};
+      user.profile.name = name;
+      user.profile.school = (inputAccountSchool?.value || '').trim();
+      user.profile.grade = inputAccountGrade?.value || '9';
+      user.profile.className = (inputAccountClass?.value || '').trim();
+      user.profile.avatar = inputAccountAvatar?.value || '👨‍🎓';
+
+      const newPass = (inputAccountNewPassword?.value || '').trim();
+      if (newPass) {
+        user.password = newPass;
+      }
+
+      await window.SmartEduCloud.syncUserData(user);
+      updateHeaderAccountUI();
+      renderAccountProgressUI();
+      showToast(`Đã lưu thay đổi hồ sơ của em ${name}!`, 'success');
+      switchAccountModalTab('progress');
     });
   }
 
-  if (btnClearQuizHistory) {
-    btnClearQuizHistory.addEventListener('click', () => {
-      if (confirm('Bạn có chắc chắn muốn xóa toàn bộ lịch sử làm bài thi trên máy này không?')) {
-        localStorage.removeItem('smartedu_quiz_history');
-        renderQuizHistory();
-        showToast('Đã xóa toàn bộ lịch sử khảo thí!', 'info');
+  if (accFilterSubject) {
+    accFilterSubject.addEventListener('change', () => {
+      renderAccountProgressUI(accFilterSubject.value);
+    });
+  }
+
+  if (tabBtnAccountProgress) tabBtnAccountProgress.addEventListener('click', () => switchAccountModalTab('progress'));
+  if (tabBtnAccountManage) tabBtnAccountManage.addEventListener('click', () => {
+    fillCurrentProfileForm();
+    switchAccountModalTab('manage');
+  });
+
+  if (btnEditCurrentProfile) {
+    btnEditCurrentProfile.addEventListener('click', () => {
+      if (state.currentUser) {
+        fillCurrentProfileForm();
+        switchAccountModalTab('manage');
       }
     });
   }
 
+  // In bảng điểm cá nhân
+  function printStudentReport() {
+    const user = state.currentUser;
+    if (!user) return;
+    const p = user.profile || {};
+    const scores = user.scores || [];
+
+    const printName = document.getElementById('print-student-name');
+    const printClass = document.getElementById('print-student-class');
+    const printSchool = document.getElementById('print-student-school');
+    const printDate = document.getElementById('print-report-date');
+    const printStatTests = document.getElementById('print-stat-tests');
+    const printStatAvg = document.getElementById('print-stat-avg');
+    const printStatMax = document.getElementById('print-stat-max');
+    const printStatRating = document.getElementById('print-stat-rating');
+    const printTableBody = document.getElementById('print-history-table-body');
+
+    if (printName) printName.textContent = p.name || user.username;
+    if (printClass) printClass.textContent = p.className ? `Lớp ${p.className} (Khối ${p.grade || 9})` : `Khối ${p.grade || 9}`;
+    if (printSchool) printSchool.textContent = p.school || 'Trường THCS';
+    if (printDate) printDate.textContent = `Ngày xuất báo cáo: ${new Date().toLocaleDateString('vi-VN')} lúc ${new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+
+    let totalScore = 0;
+    let maxScore = 0;
+    scores.forEach(s => {
+      totalScore += s.score;
+      if (s.score > maxScore) maxScore = s.score;
+    });
+    const avgScore = scores.length > 0 ? (totalScore / scores.length).toFixed(1) : '0.0';
+
+    if (printStatTests) printStatTests.textContent = scores.length;
+    if (printStatAvg) printStatAvg.textContent = `${avgScore} đ`;
+    if (printStatMax) printStatMax.textContent = `${maxScore.toFixed(1)} đ`;
+    if (printStatRating) {
+      const a = parseFloat(avgScore);
+      printStatRating.textContent = a >= 9 ? 'Xuất sắc' : (a >= 8 ? 'Giỏi' : (a >= 6.5 ? 'Khá' : (a >= 5 ? 'Đạt' : 'Cần cố gắng')));
+    }
+
+    if (printTableBody) {
+      if (scores.length === 0) {
+        printTableBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">Chưa có bài thi nào được ghi nhận.</td></tr>`;
+      } else {
+        printTableBody.innerHTML = scores.map((item, idx) => `
+          <tr class="border-b border-slate-200">
+            <td class="p-2 border-r border-slate-200 text-center">${idx + 1}</td>
+            <td class="p-2 border-r border-slate-200">${item.date}</td>
+            <td class="p-2 border-r border-slate-200 font-semibold">${item.title}</td>
+            <td class="p-2 border-r border-slate-200 text-center">${item.subject || 'Khác'}</td>
+            <td class="p-2 border-r border-slate-200 text-center">${item.correctTotal}/${item.totalQ} (${item.percentage}%)</td>
+            <td class="p-2 text-right font-bold">${item.score.toFixed(1)} đ</td>
+          </tr>
+        `).join('');
+      }
+    }
+
+    document.body.classList.add('printing-report-active');
+    window.print();
+    window.addEventListener('afterprint', () => {
+      document.body.classList.remove('printing-report-active');
+    }, { once: true });
+  }
+
+  if (btnPrintStudentReport) btnPrintStudentReport.addEventListener('click', printStudentReport);
+
+  // Xuất file sao lưu JSON
+  if (btnExportAccountData) {
+    btnExportAccountData.addEventListener('click', () => {
+      const user = state.currentUser;
+      if (!user) return;
+      const jsonStr = JSON.stringify(user, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safeName = (user.profile?.name || user.username).replace(/[^a-zA-Z0-9_\u00C0-\u1EF9]/g, '_');
+      a.href = url;
+      a.download = `SmartEdu_Cloud_${safeName}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('Đã xuất file sao lưu dữ liệu học tập thành công!', 'success');
+    });
+  }
+
+  // Nhập file sao lưu JSON của cá nhân
+  if (inputImportAccountData) {
+    inputImportAccountData.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const imported = JSON.parse(event.target.result);
+          if (imported && imported.username && imported.profile) {
+            await window.SmartEduCloud.syncUserData(imported);
+            localStorage.setItem('smartedu_active_cloud_username', imported.username);
+            applyUserSession(imported);
+            fillCurrentProfileForm();
+            renderAccountProgressUI();
+            showToast(`Đã nạp và khôi phục dữ liệu học tập của ${imported.profile?.name || imported.username}!`, 'success');
+          } else {
+            showToast('Tệp JSON không đúng định dạng sao lưu của SmartEdu!', 'warning');
+          }
+        } catch (err) {
+          showToast('Lỗi đọc tệp JSON: ' + err.message, 'error');
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+  }
+
+  // Gắn sự kiện đóng mở Modal Hồ sơ
+  if (btnUserAccountMobile) btnUserAccountMobile.addEventListener('click', () => openUserAccountModal('progress'));
+  if (btnUserAccountDesktop) btnUserAccountDesktop.addEventListener('click', () => openUserAccountModal('progress'));
+  if (btnQuizHistory) btnQuizHistory.addEventListener('click', () => openUserAccountModal('progress'));
+  if (btnCloseUserAccount) btnCloseUserAccount.addEventListener('click', closeUserAccountModal);
+  if (btnDoneUserAccount) btnDoneUserAccount.addEventListener('click', closeUserAccountModal);
+  if (modalUserAccount) {
+    modalUserAccount.addEventListener('click', (e) => {
+      if (e.target === modalUserAccount) closeUserAccountModal();
+    });
+  }
+
+  // Expose các hàm ra window & aliases an toàn
+  window.openUserAccountModal = openUserAccountModal;
+  window.recordQuizScoreToAccount = recordQuizScoreToAccount;
+  window.renderMindmap = renderMindmap;
+  window.renderMarkmap = renderMindmap;
+  window.renderSummary = renderSummary;
+  window.renderSummaryUI = renderSummary;
+
+  // ==============================================================
+  // QUẢN LÝ SUPER ADMIN (BẢNG ĐIỀU KHIỂN TOÀN TRƯỜNG)
+  // ==============================================================
+  const modalSuperAdmin = document.getElementById('modal-super-admin');
+  const btnCloseSuperAdmin = document.getElementById('btn-close-super-admin');
+  const btnRefreshSuperAdmin = document.getElementById('btn-refresh-super-admin');
+  const btnSuperAdminMobile = document.getElementById('btn-super-admin-mobile');
+  const btnSuperAdminDesktop = document.getElementById('btn-super-admin-desktop');
+
+  // Stats
+  const adminStatUsers = document.getElementById('admin-stat-users');
+  const adminStatMindmaps = document.getElementById('admin-stat-mindmaps');
+  const adminStatSummaries = document.getElementById('admin-stat-summaries');
+  const adminStatQuizzes = document.getElementById('admin-stat-quizzes');
+  const adminStatFlashcards = document.getElementById('admin-stat-flashcards');
+  const adminStatCloud = document.getElementById('admin-stat-cloud');
+
+  // Panes & Tabs
+  const adminTabBtns = {
+    users: document.getElementById('admin-tab-btn-users'),
+    mindmaps: document.getElementById('admin-tab-btn-mindmaps'),
+    summaries: document.getElementById('admin-tab-btn-summaries'),
+    scores: document.getElementById('admin-tab-btn-scores'),
+    flashcards: document.getElementById('admin-tab-btn-flashcards')
+  };
+  const adminPanes = {
+    users: document.getElementById('admin-pane-users'),
+    mindmaps: document.getElementById('admin-pane-mindmaps'),
+    summaries: document.getElementById('admin-pane-summaries'),
+    scores: document.getElementById('admin-pane-scores'),
+    flashcards: document.getElementById('admin-pane-flashcards')
+  };
+
+  // Search Inputs & Lists
+  const adminSearchUsers = document.getElementById('admin-search-users');
+  const adminUsersList = document.getElementById('admin-users-list');
+  const adminUsersCounter = document.getElementById('admin-users-counter');
+
+  const adminSearchMindmaps = document.getElementById('admin-search-mindmaps');
+  const adminMindmapsList = document.getElementById('admin-mindmaps-list');
+  const adminMindmapsCounter = document.getElementById('admin-mindmaps-counter');
+
+  const adminSearchSummaries = document.getElementById('admin-search-summaries');
+  const adminSummariesList = document.getElementById('admin-summaries-list');
+  const adminSummariesCounter = document.getElementById('admin-summaries-counter');
+
+  const adminSearchScores = document.getElementById('admin-search-scores');
+  const adminFilterSubjectScores = document.getElementById('admin-filter-subject-scores');
+  const adminScoresTableBody = document.getElementById('admin-scores-table-body');
+
+  const adminSearchFlashcards = document.getElementById('admin-search-flashcards');
+  const adminFlashcardsList = document.getElementById('admin-flashcards-list');
+  const adminFlashcardsCounter = document.getElementById('admin-flashcards-counter');
+
+  let cachedAllAdminUsers = [];
+  let currentAdminTab = 'users';
+
+  // Mở Bảng điều khiển Super Admin
+  async function openSuperAdminModal(tab = 'users') {
+    const user = state.currentUser;
+    const isSuperAdmin = user && (user.username === 'admin' || user.profile?.role === 'superadmin');
+    if (!isSuperAdmin) {
+      showToast('Chỉ Quản trị viên (Super Admin) mới có quyền truy cập khu vực này!', 'warning');
+      return;
+    }
+
+    if (modalSuperAdmin) {
+      modalSuperAdmin.style.display = 'flex';
+      modalSuperAdmin.classList.remove('hidden');
+      modalSuperAdmin.classList.add('flex');
+    }
+    switchAdminTab(tab);
+    loadSuperAdminData();
+  }
+
+  // Đóng Modal Super Admin
+  function closeSuperAdminModal() {
+    if (modalSuperAdmin) {
+      modalSuperAdmin.style.display = 'none';
+      modalSuperAdmin.classList.add('hidden');
+      modalSuperAdmin.classList.remove('flex');
+    }
+  }
+
+  // Nạp toàn bộ dữ liệu từ Cloud / Local
+  async function loadSuperAdminData() {
+    if (!window.SmartEduCloud) return;
+    
+    // Hiển thị trạng thái cloud
+    if (adminStatCloud) {
+      if (window.SmartEduCloud.isFirebaseReady) {
+        adminStatCloud.textContent = 'Google Cloud Online';
+        adminStatCloud.className = 'text-[11px] font-bold text-emerald-700 mt-1 truncate';
+      } else {
+        adminStatCloud.textContent = 'Bộ nhớ Máy này';
+        adminStatCloud.className = 'text-[11px] font-bold text-amber-700 mt-1 truncate';
+      }
+    }
+
+    try {
+      const res = await window.SmartEduCloud.getAllUsers();
+      if (Array.isArray(res)) {
+        cachedAllAdminUsers = res;
+      } else if (res && typeof res === 'object') {
+        cachedAllAdminUsers = Object.values(res);
+      } else {
+        cachedAllAdminUsers = [];
+      }
+      updateAdminStats();
+      renderCurrentAdminTab();
+    } catch (e) {
+      console.warn('Lỗi nạp dữ liệu Super Admin:', e);
+      showToast('Lỗi khi tải dữ liệu từ máy chủ: ' + e.message, 'error');
+    }
+  }
+
+  // Cập nhật thẻ số liệu thống kê
+  function updateAdminStats() {
+    const students = cachedAllAdminUsers.filter(u => u.username !== 'admin');
+    let totalMindmaps = 0;
+    let totalSummaries = 0;
+    let totalScores = 0;
+    let totalFlashcards = 0;
+
+    cachedAllAdminUsers.forEach(u => {
+      totalMindmaps += (u.mindmaps?.length || 0);
+      totalSummaries += (u.summaries?.length || 0);
+      totalScores += (u.scores?.length || 0);
+      totalFlashcards += (u.flashcards?.length || 0);
+    });
+
+    if (adminStatUsers) adminStatUsers.textContent = students.length;
+    if (adminStatMindmaps) adminStatMindmaps.textContent = totalMindmaps;
+    if (adminStatSummaries) adminStatSummaries.textContent = totalSummaries;
+    if (adminStatQuizzes) adminStatQuizzes.textContent = totalScores;
+    if (adminStatFlashcards) adminStatFlashcards.textContent = totalFlashcards;
+  }
+
+  // Chuyển Tab
+  function switchAdminTab(tabName) {
+    currentAdminTab = tabName;
+    Object.keys(adminTabBtns).forEach(k => {
+      const btn = adminTabBtns[k];
+      const pane = adminPanes[k];
+      if (k === tabName) {
+        if (btn) btn.className = 'admin-tab-btn active px-3 py-2 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all';
+        if (pane) pane.classList.remove('hidden');
+      } else {
+        if (btn) btn.className = 'admin-tab-btn px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all';
+        if (pane) pane.classList.add('hidden');
+      }
+    });
+    renderCurrentAdminTab();
+  }
+
+  // Render tab hiện tại
+  function renderCurrentAdminTab() {
+    switch (currentAdminTab) {
+      case 'users':
+        renderAdminUsersTab();
+        break;
+      case 'mindmaps':
+        renderAdminMindmapsTab();
+        break;
+      case 'summaries':
+        renderAdminSummariesTab();
+        break;
+      case 'scores':
+        renderAdminScoresTab();
+        break;
+      case 'flashcards':
+        renderAdminFlashcardsTab();
+        break;
+    }
+  }
+
+  // TAB 1: Render Danh sách Học sinh
+  function renderAdminUsersTab() {
+    if (!adminUsersList) return;
+    const query = (adminSearchUsers?.value || '').trim().toLowerCase();
+    const students = cachedAllAdminUsers.filter(u => {
+      if (u.username === 'admin') return false;
+      if (!query) return true;
+      const name = (u.profile?.name || '').toLowerCase();
+      const uname = (u.username || '').toLowerCase();
+      const cls = (u.profile?.className || '').toLowerCase();
+      const school = (u.profile?.school || '').toLowerCase();
+      return name.includes(query) || uname.includes(query) || cls.includes(query) || school.includes(query);
+    });
+
+    if (adminUsersCounter) {
+      adminUsersCounter.textContent = `Hiển thị ${students.length} học sinh`;
+    }
+
+    if (students.length === 0) {
+      adminUsersList.innerHTML = `
+        <div class="p-8 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+          <i class="fa-solid fa-user-slash text-2xl mb-2 text-slate-300"></i>
+          <p class="font-bold">Chưa tìm thấy học sinh nào phù hợp!</p>
+          <p class="text-[11px] text-slate-400 mt-0.5">Khi học sinh đăng ký trên web, tài khoản sẽ tự động xuất hiện tại đây.</p>
+        </div>
+      `;
+      return;
+    }
+
+    adminUsersList.innerHTML = students.map((u, idx) => {
+      const p = u.profile || {};
+      const mmCount = u.mindmaps?.length || 0;
+      const smCount = u.summaries?.length || 0;
+      const scCount = u.scores?.length || 0;
+      const fcCount = u.flashcards?.length || 0;
+      return `
+        <div class="bg-white p-3.5 rounded-2xl border border-slate-200 hover:border-indigo-200 hover:shadow-xs transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-xl shrink-0 shadow-2xs">
+              ${p.avatar || '👨‍🎓'}
+            </span>
+            <div class="min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-extrabold text-slate-900 text-xs sm:text-sm truncate">${p.name || u.username}</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                  ${p.className ? 'Lớp ' + p.className : 'Khối ' + (p.grade || 9)}
+                </span>
+                <span class="text-[11px] text-slate-400 font-mono">@${u.username}</span>
+              </div>
+              <p class="text-[11px] text-slate-500 mt-0.5 truncate">
+                ${p.school || 'THCS Long Cang'} • Tham gia: ${p.createdAt || 'Mới'} • Đăng nhập: ${p.lastLogin || 'Chưa rõ'}
+              </p>
+              <div class="flex items-center gap-2 mt-1.5 flex-wrap text-[10px] font-bold text-slate-600">
+                <span class="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md">🧠 ${mmCount} sơ đồ</span>
+                <span class="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-md">📝 ${smCount} tóm tắt</span>
+                <span class="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md">🎯 ${scCount} bài thi</span>
+                <span class="px-2 py-0.5 bg-amber-50 text-amber-700 rounded-md">🃏 ${fcCount} bộ thẻ</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+            <button onclick="window.adminResetStudentPassword && window.adminResetStudentPassword('${u.username}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition-all active:scale-95" title="Đặt lại mật khẩu cho học sinh này">
+              <i class="fa-solid fa-key text-[11px]"></i>
+              <span>Đổi MK</span>
+            </button>
+            <button onclick="window.adminDeleteStudent && window.adminDeleteStudent('${u.username}', '${p.name || u.username}')" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95" title="Xóa tài khoản học sinh">
+              <i class="fa-solid fa-trash text-[11px]"></i>
+              <span>Xóa</span>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // TAB 2: Render Tất Cả Sơ Đồ Tư Duy
+  function renderAdminMindmapsTab() {
+    if (!adminMindmapsList) return;
+    const query = (adminSearchMindmaps?.value || '').trim().toLowerCase();
+    
+    let allMindmaps = [];
+    cachedAllAdminUsers.forEach(u => {
+      if (u.mindmaps && Array.isArray(u.mindmaps)) {
+        u.mindmaps.forEach(mm => {
+          allMindmaps.push({
+            ...mm,
+            authorUsername: u.username,
+            authorName: u.profile?.name || u.username,
+            authorClass: u.profile?.className || `Khối ${u.profile?.grade || 9}`
+          });
+        });
+      }
+    });
+
+    if (query) {
+      allMindmaps = allMindmaps.filter(mm => {
+        const title = (mm.title || '').toLowerCase();
+        const sub = (mm.subject || '').toLowerCase();
+        const author = (mm.authorName || '').toLowerCase();
+        return title.includes(query) || sub.includes(query) || author.includes(query);
+      });
+    }
+
+    if (adminMindmapsCounter) {
+      adminMindmapsCounter.textContent = `Hiển thị ${allMindmaps.length} sơ đồ tư duy toàn trường`;
+    }
+
+    if (allMindmaps.length === 0) {
+      adminMindmapsList.innerHTML = `
+        <div class="col-span-2 p-8 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+          <i class="fa-solid fa-sitemap text-2xl mb-2 text-slate-300"></i>
+          <p class="font-bold">Chưa có sơ đồ tư duy nào!</p>
+        </div>
+      `;
+      return;
+    }
+
+    adminMindmapsList.innerHTML = allMindmaps.map(mm => `
+      <div class="bg-white p-3.5 rounded-2xl border border-slate-200 hover:border-indigo-200 hover:shadow-xs transition-all flex flex-col justify-between gap-3">
+        <div>
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200">
+              ${mm.subject || 'Tổng hợp'}
+            </span>
+            <span class="text-[11px] text-slate-400 font-mono">${mm.createdAt || 'Mới'}</span>
+          </div>
+          <h4 class="font-bold text-slate-900 text-xs sm:text-sm line-clamp-2">${mm.title || 'Sơ đồ tư duy'}</h4>
+          <p class="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
+            <i class="fa-solid fa-user-pen text-indigo-500"></i>
+            Tác giả: <span class="font-bold text-slate-700">${mm.authorName}</span> (${mm.authorClass})
+          </p>
+        </div>
+        <div class="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100">
+          <button onclick="window.adminOpenMindmap && window.adminOpenMindmap('${mm.authorUsername}', ${mm.id})" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
+            <i class="fa-solid fa-eye text-[11px]"></i>
+            <span>Mở xem</span>
+          </button>
+          <button onclick="window.adminDeletePost && window.adminDeletePost('${mm.authorUsername}', 'mindmap', ${mm.id})" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
+            <i class="fa-solid fa-trash text-[11px]"></i>
+            <span>Xóa</span>
+          </button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // TAB 3: Render Tất Cả Bài Tóm Tắt
+  function renderAdminSummariesTab() {
+    if (!adminSummariesList) return;
+    const query = (adminSearchSummaries?.value || '').trim().toLowerCase();
+
+    let allSummaries = [];
+    cachedAllAdminUsers.forEach(u => {
+      if (u.summaries && Array.isArray(u.summaries)) {
+        u.summaries.forEach(sm => {
+          allSummaries.push({
+            ...sm,
+            authorUsername: u.username,
+            authorName: u.profile?.name || u.username,
+            authorClass: u.profile?.className || `Khối ${u.profile?.grade || 9}`
+          });
+        });
+      }
+    });
+
+    if (query) {
+      allSummaries = allSummaries.filter(sm => {
+        const title = (sm.title || '').toLowerCase();
+        const sub = (sm.subject || '').toLowerCase();
+        const author = (sm.authorName || '').toLowerCase();
+        return title.includes(query) || sub.includes(query) || author.includes(query);
+      });
+    }
+
+    if (adminSummariesCounter) {
+      adminSummariesCounter.textContent = `Hiển thị ${allSummaries.length} bài tóm tắt toàn trường`;
+    }
+
+    if (allSummaries.length === 0) {
+      adminSummariesList.innerHTML = `
+        <div class="col-span-2 p-8 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+          <i class="fa-solid fa-book-bookmark text-2xl mb-2 text-slate-300"></i>
+          <p class="font-bold">Chưa có bài tóm tắt nào!</p>
+        </div>
+      `;
+      return;
+    }
+
+    adminSummariesList.innerHTML = allSummaries.map(sm => `
+      <div class="bg-white p-3.5 rounded-2xl border border-slate-200 hover:border-purple-200 hover:shadow-xs transition-all flex flex-col justify-between gap-3">
+        <div>
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-50 text-purple-700 border border-purple-200">
+              ${sm.subject || 'Tổng hợp'}
+            </span>
+            <span class="text-[11px] text-slate-400 font-mono">${sm.createdAt || 'Mới'}</span>
+          </div>
+          <h4 class="font-bold text-slate-900 text-xs sm:text-sm line-clamp-2">${sm.title || 'Bài tóm tắt kiến thức'}</h4>
+          <p class="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
+            <i class="fa-solid fa-user-pen text-purple-500"></i>
+            Tác giả: <span class="font-bold text-slate-700">${sm.authorName}</span> (${sm.authorClass})
+          </p>
+        </div>
+        <div class="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100">
+          <button onclick="window.adminOpenSummary && window.adminOpenSummary('${sm.authorUsername}', ${sm.id})" class="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
+            <i class="fa-solid fa-eye text-[11px]"></i>
+            <span>Xem lại</span>
+          </button>
+          <button onclick="window.adminDeletePost && window.adminDeletePost('${sm.authorUsername}', 'summary', ${sm.id})" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
+            <i class="fa-solid fa-trash text-[11px]"></i>
+            <span>Xóa</span>
+          </button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // TAB 4: Render Bảng Điểm Khảo Thí Toàn Trường
+  function renderAdminScoresTab() {
+    if (!adminScoresTableBody) return;
+    const query = (adminSearchScores?.value || '').trim().toLowerCase();
+    const filterSub = adminFilterSubjectScores?.value || 'all';
+
+    let allScores = [];
+    cachedAllAdminUsers.forEach(u => {
+      if (u.scores && Array.isArray(u.scores)) {
+        u.scores.forEach(sc => {
+          allScores.push({
+            ...sc,
+            studentUsername: u.username,
+            studentName: u.profile?.name || u.username,
+            studentClass: u.profile?.className || `Khối ${u.profile?.grade || 9}`,
+            studentSchool: u.profile?.school || 'THCS Long Cang'
+          });
+        });
+      }
+    });
+
+    if (filterSub !== 'all') {
+      allScores = allScores.filter(sc => (sc.subject || '').toLowerCase().includes(filterSub.toLowerCase()));
+    }
+
+    if (query) {
+      allScores = allScores.filter(sc => {
+        const sName = (sc.studentName || '').toLowerCase();
+        const sClass = (sc.studentClass || '').toLowerCase();
+        const sTitle = (sc.title || '').toLowerCase();
+        return sName.includes(query) || sClass.includes(query) || sTitle.includes(query);
+      });
+    }
+
+    // Sắp xếp bài mới nhất lên đầu
+    allScores.sort((a, b) => (b.id || 0) - (a.id || 0));
+
+    if (allScores.length === 0) {
+      adminScoresTableBody.innerHTML = `
+        <tr>
+          <td colspan="9" class="p-8 text-center text-slate-400 bg-slate-50">
+            <i class="fa-solid fa-award text-2xl mb-1 text-slate-300"></i>
+            <p class="font-bold">Chưa có kết quả khảo thí nào!</p>
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    adminScoresTableBody.innerHTML = allScores.map((sc, idx) => {
+      const scoreVal = typeof sc.score === 'number' ? sc.score : parseFloat(sc.score) || 0;
+      let badgeClass = 'bg-rose-50 text-rose-700 border-rose-200';
+      let evalText = 'Cần cố gắng';
+      if (scoreVal >= 8.0) {
+        badgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200 font-extrabold';
+        evalText = 'Giỏi / Xuất sắc';
+      } else if (scoreVal >= 6.5) {
+        badgeClass = 'bg-blue-50 text-blue-700 border-blue-200 font-bold';
+        evalText = 'Khá';
+      } else if (scoreVal >= 5.0) {
+        badgeClass = 'bg-amber-50 text-amber-700 border-amber-200 font-semibold';
+        evalText = 'Đạt';
+      }
+
+      return `
+        <tr class="hover:bg-slate-50 transition-colors">
+          <td class="py-2.5 px-3 text-slate-400 font-mono text-[11px]">${idx + 1}</td>
+          <td class="py-2.5 px-3 font-bold text-slate-900">${sc.studentName}</td>
+          <td class="py-2.5 px-3 text-slate-600 font-medium">${sc.studentClass}</td>
+          <td class="py-2.5 px-3 text-slate-800 font-medium max-w-[200px] truncate" title="${sc.title || ''}">${sc.title || 'Bài kiểm tra'}</td>
+          <td class="py-2.5 px-3">
+            <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+              ${sc.subject || 'Tổng hợp'}
+            </span>
+          </td>
+          <td class="py-2.5 px-3 text-center">
+            <span class="text-sm font-black text-indigo-700">${scoreVal.toFixed(1)}</span>
+          </td>
+          <td class="py-2.5 px-3 text-center font-mono text-[11px]">
+            ${sc.correctTotal || 0}/${sc.totalQ || 10}
+          </td>
+          <td class="py-2.5 px-3 text-center">
+            <span class="px-2 py-0.5 rounded-full text-[10px] border ${badgeClass}">
+              ${evalText}
+            </span>
+          </td>
+          <td class="py-2.5 px-3 text-slate-400 font-mono text-[11px] whitespace-nowrap">
+            ${sc.date || ''}
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // TAB 5: Render Tất Cả Bộ Thẻ Lật
+  function renderAdminFlashcardsTab() {
+    if (!adminFlashcardsList) return;
+    const query = (adminSearchFlashcards?.value || '').trim().toLowerCase();
+
+    let allFlashcards = [];
+    cachedAllAdminUsers.forEach(u => {
+      if (u.flashcards && Array.isArray(u.flashcards)) {
+        u.flashcards.forEach(fc => {
+          allFlashcards.push({
+            ...fc,
+            authorUsername: u.username,
+            authorName: u.profile?.name || u.username,
+            authorClass: u.profile?.className || `Khối ${u.profile?.grade || 9}`
+          });
+        });
+      }
+    });
+
+    if (query) {
+      allFlashcards = allFlashcards.filter(fc => {
+        const title = (fc.title || '').toLowerCase();
+        const sub = (fc.subject || '').toLowerCase();
+        const author = (fc.authorName || '').toLowerCase();
+        return title.includes(query) || sub.includes(query) || author.includes(query);
+      });
+    }
+
+    if (adminFlashcardsCounter) {
+      adminFlashcardsCounter.textContent = `Hiển thị ${allFlashcards.length} bộ thẻ lật toàn trường`;
+    }
+
+    if (allFlashcards.length === 0) {
+      adminFlashcardsList.innerHTML = `
+        <div class="col-span-2 p-8 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+          <i class="fa-solid fa-clone text-2xl mb-2 text-slate-300"></i>
+          <p class="font-bold">Chưa có bộ thẻ lật nào!</p>
+        </div>
+      `;
+      return;
+    }
+
+    adminFlashcardsList.innerHTML = allFlashcards.map(fc => `
+      <div class="bg-white p-3.5 rounded-2xl border border-slate-200 hover:border-amber-200 hover:shadow-xs transition-all flex flex-col justify-between gap-3">
+        <div>
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200">
+              ${fc.subject || 'Tổng hợp'} • ${fc.cards?.length || 0} thẻ
+            </span>
+            <span class="text-[11px] text-slate-400 font-mono">${fc.createdAt || 'Mới'}</span>
+          </div>
+          <h4 class="font-bold text-slate-900 text-xs sm:text-sm line-clamp-2">${fc.title || 'Bộ thẻ ôn tập'}</h4>
+          <p class="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
+            <i class="fa-solid fa-user-pen text-amber-500"></i>
+            Tác giả: <span class="font-bold text-slate-700">${fc.authorName}</span> (${fc.authorClass})
+          </p>
+        </div>
+        <div class="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100">
+          <button onclick="window.adminOpenFlashcard && window.adminOpenFlashcard('${fc.authorUsername}', ${fc.id})" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
+            <i class="fa-solid fa-play text-[11px]"></i>
+            <span>Luyện tập</span>
+          </button>
+          <button onclick="window.adminDeletePost && window.adminDeletePost('${fc.authorUsername}', 'flashcard', ${fc.id})" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
+            <i class="fa-solid fa-trash text-[11px]"></i>
+            <span>Xóa</span>
+          </button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // Xuất file CSV / Excel Bảng điểm toàn trường
+  window.exportAdminScoresCSV = function() {
+    let allScores = [];
+    cachedAllAdminUsers.forEach(u => {
+      if (u.scores && Array.isArray(u.scores)) {
+        u.scores.forEach(sc => {
+          allScores.push({
+            ...sc,
+            studentUsername: u.username,
+            studentName: u.profile?.name || u.username,
+            studentClass: u.profile?.className || `Khối ${u.profile?.grade || 9}`,
+            studentSchool: u.profile?.school || 'THCS Long Cang'
+          });
+        });
+      }
+    });
+
+    if (allScores.length === 0) {
+      showToast('Chưa có dữ liệu bài khảo thí nào để xuất file!', 'warning');
+      return;
+    }
+
+    let csvContent = '\uFEFFSTT,Họ và tên,Lớp,Trường THCS,Bài Khảo Thí,Môn học,Điểm số (Thang 10),Số câu đúng,Tổng số câu,Tỉ lệ (%),Thời gian thi\n';
+    allScores.forEach((sc, idx) => {
+      const cleanTitle = (sc.title || '').replace(/"/g, '""');
+      const cleanName = (sc.studentName || '').replace(/"/g, '""');
+      const cleanSchool = (sc.studentSchool || '').replace(/"/g, '""');
+      csvContent += `${idx + 1},"${cleanName}","${sc.studentClass}","${cleanSchool}","${cleanTitle}","${sc.subject || ''}",${sc.score || 0},${sc.correctTotal || 0},${sc.totalQ || 10},${sc.percentage || 0}%,"${sc.date || ''}"
+`;
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Bang_Diem_SmartEdu_THCS_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast('Đã xuất file bảng điểm CSV / Excel thành công!', 'success');
+  };
+
+  // In Báo Cáo Bảng Điểm Toàn Trường
+  window.printAdminScoresReport = function() {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      showToast('Trình duyệt đã chặn popup in, vui lòng cho phép!', 'warning');
+      return;
+    }
+
+    let allScores = [];
+    cachedAllAdminUsers.forEach(u => {
+      if (u.scores && Array.isArray(u.scores)) {
+        u.scores.forEach(sc => {
+          allScores.push({
+            ...sc,
+            studentName: u.profile?.name || u.username,
+            studentClass: u.profile?.className || `Khối ${u.profile?.grade || 9}`
+          });
+        });
+      }
+    });
+
+    const rowsHtml = allScores.map((sc, i) => `
+      <tr>
+        <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">${i + 1}</td>
+        <td style="border: 1px solid #ddd; padding: 6px;"><b>${sc.studentName}</b></td>
+        <td style="border: 1px solid #ddd; padding: 6px;">${sc.studentClass}</td>
+        <td style="border: 1px solid #ddd; padding: 6px;">${sc.title || ''}</td>
+        <td style="border: 1px solid #ddd; padding: 6px;">${sc.subject || ''}</td>
+        <td style="border: 1px solid #ddd; padding: 6px; text-align: center; font-weight: bold; color: #4338ca;">${sc.score}</td>
+        <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">${sc.correctTotal}/${sc.totalQ}</td>
+        <td style="border: 1px solid #ddd; padding: 6px; text-align: center;">${sc.date || ''}</td>
+      </tr>
+    `).join('');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Bảng Điểm Khảo Thí SmartEdu THCS</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 30px; font-size: 13px; color: #1e293b; }
+            h2, h3 { text-align: center; margin-bottom: 5px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th { background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
+          </style>
+        </head>
+        <body>
+          <h2>BÁO CÁO KẾT QUẢ KHẢO THÍ TOÀN TRƯỜNG</h2>
+          <h3>HỆ THỐNG SMARTEDU THCS (GDPT 2018)</h3>
+          <p style="text-align: center; font-size: 12px; color: #64748b;">Thời gian xuất báo cáo: ${new Date().toLocaleString('vi-VN')}</p>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 40px; text-align: center;">STT</th>
+                <th>Họ và tên</th>
+                <th>Lớp</th>
+                <th>Bài Khảo Thí</th>
+                <th>Môn</th>
+                <th style="text-align: center;">Điểm</th>
+                <th style="text-align: center;">Đúng/Tổng</th>
+                <th style="text-align: center;">Thời gian</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => { printWindow.print(); }, 500);
+  };
+
+  // Hành động Admin: Đổi mật khẩu học sinh
+  window.adminResetStudentPassword = async function(username) {
+    const newPass = prompt(`Nhập mật khẩu mới cho tài khoản @${username}:`, '123');
+    if (!newPass || !newPass.trim()) return;
+
+    if (window.SmartEduCloud) {
+      const res = await window.SmartEduCloud.adminResetPassword(username, newPass.trim());
+      if (res.success) {
+        showToast(res.message, 'success');
+        await loadSuperAdminData();
+      } else {
+        showToast(res.message, 'error');
+      }
+    }
+  };
+
+  // Hành động Admin: Xóa tài khoản học sinh
+  window.adminDeleteStudent = async function(username, fullname) {
+    const confirmDel = confirm(`⚠️ CẢNH BÁO QUẢN TRỊ VIÊN:
+Thầy cô có chắc chắn muốn xóa tài khoản học sinh "${fullname}" (@${username}) cùng toàn bộ sơ đồ, bài tóm tắt và điểm số của em này?`);
+    if (!confirmDel) return;
+
+    if (window.SmartEduCloud) {
+      const res = await window.SmartEduCloud.adminDeleteUser(username);
+      if (res.success) {
+        showToast(res.message, 'success');
+        await loadSuperAdminData();
+      } else {
+        showToast(res.message, 'error');
+      }
+    }
+  };
+
+  // Hành động Admin: Xóa bài viết cụ thể (mindmap, summary, flashcard)
+  window.adminDeletePost = async function(username, postType, postId) {
+    const typeLabel = postType === 'mindmap' ? 'sơ đồ tư duy' : postType === 'summary' ? 'bài tóm tắt' : 'bộ thẻ lật';
+    const confirmDel = confirm(`Thầy cô có chắc chắn muốn xóa ${typeLabel} này?`);
+    if (!confirmDel) return;
+
+    if (window.SmartEduCloud) {
+      const res = await window.SmartEduCloud.adminDeleteUserPost(username, postType, postId);
+      if (res.success) {
+        showToast(res.message, 'success');
+        await loadSuperAdminData();
+      } else {
+        showToast(res.message, 'error');
+      }
+    }
+  };
+
+  // Hành động Admin: Mở xem sơ đồ tư duy của học sinh
+  window.adminOpenMindmap = function(authorUsername, mindmapId) {
+    const user = cachedAllAdminUsers.find(u => u.username === authorUsername);
+    if (!user || !user.mindmaps) return;
+    const mm = user.mindmaps.find(m => m.id === mindmapId);
+    if (!mm) return;
+
+    closeSuperAdminModal();
+    const tabBtn = document.getElementById('tab-btn-mindmap');
+    if (tabBtn) tabBtn.click();
+    setTimeout(() => {
+      renderMindmap(mm.content, mm.title);
+      showToast(`Đang xem sơ đồ tư duy của học sinh: ${user.profile?.name || authorUsername}`, 'info');
+    }, 200);
+  };
+
+  // Hành động Admin: Mở xem bài tóm tắt của học sinh
+  window.adminOpenSummary = function(authorUsername, summaryId) {
+    const user = cachedAllAdminUsers.find(u => u.username === authorUsername);
+    if (!user || !user.summaries) return;
+    const sm = user.summaries.find(s => s.id === summaryId);
+    if (!sm) return;
+
+    closeSuperAdminModal();
+    const tabBtn = document.getElementById('tab-btn-summary');
+    if (tabBtn) tabBtn.click();
+    setTimeout(() => {
+      renderSummary(sm.content);
+      showToast(`Đang xem bài tóm tắt của học sinh: ${user.profile?.name || authorUsername}`, 'info');
+    }, 200);
+  };
+
+  // Hành động Admin: Mở xem bộ thẻ lật của học sinh
+  window.adminOpenFlashcard = function(authorUsername, flashcardId) {
+    const user = cachedAllAdminUsers.find(u => u.username === authorUsername);
+    if (!user || !user.flashcards) return;
+    const fc = user.flashcards.find(f => f.id === flashcardId);
+    if (!fc) return;
+
+    closeSuperAdminModal();
+    const tabBtn = document.getElementById('tab-btn-flashcards');
+    if (tabBtn) tabBtn.click();
+    setTimeout(() => {
+      if (typeof window.loadBeamsCardsIntoPlayer === 'function') {
+        window.loadBeamsCardsIntoPlayer(fc.cards, fc.title);
+      }
+      showToast(`Đang mở bộ thẻ lật của học sinh: ${user.profile?.name || authorUsername}`, 'info');
+    }, 200);
+  };
+
+  // Gắn sự kiện Admin
+  if (btnCloseSuperAdmin) btnCloseSuperAdmin.addEventListener('click', closeSuperAdminModal);
+  if (btnRefreshSuperAdmin) btnRefreshSuperAdmin.addEventListener('click', loadSuperAdminData);
+  if (btnSuperAdminMobile) btnSuperAdminMobile.addEventListener('click', () => openSuperAdminModal('users'));
+  if (btnSuperAdminDesktop) btnSuperAdminDesktop.addEventListener('click', () => openSuperAdminModal('users'));
+  if (modalSuperAdmin) {
+    modalSuperAdmin.addEventListener('click', (e) => {
+      if (e.target === modalSuperAdmin) closeSuperAdminModal();
+    });
+  }
+
+  // Tìm kiếm live trong các tab Admin
+  if (adminSearchUsers) adminSearchUsers.addEventListener('input', () => renderAdminUsersTab());
+  if (adminSearchMindmaps) adminSearchMindmaps.addEventListener('input', () => renderAdminMindmapsTab());
+  if (adminSearchSummaries) adminSearchSummaries.addEventListener('input', () => renderAdminSummariesTab());
+  if (adminSearchScores) adminSearchScores.addEventListener('input', () => renderAdminScoresTab());
+  if (adminFilterSubjectScores) adminFilterSubjectScores.addEventListener('change', () => renderAdminScoresTab());
+  if (adminSearchFlashcards) adminSearchFlashcards.addEventListener('input', () => renderAdminFlashcardsTab());
+
+  // Window exposures
+  window.openSuperAdminModal = openSuperAdminModal;
+  window.closeSuperAdminModal = closeSuperAdminModal;
+  window.switchAdminTab = switchAdminTab;
+  window.refreshSuperAdminData = loadSuperAdminData;
+
   // Initialize
+  initUserAccounts();
   loadApiKeysFromStorage();
   updateSavedMindmapsCount();
 

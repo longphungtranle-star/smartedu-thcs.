@@ -47,6 +47,63 @@
   
   <!-- Sample Lessons Data (Loaded Early in Head for Instant Access) -->
   <script src="sample_data.js"></script>
+
+  <!-- Google Firebase Firestore Cloud Database SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script src="firebase_config.js?v=20261122_18"></script>
+  
+  <!-- Early Safety Handlers: đảm bảo 100% các nút auth/admin hoạt động tức thì từ mili-giây đầu tiên -->
+  <script>
+    window.switchAuthTab = window.switchAuthTab || function(tab) {
+      var lBtn = document.getElementById('auth-tab-btn-login');
+      var rBtn = document.getElementById('auth-tab-btn-register');
+      var lForm = document.getElementById('form-auth-login');
+      var rForm = document.getElementById('form-auth-register');
+      if (tab === 'login') {
+        if (lBtn) lBtn.className = 'py-2 rounded-lg bg-white text-indigo-600 shadow-xs flex items-center justify-center gap-1.5 cursor-pointer font-bold transition-all';
+        if (rBtn) rBtn.className = 'py-2 rounded-lg text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1.5 cursor-pointer transition-all';
+        if (lForm) lForm.classList.remove('hidden');
+        if (rForm) rForm.classList.add('hidden');
+      } else {
+        if (rBtn) rBtn.className = 'py-2 rounded-lg bg-white text-indigo-600 shadow-xs flex items-center justify-center gap-1.5 cursor-pointer font-bold transition-all';
+        if (lBtn) lBtn.className = 'py-2 rounded-lg text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1.5 cursor-pointer transition-all';
+        if (rForm) rForm.classList.remove('hidden');
+        if (lForm) lForm.classList.add('hidden');
+      }
+    };
+    window.fillSuperAdminAccount = window.fillSuperAdminAccount || function() {
+      var u = document.getElementById('login-username');
+      var p = document.getElementById('login-password');
+      if (u) u.value = 'admin';
+      if (p) p.value = '123';
+      if (typeof window.handleLoginSubmit === 'function') {
+        window.handleLoginSubmit();
+      }
+    };
+    window.fillDemoAccount = window.fillDemoAccount || function() {
+      var u = document.getElementById('login-username');
+      var p = document.getElementById('login-password');
+      if (u) u.value = 'longphung9a13';
+      if (p) p.value = '123';
+    };
+    window.logoutUser = window.logoutUser || function() {
+      localStorage.removeItem('smartedu_active_cloud_username');
+      var mUser = document.getElementById('modal-user-account');
+      if (mUser) { mUser.style.display = 'none'; mUser.classList.add('hidden'); mUser.classList.remove('flex'); }
+      var mAdmin = document.getElementById('modal-super-admin');
+      if (mAdmin) { mAdmin.style.display = 'none'; mAdmin.classList.add('hidden'); mAdmin.classList.remove('flex'); }
+      var authGate = document.getElementById('modal-auth-gate');
+      if (authGate) {
+        authGate.style.display = 'flex';
+        authGate.classList.remove('hidden');
+        authGate.classList.add('flex');
+      }
+      if (typeof window.switchAuthTab === 'function') {
+        window.switchAuthTab('login');
+      }
+    };
+  </script>
   
   <!-- D3.js and Markmap for Interactive Mindmap -->
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
@@ -129,6 +186,17 @@
             <span class="text-[11px] font-bold text-slate-800">Key</span>
             <i class="fa-solid fa-rotate text-slate-400 text-[9px]"></i>
           </button>
+          <button id="btn-user-account-mobile" onclick="window.openUserAccountModal && window.openUserAccountModal()" class="px-2 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg flex items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Tài khoản học sinh & Theo dõi tiến độ">
+            <span id="user-avatar-mobile" class="text-xs">👨‍🎓</span>
+            <span id="user-name-mobile" class="text-[11px] font-bold max-w-[64px] truncate">Hồ sơ</span>
+          </button>
+          <button id="btn-super-admin-mobile" onclick="window.openSuperAdminModal && window.openSuperAdminModal()" class="hidden px-2 py-1 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Bảng điều khiển Quản trị Toàn trường">
+            <span class="text-xs">👑</span>
+            <span class="text-[11px] font-bold">Admin</span>
+          </button>
+          <button id="btn-logout-mobile" onclick="window.logoutUser && window.logoutUser()" class="px-1.5 py-1 text-xs font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 rounded-lg flex items-center justify-center shadow-xs shrink-0 cursor-pointer active:scale-95" title="Đăng xuất tài khoản">
+            <i class="fa-solid fa-arrow-right-from-bracket text-[11px]"></i>
+          </button>
         </div>
       </div>
 
@@ -173,6 +241,28 @@
           </span>
           <span id="key-summary-text" class="font-semibold text-slate-800">Kho Key: 0 Khả dụng</span>
           <i class="fa-solid fa-rotate text-slate-400 text-xs"></i>
+        </button>
+
+        <!-- User Account & Learning Progress Button (Desktop >= lg) -->
+        <button id="btn-user-account-desktop" onclick="window.openUserAccountModal && window.openUserAccountModal()" class="hidden lg:flex px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-slate-700 bg-gradient-to-r from-indigo-50/90 via-purple-50/80 to-blue-50/90 hover:from-indigo-100 hover:to-purple-100 border border-indigo-200 rounded-lg items-center gap-2 transition-all shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Tài khoản học sinh & Bảng theo dõi tiến độ">
+          <span id="user-avatar-desktop" class="w-6 h-6 rounded-full bg-white border border-indigo-200 flex items-center justify-center text-sm shadow-2xs">👨‍🎓</span>
+          <div class="flex flex-col text-left leading-tight">
+            <span id="user-name-desktop" class="font-extrabold text-indigo-950 text-xs">Đăng nhập</span>
+            <span id="user-subtext-desktop" class="text-[10px] text-indigo-600 font-medium">Đồng bộ Web</span>
+          </div>
+          <span id="user-badge-count-desktop" class="hidden text-[10px] bg-indigo-600 text-white font-extrabold px-1.5 py-0.2 rounded-full">0 bài</span>
+        </button>
+
+        <!-- Super Admin Button (Desktop >= lg, only visible when role === 'superadmin') -->
+        <button id="btn-super-admin-desktop" onclick="window.openSuperAdminModal && window.openSuperAdminModal()" class="hidden lg:flex px-2.5 sm:px-3 py-1.5 text-xs font-bold text-amber-900 bg-gradient-to-r from-amber-100 via-amber-50 to-yellow-100 hover:from-amber-200 hover:to-yellow-200 border border-amber-300 rounded-lg items-center gap-1.5 transition-all shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Bảng điều khiển Quản trị Toàn trường">
+          <span class="text-sm">👑</span>
+          <span class="font-bold text-amber-900">Quản Trị Toàn Trường</span>
+        </button>
+
+        <!-- Logout button on desktop -->
+        <button id="btn-logout-header" onclick="window.logoutUser && window.logoutUser()" class="hidden lg:flex px-2.5 py-1.5 text-xs font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 rounded-lg items-center gap-1 transition-all shadow-2xs shrink-0 cursor-pointer active:scale-95" title="Đăng xuất tài khoản này">
+          <i class="fa-solid fa-arrow-right-from-bracket text-xs"></i>
+          <span class="text-[11px]">Thoát</span>
         </button>
       </div>
     </div>
@@ -568,6 +658,14 @@
               <i class="fa-solid fa-print"></i>
               <span>In / Xuất PDF</span>
             </button>
+            <button id="btn-save-summary" class="shrink-0 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg flex items-center gap-1.5 shadow-xs whitespace-nowrap active:scale-95 cursor-pointer" title="Lưu bài tóm tắt & gợi ý này vào tài khoản Web">
+              <i class="fa-solid fa-cloud-arrow-up"></i>
+              <span>Lưu tóm tắt</span>
+            </button>
+            <button id="btn-open-summary-library" class="shrink-0 px-2.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg flex items-center gap-1.5 shadow-xs whitespace-nowrap active:scale-95 cursor-pointer" title="Mở danh sách các bài tóm tắt & gợi ý đã lưu trên Web">
+              <i class="fa-solid fa-folder-open text-indigo-600"></i>
+              <span>Kho tóm tắt (<span id="saved-summaries-count">0</span>)</span>
+            </button>
           </div>
         </div>
 
@@ -898,6 +996,14 @@
               <i class="fa-solid fa-file-pdf text-rose-600 text-xs"></i>
               <span>Tải PDF / In thẻ</span>
             </button>
+            <button id="btn-save-beams" class="shrink-0 px-3 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer whitespace-nowrap active:scale-95" title="Lưu bộ thẻ này vào tài khoản Web của bạn">
+              <i class="fa-solid fa-cloud-arrow-up text-xs"></i>
+              <span>Lưu bộ thẻ</span>
+            </button>
+            <button id="btn-open-beams-library" class="shrink-0 px-2.5 py-2 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer whitespace-nowrap active:scale-95" title="Mở danh sách các bộ thẻ học tập đã lưu trên Web">
+              <i class="fa-solid fa-folder-open text-amber-600 text-xs"></i>
+              <span>Bộ thẻ của tôi (<span id="saved-beams-count">0</span>)</span>
+            </button>
           </div>
 
           <!-- Progress & Mastery Stats -->
@@ -1185,74 +1291,347 @@
     </div>
   </div>
 
-  <!-- ================= MODAL: QUIZ HISTORY & PROGRESS ================= -->
-  <div id="modal-quiz-history" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 flex flex-col gap-4 max-h-[90vh]">
-      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm">
-            <i class="fa-solid fa-chart-line"></i>
+  <!-- ================= MODAL: USER ACCOUNT & LEARNING PROGRESS ================= -->
+  <div id="modal-user-account" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
+    <div class="bg-white rounded-2xl max-w-3xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 flex flex-col gap-3.5 max-h-[92vh] overflow-hidden">
+      
+      <!-- Modal Header: Student Info & Actions -->
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+        <div class="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+          <div id="modal-user-avatar-large" class="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 text-white flex items-center justify-center text-2xl sm:text-3xl shadow-md shadow-indigo-200 shrink-0 select-none border-2 border-white">
+            👨‍🎓
           </div>
-          <div>
-            <h3 class="text-base font-bold text-slate-900">Tiến Độ & Lịch Sử Làm Bài Khảo Thí</h3>
-            <p class="text-xs text-slate-500">Ghi nhận kết quả các lần kiểm tra trắc nghiệm trên thiết bị</p>
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5 sm:gap-2">
+              <h3 id="modal-user-fullname" class="text-sm sm:text-base font-extrabold text-slate-900 truncate">Học Sinh THCS</h3>
+              <span id="modal-user-grade-badge" class="px-2 py-0.5 text-[10px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full shrink-0">Khối 9</span>
+            </div>
+            <p id="modal-user-school-class" class="text-[11px] sm:text-xs text-slate-500 truncate mt-0.5">Lớp 9A1 • Trường THCS Chu Văn An</p>
           </div>
         </div>
-        <button id="btn-close-quiz-history-modal" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
-          <i class="fa-solid fa-xmark text-lg"></i>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button id="btn-edit-current-profile" class="px-2.5 py-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 border border-indigo-200 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer" title="Chỉnh sửa thông tin tài khoản này">
+            <i class="fa-solid fa-pen-to-square"></i>
+            <span class="hidden sm:inline">Sửa hồ sơ</span>
+          </button>
+          <button id="btn-close-user-account-modal" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg text-lg cursor-pointer" title="Đóng">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs inside Modal -->
+      <div class="flex items-center gap-2 border-b border-slate-200 pb-1 text-xs font-bold shrink-0">
+        <button id="tab-btn-account-progress" class="account-tab-btn active px-3 py-2 text-indigo-600 border-b-2 border-indigo-600 flex items-center gap-1.5 cursor-pointer">
+          <i class="fa-solid fa-chart-line"></i>
+          <span>Tiến Độ Học Tập & Bảng Điểm</span>
+        </button>
+        <button id="tab-btn-account-manage" class="account-tab-btn px-3 py-2 text-slate-500 hover:text-slate-800 border-b-2 border-transparent flex items-center gap-1.5 cursor-pointer">
+          <i class="fa-solid fa-user-gear"></i>
+          <span>Hồ Sơ & Bảo Mật Cá Nhân</span>
         </button>
       </div>
 
-      <!-- Stats Overview Grid -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-center">
-          <span class="text-[11px] font-medium text-slate-500 block">Số lần thi</span>
-          <span id="quiz-stat-total-tests" class="text-xl font-bold text-slate-900">0</span>
-        </div>
-        <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
-          <span class="text-[11px] font-medium text-emerald-700 block">Điểm cao nhất</span>
-          <span id="quiz-stat-max-score" class="text-xl font-bold text-emerald-700">0.0</span>
-        </div>
-        <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-3 text-center">
-          <span class="text-[11px] font-medium text-indigo-700 block">Điểm trung bình</span>
-          <span id="quiz-stat-avg-score" class="text-xl font-bold text-indigo-700">0.0</span>
-        </div>
-        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
-          <span class="text-[11px] font-medium text-amber-700 block">Tổng câu đúng</span>
-          <span id="quiz-stat-total-correct" class="text-xl font-bold text-amber-700">0</span>
-        </div>
-      </div>
+      <!-- Scrollable Content Pane -->
+      <div class="flex-1 overflow-y-auto space-y-4 pr-1">
+        
+        <!-- ================= PANE 1: TIẾN ĐỘ HỌC TẬP ================= -->
+        <div id="pane-account-progress" class="space-y-3.5">
+          
+          <!-- Stats Overview Grid -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div class="bg-gradient-to-br from-slate-50 to-indigo-50/40 border border-slate-200/80 rounded-xl p-3 text-center shadow-2xs">
+              <span class="text-[11px] font-medium text-slate-500 block">Số bài đã luyện</span>
+              <span id="acc-stat-total-tests" class="text-xl sm:text-2xl font-extrabold text-slate-900">0</span>
+              <span class="text-[10px] text-slate-400 block mt-0.5">bài kiểm tra</span>
+            </div>
+            <div class="bg-gradient-to-br from-emerald-50 to-teal-50/40 border border-emerald-200 rounded-xl p-3 text-center shadow-2xs">
+              <span class="text-[11px] font-medium text-emerald-700 block">Điểm cao nhất</span>
+              <span id="acc-stat-max-score" class="text-xl sm:text-2xl font-extrabold text-emerald-700">0.0</span>
+              <span class="text-[10px] text-emerald-600 block mt-0.5">thang điểm 10</span>
+            </div>
+            <div class="bg-gradient-to-br from-indigo-50 to-blue-50/40 border border-indigo-200 rounded-xl p-3 text-center shadow-2xs">
+              <span class="text-[11px] font-medium text-indigo-700 block">Điểm trung bình</span>
+              <span id="acc-stat-avg-score" class="text-xl sm:text-2xl font-extrabold text-indigo-700">0.0</span>
+              <span id="acc-stat-rating-badge" class="inline-block text-[9px] px-1.5 py-0.2 rounded font-bold bg-indigo-100 text-indigo-800 mt-0.5">Chưa có bài</span>
+            </div>
+            <div class="bg-gradient-to-br from-amber-50 to-orange-50/40 border border-amber-200 rounded-xl p-3 text-center shadow-2xs">
+              <span class="text-[11px] font-medium text-amber-700 block">Tổng câu đúng</span>
+              <span id="acc-stat-total-correct" class="text-xl sm:text-2xl font-extrabold text-amber-700">0</span>
+              <span class="text-[10px] text-amber-600 block mt-0.5">câu hỏi</span>
+            </div>
+          </div>
 
-      <!-- History Table Container -->
-      <div class="flex-1 overflow-y-auto border border-slate-200 rounded-xl max-h-64 sm:max-h-80">
-        <table class="w-full text-left text-xs text-slate-700 border-collapse">
-          <thead class="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 sticky top-0">
-            <tr>
-              <th class="p-2.5 sm:px-3">Thời gian</th>
-              <th class="p-2.5 sm:px-3">Bài học / Môn</th>
-              <th class="p-2.5 sm:px-3 text-center">Số câu đúng</th>
-              <th class="p-2.5 sm:px-3 text-right">Điểm số</th>
-            </tr>
-          </thead>
-          <tbody id="quiz-history-table-body" class="divide-y divide-slate-100">
-            <!-- Dynamic rows will be inserted here -->
-          </tbody>
-        </table>
-        <div id="quiz-history-empty" class="hidden p-8 text-center text-slate-400 text-xs">
-          <i class="fa-regular fa-clipboard text-3xl mb-2 text-slate-300"></i>
-          <p>Chưa có lịch sử làm bài nào. Hãy hoàn thành một bài trắc nghiệm ở Tab 3 để ghi nhận!</p>
+          <!-- Progress Chart Card (Biểu đồ tiến độ học tập trực quan) -->
+          <div class="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <div class="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs">
+                  <i class="fa-solid fa-arrow-trend-up"></i>
+                </div>
+                <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Biểu Đồ Xu Hướng Điểm Số Qua Các Bài Thi</h4>
+              </div>
+              <span id="acc-trend-comment" class="text-[11px] font-bold text-emerald-600">Đang cập nhật</span>
+            </div>
+            <div id="acc-chart-container" class="w-full h-36 bg-slate-50/70 border border-slate-100 rounded-lg flex items-center justify-center relative overflow-hidden">
+              <span class="text-xs text-slate-400">Chưa đủ dữ liệu để vẽ biểu đồ (Cần ít nhất 1 bài thi)</span>
+            </div>
+          </div>
+
+          <!-- Achievement Badges Card (Huy hiệu khích lệ học sinh) -->
+          <div class="bg-gradient-to-r from-amber-50/70 via-indigo-50/40 to-emerald-50/70 border border-amber-200/70 rounded-xl p-3.5 shadow-2xs">
+            <div class="flex items-center justify-between mb-2.5">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-award text-amber-600 text-sm"></i>
+                <h4 class="text-xs font-bold text-slate-900 uppercase tracking-wider">Huy Hiệu Khích Lệ Rèn Luyện</h4>
+              </div>
+              <span id="acc-badge-unlocked-text" class="text-[11px] font-bold text-indigo-700 bg-white/90 px-2 py-0.5 rounded-full border border-indigo-200 shadow-2xs">Đã đạt 0/5</span>
+            </div>
+            <div id="acc-badges-list" class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              <!-- Dynamically populated badges -->
+            </div>
+          </div>
+
+          <!-- History Table with Subject Filter -->
+          <div class="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs space-y-2.5">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-list-check text-slate-700 text-xs"></i>
+                <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Lịch Sử Các Bài Khảo Thí</h4>
+              </div>
+              <div class="flex items-center gap-2">
+                <select id="acc-filter-subject" class="text-[11px] font-medium bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-slate-700 outline-none">
+                  <option value="all">Tất cả môn học</option>
+                  <option value="Toán">Môn Toán</option>
+                  <option value="KHTN">Môn KHTN</option>
+                  <option value="Ngữ văn">Môn Ngữ văn</option>
+                  <option value="Khác">Môn khác</option>
+                </select>
+                <button id="btn-print-student-report" class="text-[11px] font-semibold text-slate-700 bg-white hover:bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-300 flex items-center gap-1 cursor-pointer shadow-2xs active:scale-95" title="In phiếu kết quả học tập">
+                  <i class="fa-solid fa-print text-indigo-600"></i>
+                  <span>In bảng điểm</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="border border-slate-200 rounded-lg overflow-hidden max-h-56 overflow-y-auto">
+              <table class="w-full text-left text-xs text-slate-700 border-collapse">
+                <thead class="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 sticky top-0">
+                  <tr>
+                    <th class="p-2 sm:px-3">Thời gian</th>
+                    <th class="p-2 sm:px-3">Bài học</th>
+                    <th class="p-2 sm:px-3 text-center">Môn</th>
+                    <th class="p-2 sm:px-3 text-center">Câu đúng</th>
+                    <th class="p-2 sm:px-3 text-right">Điểm số</th>
+                  </tr>
+                </thead>
+                <tbody id="acc-history-table-body" class="divide-y divide-slate-100">
+                  <!-- Dynamic rows -->
+                </tbody>
+              </table>
+              <div id="acc-history-empty" class="p-6 text-center text-slate-400 text-xs">
+                <i class="fa-regular fa-clipboard text-2xl mb-1 text-slate-300"></i>
+                <p>Chưa có lịch sử làm bài. Hãy làm bài ở Tab 3 để ghi nhận điểm!</p>
+              </div>
+            </div>
+          </div>
         </div>
+
+        <!-- ================= PANE 2: HỒ SƠ & BẢO MẬT CÁ NHÂN ================= -->
+        <div id="pane-account-manage" class="hidden space-y-4">
+          
+          <!-- Form Chỉnh sửa thông tin tài khoản của chính mình -->
+          <div id="acc-form-container" class="bg-white border-2 border-indigo-100 rounded-xl p-4 shadow-sm space-y-3">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h4 id="acc-form-title" class="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <i class="fa-solid fa-id-card text-indigo-600"></i>
+                <span>Chỉnh Sửa Hồ Sơ Cá Nhân Của Bạn</span>
+              </h4>
+              <span class="text-[11px] text-slate-400 font-mono" id="acc-form-username-display"></span>
+            </div>
+
+            <form id="form-user-account" class="space-y-3 text-xs">
+              <input type="hidden" id="input-account-id" value="">
+              
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label for="input-account-name" class="block font-semibold text-slate-700 mb-1">
+                    Họ và tên học sinh <span class="text-rose-500">*</span>
+                  </label>
+                  <input type="text" id="input-account-name" required placeholder="Ví dụ: Trần Lê Long Phụng" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none">
+                </div>
+                <div>
+                  <label for="input-account-school" class="block font-semibold text-slate-700 mb-1">
+                    Trường THCS
+                  </label>
+                  <input type="text" id="input-account-school" placeholder="Ví dụ: THCS Long Cang" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none">
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label for="input-account-grade" class="block font-semibold text-slate-700 mb-1">
+                    Khối lớp <span class="text-rose-500">*</span>
+                  </label>
+                  <select id="input-account-grade" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 font-medium">
+                    <option value="9">Khối 9 (Lớp 9)</option>
+                    <option value="8">Khối 8 (Lớp 8)</option>
+                    <option value="7">Khối 7 (Lớp 7)</option>
+                    <option value="6">Khối 6 (Lớp 6)</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="input-account-class" class="block font-semibold text-slate-700 mb-1">
+                    Tên lớp cụ thể
+                  </label>
+                  <input type="text" id="input-account-class" placeholder="Ví dụ: 9A13" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none">
+                </div>
+              </div>
+
+              <!-- Đổi mật khẩu / PIN -->
+              <div class="bg-slate-50/70 border border-slate-200/80 rounded-lg p-2.5">
+                <label for="input-account-new-password" class="block font-semibold text-slate-700 mb-1">
+                  <i class="fa-solid fa-key text-indigo-600 mr-1"></i> Đổi Mật khẩu / Mã PIN mới
+                </label>
+                <input type="password" id="input-account-new-password" placeholder="Để trống nếu không muốn đổi mật khẩu..." class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none">
+                <span class="text-[10px] text-slate-400 block mt-1">Giúp bảo mật tài khoản cá nhân khi sử dụng chung máy tính ở trường.</span>
+              </div>
+
+              <!-- Avatar Selection -->
+              <div>
+                <label class="block font-semibold text-slate-700 mb-1.5">
+                  Chọn hình đại diện (Avatar)
+                </label>
+                <div id="acc-avatar-picker" class="flex flex-wrap items-center gap-2">
+                  <!-- Avatar buttons dynamically generated: 👨‍🎓, 👩‍🎓, 🧑‍💻, 🦊, 🦁, 🚀, 🌟, 🎯, 💡, 🏆 -->
+                </div>
+                <input type="hidden" id="input-account-avatar" value="👨‍🎓">
+              </div>
+
+              <div class="pt-2 flex items-center justify-end gap-2">
+                <button type="submit" id="btn-save-account" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer">
+                  <i class="fa-solid fa-floppy-disk"></i>
+                  <span>Lưu Cập Nhật Hồ Sơ</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Đăng xuất an toàn khi đổi người dùng -->
+          <div class="bg-rose-50 border border-rose-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+            <div>
+              <h5 class="text-xs font-bold text-rose-900 flex items-center gap-1.5">
+                <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                <span>Đăng Xuất Tài Khoản Khỏi Thiết Bị Này</span>
+              </h5>
+              <p class="text-[11px] text-rose-700 mt-0.5">
+                Bấm đăng xuất khi bạn học xong để bảo mật sơ đồ tư duy, điểm số, tóm tắt và thẻ lật của bạn.
+              </p>
+            </div>
+            <button type="button" onclick="window.logoutUser && window.logoutUser()" class="shrink-0 px-3.5 py-1.5 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg cursor-pointer shadow-xs active:scale-95 transition-all">
+              <i class="fa-solid fa-arrow-right-from-bracket mr-1"></i>
+              <span>Đăng xuất ngay</span>
+            </button>
+          </div>
+
+          <!-- Data Backup & Restore -->
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+            <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <i class="fa-solid fa-database text-slate-600"></i>
+              <span>Sao Lưu & Đồng Bộ Dữ Liệu Cá Nhân</span>
+            </h4>
+            <p class="text-[11px] text-slate-500">
+              Xuất dữ liệu sơ đồ, tóm tắt, điểm số và thẻ lật của tài khoản bạn ra tệp tin JSON để lưu trữ hoặc chuyển sang máy khác.
+            </p>
+            <div class="flex flex-wrap items-center gap-2 pt-1">
+              <button id="btn-export-account-data" class="text-xs font-semibold px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-2xs">
+                <i class="fa-solid fa-file-export text-indigo-600"></i>
+                <span>Xuất tệp sao lưu của tôi (.json)</span>
+              </button>
+              <label class="text-xs font-semibold px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-2xs">
+                <i class="fa-solid fa-file-import text-emerald-600"></i>
+                <span>Khôi phục tệp dữ liệu</span>
+                <input type="file" id="input-import-account-data" accept=".json" class="hidden">
+              </label>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- Modal Footer -->
-      <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-        <button id="btn-clear-quiz-history" class="px-3 py-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer">
-          <i class="fa-regular fa-trash-can"></i>
-          <span>Xóa lịch sử</span>
-        </button>
-        <button id="btn-done-quiz-history" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-semibold transition-all shadow-xs cursor-pointer">
+      <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs shrink-0">
+        <span class="text-[11px] text-slate-400">
+          <i class="fa-solid fa-shield-halved text-emerald-600 mr-1"></i> Lưu trữ an toàn 100% trên thiết bị
+        </span>
+        <button id="btn-done-user-account" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-semibold transition-all shadow-xs cursor-pointer">
           Đóng
         </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Hidden Printable Report for Student Progress -->
+  <div id="printable-student-report" class="hidden p-8 bg-white text-slate-800 space-y-4">
+    <div class="border-b-2 border-slate-800 pb-4 mb-4 flex justify-between items-start">
+      <div>
+        <p class="text-xs uppercase font-bold text-indigo-700 tracking-wider">SMARTEDU THCS • NỀN TẢNG HỌC TẬP & KHẢO THÍ THÔNG MINH</p>
+        <h2 class="text-xl font-bold text-slate-900 mt-1">PHIẾU THEO DÕI TIẾN BỘ HỌC TẬP HỌC SINH</h2>
+        <p id="print-report-date" class="text-xs text-slate-500 mt-1">Ngày xuất báo cáo: ...</p>
+      </div>
+      <div class="text-xs text-right border border-slate-300 p-3 rounded-lg min-w-[220px]">
+        <p>Họ tên: <strong id="print-student-name">...</strong></p>
+        <p class="mt-1">Lớp: <strong id="print-student-class">...</strong></p>
+        <p class="mt-1">Trường: <strong id="print-student-school">...</strong></p>
+      </div>
+    </div>
+    
+    <div class="grid grid-cols-4 gap-3 text-center text-xs py-2 border-b border-slate-200">
+      <div class="p-2 bg-slate-50 rounded">
+        <span class="text-slate-500 block">Số bài đã luyện</span>
+        <strong id="print-stat-tests" class="text-base text-slate-900">0</strong>
+      </div>
+      <div class="p-2 bg-slate-50 rounded">
+        <span class="text-slate-500 block">Điểm trung bình</span>
+        <strong id="print-stat-avg" class="text-base text-indigo-700">0.0</strong>
+      </div>
+      <div class="p-2 bg-slate-50 rounded">
+        <span class="text-slate-500 block">Điểm cao nhất</span>
+        <strong id="print-stat-max" class="text-base text-emerald-700">0.0</strong>
+      </div>
+      <div class="p-2 bg-slate-50 rounded">
+        <span class="text-slate-500 block">Xếp loại tiến bộ</span>
+        <strong id="print-stat-rating" class="text-base text-amber-700">Tốt</strong>
+      </div>
+    </div>
+
+    <div class="pt-2">
+      <h3 class="text-xs font-bold text-slate-800 uppercase mb-2">Bảng Điểm Chi Tiết Các Lần Khảo Thí:</h3>
+      <table class="w-full text-left text-xs border border-slate-300 border-collapse">
+        <thead>
+          <tr class="bg-slate-100 border-b border-slate-300">
+            <th class="p-2 border-r border-slate-300">STT</th>
+            <th class="p-2 border-r border-slate-300">Thời gian</th>
+            <th class="p-2 border-r border-slate-300">Tên bài học</th>
+            <th class="p-2 border-r border-slate-300 text-center">Môn</th>
+            <th class="p-2 border-r border-slate-300 text-center">Số câu đúng</th>
+            <th class="p-2 text-right">Điểm số</th>
+          </tr>
+        </thead>
+        <tbody id="print-history-table-body">
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pt-8 flex justify-between text-xs text-center">
+      <div>
+        <p class="font-bold">Ý KIẾN PHỤ HUYNH</p>
+        <p class="text-slate-400 mt-12">(Ký và ghi rõ họ tên)</p>
+      </div>
+      <div>
+        <p class="font-bold">GIÁO VIÊN / HỌC SINH TỰ ĐÁNH GIÁ</p>
+        <p class="text-slate-400 mt-12">(Ký và ghi rõ họ tên)</p>
       </div>
     </div>
   </div>
@@ -1294,6 +1673,510 @@
           Đóng
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- ================= AUTHENTICATION GATE MODAL (ĐĂNG NHẬP / ĐĂNG KÝ TRỰC TUYẾN) ================= -->
+  <div id="modal-auth-gate" class="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-200 flex flex-col gap-5 overflow-hidden relative">
+      
+      <!-- Top Branding -->
+      <div class="text-center space-y-1.5">
+        <div class="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center text-white text-2xl shadow-lg shadow-indigo-200">
+          <i class="fa-solid fa-graduation-cap"></i>
+        </div>
+        <h2 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">SmartEdu <span class="text-indigo-600">THCS</span></h2>
+        <p class="text-xs text-slate-500">Nền tảng Học tập & Khảo thí Thông minh Cấp 2 (GDPT 2018)</p>
+        <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 mt-1">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span id="auth-cloud-status-text">Đám Mây Google Firebase Online</span>
+        </div>
+      </div>
+
+      <!-- Auth Switch Tabs -->
+      <div class="grid grid-cols-2 p-1 bg-slate-100 rounded-xl text-xs font-bold text-slate-600">
+        <button id="auth-tab-btn-login" type="button" onclick="window.switchAuthTab && window.switchAuthTab('login')" class="py-2 rounded-lg bg-white text-indigo-600 shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all">
+          <i class="fa-solid fa-arrow-right-to-bracket"></i>
+          <span>Đăng Nhập</span>
+        </button>
+        <button id="auth-tab-btn-register" type="button" onclick="window.switchAuthTab && window.switchAuthTab('register')" class="py-2 rounded-lg text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1.5 cursor-pointer transition-all">
+          <i class="fa-solid fa-user-plus"></i>
+          <span>Tạo Tài Khoản Mới</span>
+        </button>
+      </div>
+
+      <!-- FORM 1: ĐĂNG NHẬP (LOGIN) -->
+      <form id="form-auth-login" action="javascript:void(0);" onsubmit="event.preventDefault(); window.handleLoginSubmit && window.handleLoginSubmit(event); return false;" class="space-y-3.5 text-xs">
+        <div>
+          <label for="login-username" class="block font-bold text-slate-700 mb-1">
+            Tên đăng nhập / Mã học sinh <span class="text-rose-500">*</span>
+          </label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+              <i class="fa-solid fa-user"></i>
+            </span>
+            <input type="text" id="login-username" required placeholder="Ví dụ: longphung9a13" onkeydown="if(event.key==='Enter'){window.handleLoginSubmit&&window.handleLoginSubmit(event);event.preventDefault();}" class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label for="login-password" class="block font-bold text-slate-700 mb-1">
+            Mật khẩu / Mã PIN <span class="text-rose-500">*</span>
+          </label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+              <i class="fa-solid fa-lock"></i>
+            </span>
+            <input type="password" id="login-password" required placeholder="Nhập mật khẩu hoặc mã PIN" onkeydown="if(event.key==='Enter'){window.handleLoginSubmit&&window.handleLoginSubmit(event);event.preventDefault();}" class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none">
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-1">
+          <label class="flex items-center gap-2 cursor-pointer text-slate-600 select-none">
+            <input type="checkbox" id="login-remember-me" checked class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+            <span>Ghi nhớ trên máy này</span>
+          </label>
+        </div>
+
+        <button type="button" id="btn-submit-login" onclick="window.handleLoginSubmit && window.handleLoginSubmit(event)" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-md shadow-indigo-200 transition-all active:scale-95 cursor-pointer mt-2 text-sm">
+          <i class="fa-solid fa-arrow-right-to-bracket"></i>
+          <span>Đăng Nhập Vào Học Ngay</span>
+        </button>
+
+        <p class="text-center text-slate-500 pt-1">
+          Chưa có tài khoản? 
+          <button type="button" onclick="window.switchAuthTab && window.switchAuthTab('register')" class="text-indigo-600 font-bold hover:underline cursor-pointer">
+            Đăng ký tài khoản mới miễn phí
+          </button>
+        </p>
+      </form>
+
+      <!-- FORM 2: ĐĂNG KÝ (REGISTER) -->
+      <form id="form-auth-register" action="javascript:void(0);" onsubmit="event.preventDefault(); window.handleRegisterSubmit && window.handleRegisterSubmit(event); return false;" class="hidden space-y-3 text-xs max-h-[60vh] overflow-y-auto pr-1">
+        <div>
+          <label for="reg-fullname" class="block font-bold text-slate-700 mb-1">
+            Họ và tên học sinh <span class="text-rose-500">*</span>
+          </label>
+          <input type="text" id="reg-fullname" required placeholder="Ví dụ: Trần Lê Long Phụng" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-indigo-500 outline-none">
+        </div>
+
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label for="reg-grade" class="block font-bold text-slate-700 mb-1">
+              Khối lớp <span class="text-rose-500">*</span>
+            </label>
+            <select id="reg-grade" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 font-medium">
+              <option value="9">Khối 9 (Lớp 9)</option>
+              <option value="8">Khối 8 (Lớp 8)</option>
+              <option value="7">Khối 7 (Lớp 7)</option>
+              <option value="6">Khối 6 (Lớp 6)</option>
+            </select>
+          </div>
+          <div>
+            <label for="reg-class" class="block font-bold text-slate-700 mb-1">
+              Tên lớp cụ thể
+            </label>
+            <input type="text" id="reg-class" placeholder="Ví dụ: 9A13" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-indigo-500 outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label for="reg-school" class="block font-bold text-slate-700 mb-1">
+            Trường THCS
+          </label>
+          <input type="text" id="reg-school" placeholder="Ví dụ: THCS Long Cang" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-indigo-500 outline-none">
+        </div>
+
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label for="reg-username" class="block font-bold text-slate-700 mb-1">
+              Tên đăng nhập <span class="text-rose-500">*</span>
+            </label>
+            <input type="text" id="reg-username" required placeholder="viết liền, vd: longphung" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-indigo-500 outline-none">
+          </div>
+          <div>
+            <label for="reg-password" class="block font-bold text-slate-700 mb-1">
+              Mật khẩu / PIN <span class="text-rose-500">*</span>
+            </label>
+            <input type="password" id="reg-password" required placeholder="Mật khẩu hoặc mã PIN" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 font-medium focus:bg-white focus:border-indigo-500 outline-none">
+          </div>
+        </div>
+
+        <!-- Chọn Avatar -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Chọn hình đại diện</label>
+          <div id="reg-avatar-picker" class="flex flex-wrap items-center gap-1.5">
+            <!-- Avatars -->
+          </div>
+          <input type="hidden" id="reg-avatar" value="👨‍🎓">
+        </div>
+
+        <button type="button" id="btn-submit-register" onclick="window.handleRegisterSubmit && window.handleRegisterSubmit(event)" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-md shadow-emerald-200 transition-all active:scale-95 cursor-pointer mt-1 text-sm">
+          <i class="fa-solid fa-user-check"></i>
+          <span>Tạo Tài Khoản & Bắt Đầu Học</span>
+        </button>
+
+        <p class="text-center text-slate-500 pt-1">
+          Đã có tài khoản? 
+          <button type="button" onclick="window.switchAuthTab && window.switchAuthTab('login')" class="text-indigo-600 font-bold hover:underline cursor-pointer">
+            Đăng nhập ngay
+          </button>
+        </p>
+      </form>
+
+      <!-- Footer Help & Firebase Config Link -->
+      <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+        <span class="flex items-center gap-1">
+          <i class="fa-solid fa-shield-halved text-emerald-600"></i>
+          Bảo mật học sinh THCS
+        </span>
+        <button type="button" onclick="window.openFirebaseSettingsModal && window.openFirebaseSettingsModal()" class="text-slate-500 hover:text-indigo-600 underline cursor-pointer">
+          Cài đặt Firebase
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= SUMMARY LIBRARY MODAL ================= -->
+  <div id="modal-summary-library" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-2xl p-4 sm:p-6 max-w-xl w-full max-h-[90vh] flex flex-col gap-4 shadow-2xl border border-slate-200">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center text-base font-bold shadow-xs">
+            <i class="fa-solid fa-book-bookmark"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-sm sm:text-base text-slate-900">Kho Tóm Tắt & Gợi Ý Học Tập Của Tôi</h3>
+            <p class="text-[11px] sm:text-xs text-slate-500">Đồng bộ trên Web • Xem lại & ôn thi mọi lúc mọi nơi</p>
+          </div>
+        </div>
+        <button id="btn-close-summary-library" class="text-slate-400 hover:text-slate-600 p-2 rounded-lg text-sm cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto border border-slate-200 rounded-xl max-h-72 sm:max-h-96 divide-y divide-slate-100">
+        <div id="summary-library-list" class="divide-y divide-slate-100">
+          <!-- Dynamic summaries inserted by JS -->
+        </div>
+        <div id="summary-library-empty" class="p-8 text-center text-slate-400 text-xs">
+          <i class="fa-solid fa-book-open-reader text-3xl mb-2 text-slate-300"></i>
+          <p class="font-semibold text-slate-600">Chưa có bài tóm tắt nào được lưu trong kho</p>
+          <p class="text-[11px] text-slate-400 mt-1">Khi tạo xong tóm tắt ở Tab 2, hãy bấm nút <strong>"Lưu tóm tắt"</strong> để lưu lên Web nhé!</p>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+        <span class="text-slate-500 text-[11px]" id="summary-library-status">Đã lưu 0 bài tóm tắt</span>
+        <button id="btn-done-summary-library" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-semibold transition-all shadow-xs cursor-pointer">
+          Đóng
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= BEAMS FLASHCARD LIBRARY MODAL ================= -->
+  <div id="modal-beams-library" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-2xl p-4 sm:p-6 max-w-xl w-full max-h-[90vh] flex flex-col gap-4 shadow-2xl border border-slate-200">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center text-base font-bold shadow-xs">
+            <i class="fa-solid fa-layer-group"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-sm sm:text-base text-slate-900">Kho Bộ Thẻ Học Tập (Flashcards) Của Tôi</h3>
+            <p class="text-[11px] sm:text-xs text-slate-500">Đồng bộ trên Web • Ôn tập ghi nhớ nhanh mọi thiết bị</p>
+          </div>
+        </div>
+        <button id="btn-close-beams-library" class="text-slate-400 hover:text-slate-600 p-2 rounded-lg text-sm cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto border border-slate-200 rounded-xl max-h-72 sm:max-h-96 divide-y divide-slate-100">
+        <div id="beams-library-list" class="divide-y divide-slate-100">
+          <!-- Dynamic flashcard sets inserted by JS -->
+        </div>
+        <div id="beams-library-empty" class="p-8 text-center text-slate-400 text-xs">
+          <i class="fa-solid fa-layer-group text-3xl mb-2 text-slate-300"></i>
+          <p class="font-semibold text-slate-600">Chưa có bộ thẻ nào được lưu trong kho</p>
+          <p class="text-[11px] text-slate-400 mt-1">Khi tạo xong bộ thẻ ở Tab 4, hãy bấm nút <strong>"Lưu bộ thẻ"</strong> để lưu lên Web nhé!</p>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+        <span class="text-slate-500 text-[11px]" id="beams-library-status">Đã lưu 0 bộ thẻ</span>
+        <button id="btn-done-beams-library" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-semibold transition-all shadow-xs cursor-pointer">
+          Đóng
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= FIREBASE SETTINGS MODAL ================= -->
+  <div id="modal-firebase-settings" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl border border-slate-200 flex flex-col gap-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-sm">
+            <i class="fa-solid fa-cloud"></i>
+          </div>
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-slate-900">Cấu Hình Google Firebase Đám Mây</h3>
+            <p class="text-[11px] text-slate-500">Đồng bộ dữ liệu học sinh giữa mọi máy tính & điện thoại</p>
+          </div>
+        </div>
+        <button id="btn-close-firebase-settings" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <p class="text-slate-600 leading-relaxed text-[11px]">
+          Dán đoạn mã cấu hình Firebase SDK (JSON) từ Firebase Console của bạn để kết nối trực tiếp với dự án của trường hoặc cá nhân:
+        </p>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Mã cấu hình Firebase SDK:</label>
+          <textarea id="input-firebase-config-json" rows="6" placeholder='{&#10;  "apiKey": "AIzaSy...",&#10;  "projectId": "smartedu-thcs",&#10;  "appId": "1:1234..."&#10;}' class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-mono text-[11px] text-slate-800 outline-none focus:bg-white focus:border-indigo-500"></textarea>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+        <button id="btn-reset-firebase-config" class="text-slate-500 hover:text-rose-600 text-[11px]">
+          Xóa cấu hình
+        </button>
+        <div class="flex items-center gap-2">
+          <button id="btn-cancel-firebase-settings" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium">
+            Hủy
+          </button>
+          <button id="btn-save-firebase-config" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-xs">
+            Lưu & Kết Nối
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SUPER ADMIN DASHBOARD MODAL ================= -->
+  <div id="modal-super-admin" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
+    <div class="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 max-w-5xl w-full max-h-[92vh] flex flex-col gap-4 shadow-2xl border border-slate-200 overflow-hidden">
+      
+      <!-- Header -->
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-400 text-white flex items-center justify-center text-xl shadow-md shadow-amber-200">
+            👑
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="text-base sm:text-lg font-black text-slate-900">BẢNG ĐIỀU KHIỂN QUẢN TRỊ TOÀN TRƯỜNG</h3>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300">
+                Super Admin
+              </span>
+            </div>
+            <p class="text-xs text-slate-500">Quản lý toàn bộ học sinh, sơ đồ tư duy, bài tóm tắt, bảng điểm và bộ thẻ lật</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btn-refresh-super-admin" onclick="window.refreshSuperAdminData && window.refreshSuperAdminData()" class="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer" title="Làm mới dữ liệu từ Đám mây">
+            <i class="fa-solid fa-rotate"></i>
+          </button>
+          <button type="button" onclick="window.logoutUser && window.logoutUser()" class="px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all active:scale-95" title="Đăng xuất tài khoản & Quay lại khung Đăng Nhập">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+            <span>Thoát / Đăng xuất</span>
+          </button>
+          <button id="btn-close-super-admin" onclick="window.closeSuperAdminModal && window.closeSuperAdminModal()" class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer" title="Đóng bảng quản trị">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Stats Cards Row -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5 shrink-0 text-xs">
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex flex-col">
+          <span class="text-[11px] font-medium text-slate-500 flex items-center gap-1">
+            <i class="fa-solid fa-users text-indigo-500"></i> Học sinh
+          </span>
+          <span id="admin-stat-users" class="text-lg font-black text-slate-800 mt-0.5">0</span>
+        </div>
+        <div class="bg-indigo-50/60 border border-indigo-100 rounded-xl p-2.5 flex flex-col">
+          <span class="text-[11px] font-medium text-indigo-600 flex items-center gap-1">
+            <i class="fa-solid fa-sitemap"></i> Sơ đồ tư duy
+          </span>
+          <span id="admin-stat-mindmaps" class="text-lg font-black text-indigo-900 mt-0.5">0</span>
+        </div>
+        <div class="bg-purple-50/60 border border-purple-100 rounded-xl p-2.5 flex flex-col">
+          <span class="text-[11px] font-medium text-purple-600 flex items-center gap-1">
+            <i class="fa-solid fa-book-bookmark"></i> Bài tóm tắt
+          </span>
+          <span id="admin-stat-summaries" class="text-lg font-black text-purple-900 mt-0.5">0</span>
+        </div>
+        <div class="bg-emerald-50/60 border border-emerald-100 rounded-xl p-2.5 flex flex-col">
+          <span class="text-[11px] font-medium text-emerald-600 flex items-center gap-1">
+            <i class="fa-solid fa-award"></i> Lượt khảo thí
+          </span>
+          <span id="admin-stat-quizzes" class="text-lg font-black text-emerald-900 mt-0.5">0</span>
+        </div>
+        <div class="bg-amber-50/60 border border-amber-100 rounded-xl p-2.5 flex flex-col">
+          <span class="text-[11px] font-medium text-amber-600 flex items-center gap-1">
+            <i class="fa-solid fa-clone"></i> Bộ thẻ lật
+          </span>
+          <span id="admin-stat-flashcards" class="text-lg font-black text-amber-900 mt-0.5">0</span>
+        </div>
+        <div class="bg-cyan-50/60 border border-cyan-100 rounded-xl p-2.5 flex flex-col">
+          <span class="text-[11px] font-medium text-cyan-700 flex items-center gap-1">
+            <i class="fa-solid fa-cloud"></i> Lưu trữ Web
+          </span>
+          <span id="admin-stat-cloud" class="text-[11px] font-bold text-cyan-900 mt-1 truncate" title="Trạng thái lưu trữ đám mây">Online</span>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="flex items-center gap-1 sm:gap-2 border-b border-slate-200 overflow-x-auto no-scrollbar pb-1 text-xs font-bold text-slate-500 shrink-0">
+        <button id="admin-tab-btn-users" onclick="window.switchAdminTab && window.switchAdminTab('users')" class="admin-tab-btn active px-3 py-2 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all">
+          <i class="fa-solid fa-user-gear"></i>
+          <span>Quản Lý Học Sinh</span>
+        </button>
+        <button id="admin-tab-btn-mindmaps" onclick="window.switchAdminTab && window.switchAdminTab('mindmaps')" class="admin-tab-btn px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all">
+          <i class="fa-solid fa-sitemap"></i>
+          <span>Tất Cả Sơ Đồ Tư Duy</span>
+        </button>
+        <button id="admin-tab-btn-summaries" onclick="window.switchAdminTab && window.switchAdminTab('summaries')" class="admin-tab-btn px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all">
+          <i class="fa-solid fa-book-bookmark"></i>
+          <span>Tất Cả Bài Tóm Tắt</span>
+        </button>
+        <button id="admin-tab-btn-scores" onclick="window.switchAdminTab && window.switchAdminTab('scores')" class="admin-tab-btn px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all">
+          <i class="fa-solid fa-chart-column"></i>
+          <span>Bảng Điểm Khảo Thí Toàn Trường</span>
+        </button>
+        <button id="admin-tab-btn-flashcards" onclick="window.switchAdminTab && window.switchAdminTab('flashcards')" class="admin-tab-btn px-3 py-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-all">
+          <i class="fa-solid fa-clone"></i>
+          <span>Tất Cả Bộ Thẻ Lật</span>
+        </button>
+      </div>
+
+      <!-- Tab Content Area (Scrollable) -->
+      <div class="flex-1 overflow-y-auto pr-1 min-h-[300px] text-xs">
+        
+        <!-- PANE 1: QUẢN LÝ HỌC SINH -->
+        <div id="admin-pane-users" class="space-y-3">
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+            <div class="relative flex-1 max-w-sm">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                <i class="fa-solid fa-magnifying-glass"></i>
+              </span>
+              <input type="text" id="admin-search-users" placeholder="Tìm kiếm theo họ tên, mã học sinh, lớp..." class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 text-xs outline-none focus:bg-white focus:border-indigo-500">
+            </div>
+            <span id="admin-users-counter" class="text-xs text-slate-500 self-center">Hiển thị 0 học sinh</span>
+          </div>
+          <div id="admin-users-list" class="space-y-2">
+            <!-- Dynamic Users List -->
+          </div>
+        </div>
+
+        <!-- PANE 2: TẤT CẢ SƠ ĐỒ TƯ DUY -->
+        <div id="admin-pane-mindmaps" class="hidden space-y-3">
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+            <div class="relative flex-1 max-w-sm">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                <i class="fa-solid fa-magnifying-glass"></i>
+              </span>
+              <input type="text" id="admin-search-mindmaps" placeholder="Tìm kiếm theo tiêu đề sơ đồ, môn học, tác giả..." class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 text-xs outline-none focus:bg-white focus:border-indigo-500">
+            </div>
+            <span id="admin-mindmaps-counter" class="text-xs text-slate-500 self-center">Hiển thị 0 sơ đồ</span>
+          </div>
+          <div id="admin-mindmaps-list" class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            <!-- Dynamic Mindmaps List -->
+          </div>
+        </div>
+
+        <!-- PANE 3: TẤT CẢ BÀI TÓM TẮT -->
+        <div id="admin-pane-summaries" class="hidden space-y-3">
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+            <div class="relative flex-1 max-w-sm">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                <i class="fa-solid fa-magnifying-glass"></i>
+              </span>
+              <input type="text" id="admin-search-summaries" placeholder="Tìm kiếm theo tiêu đề tóm tắt, môn học, tác giả..." class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 text-xs outline-none focus:bg-white focus:border-indigo-500">
+            </div>
+            <span id="admin-summaries-counter" class="text-xs text-slate-500 self-center">Hiển thị 0 bài tóm tắt</span>
+          </div>
+          <div id="admin-summaries-list" class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            <!-- Dynamic Summaries List -->
+          </div>
+        </div>
+
+        <!-- PANE 4: BẢNG ĐIỂM KHẢO THÍ TOÀN TRƯỜNG -->
+        <div id="admin-pane-scores" class="hidden space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2 flex-1 min-w-[200px]">
+              <div class="relative flex-1 max-w-xs">
+                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                  <i class="fa-solid fa-magnifying-glass"></i>
+                </span>
+                <input type="text" id="admin-search-scores" placeholder="Tìm học sinh, lớp, bài thi..." class="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 text-xs outline-none focus:bg-white focus:border-indigo-500">
+              </div>
+              <select id="admin-filter-subject-scores" class="px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-700 text-xs outline-none">
+                <option value="all">Tất cả môn học</option>
+                <option value="Toán">Toán học</option>
+                <option value="KHTN">KHTN</option>
+                <option value="Ngữ văn">Ngữ văn</option>
+                <option value="Lịch sử">Lịch sử & Địa lí</option>
+                <option value="Tiếng Anh">Tiếng Anh</option>
+              </select>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="window.exportAdminScoresCSV && window.exportAdminScoresCSV()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95">
+                <i class="fa-solid fa-file-excel"></i>
+                <span>Xuất File CSV / Excel</span>
+              </button>
+              <button onclick="window.printAdminScoresReport && window.printAdminScoresReport()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95">
+                <i class="fa-solid fa-print"></i>
+                <span>In Báo Cáo</span>
+              </button>
+            </div>
+          </div>
+          <div class="overflow-x-auto border border-slate-200 rounded-xl">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th class="py-2.5 px-3">#</th>
+                  <th class="py-2.5 px-3">Học sinh</th>
+                  <th class="py-2.5 px-3">Lớp / Khối</th>
+                  <th class="py-2.5 px-3">Bài Khảo Thí</th>
+                  <th class="py-2.5 px-3">Môn</th>
+                  <th class="py-2.5 px-3 text-center">Điểm số</th>
+                  <th class="py-2.5 px-3 text-center">Đúng / Tổng</th>
+                  <th class="py-2.5 px-3 text-center">Đánh giá</th>
+                  <th class="py-2.5 px-3">Thời gian</th>
+                </tr>
+              </thead>
+              <tbody id="admin-scores-table-body" class="divide-y divide-slate-100 text-slate-700 font-medium">
+                <!-- Dynamic Rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- PANE 5: TẤT CẢ BỘ THẺ LẬT -->
+        <div id="admin-pane-flashcards" class="hidden space-y-3">
+          <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+            <div class="relative flex-1 max-w-sm">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                <i class="fa-solid fa-magnifying-glass"></i>
+              </span>
+              <input type="text" id="admin-search-flashcards" placeholder="Tìm kiếm bộ thẻ, môn học, tác giả..." class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-800 text-xs outline-none focus:bg-white focus:border-indigo-500">
+            </div>
+            <span id="admin-flashcards-counter" class="text-xs text-slate-500 self-center">Hiển thị 0 bộ thẻ</span>
+          </div>
+          <div id="admin-flashcards-list" class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            <!-- Dynamic Flashcards List -->
+          </div>
+        </div>
+
+      </div>
+
     </div>
   </div>
 
@@ -1453,6 +2336,6 @@
   </footer>
 
   <!-- Main App Script -->
-  <script src="app.js"></script>
+  <script src="app.js?v=20261122_18"></script>
 </body>
 </html>
