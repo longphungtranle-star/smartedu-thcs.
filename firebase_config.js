@@ -115,6 +115,38 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
       };
     },
 
+    // Lấy dữ liệu mới nhất của một tài khoản từ Firebase Firestore (hoặc cache cục bộ)
+    async getUserData(username) {
+      if (!username) return null;
+      const cleanUsername = username.trim().toLowerCase();
+
+      if (this.isFirebaseReady && this.db) {
+        try {
+          const docRef = this.db.collection('users').doc(cleanUsername);
+          const doc = await docRef.get();
+          if (doc.exists) {
+            const data = doc.data();
+            this._saveLocalUser(data);
+            return data;
+          }
+        } catch (e) {
+          console.warn('⚠️ Lỗi nạp dữ liệu Firebase cho ' + cleanUsername + ', dùng cache:', e);
+        }
+      }
+
+      // Tìm trong cache cục bộ
+      try {
+        const scopedRaw = localStorage.getItem(`smartedu_user_${cleanUsername}_data`);
+        if (scopedRaw) {
+          const parsed = JSON.parse(scopedRaw);
+          if (parsed && parsed.username) return parsed;
+        }
+      } catch (e) {}
+
+      const localUsers = this._getLocalUsers();
+      return localUsers[cleanUsername] || null;
+    },
+
     // Đăng ký tài khoản mới lên Web
     async registerUser(username, password, profileData) {
       const cleanUsername = (username || '').trim().toLowerCase();
@@ -365,16 +397,30 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
     _getLocalUsers() {
       try {
         const raw = localStorage.getItem('smartedu_cloud_local_users');
-        if (!raw) return {};
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          const obj = {};
-          parsed.forEach(u => {
-            if (u && u.username) obj[u.username.toLowerCase()] = u;
-          });
-          return obj;
+        let cleanObj = {};
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            parsed.forEach(u => {
+              if (u && u.username) cleanObj[u.username.toLowerCase()] = u;
+            });
+          } else if (parsed && typeof parsed === 'object') {
+            cleanObj = { ...parsed };
+          }
         }
-        return (parsed && typeof parsed === 'object') ? parsed : {};
+        // Kiểm tra bổ sung các tài khoản lưu độc lập
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('smartedu_user_') && key.endsWith('_data')) {
+            try {
+              const uData = JSON.parse(localStorage.getItem(key));
+              if (uData && uData.username) {
+                cleanObj[uData.username.toLowerCase()] = uData;
+              }
+            } catch (e) {}
+          }
+        }
+        return cleanObj;
       } catch (e) {
         return {};
       }
@@ -395,6 +441,12 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
     _saveLocalUser(userData) {
       if (!userData || !userData.username) return;
       const cleanUsername = userData.username.trim().toLowerCase();
+      // 1. Lưu cô lập tuyệt đối theo tài khoản riêng biệt
+      try {
+        localStorage.setItem(`smartedu_user_${cleanUsername}_data`, JSON.stringify(userData));
+      } catch (e) {}
+
+      // 2. Lưu vào danh mục tài khoản thiết bị
       const users = this._getLocalUsers();
       users[cleanUsername] = userData;
       this._setLocalUsers(users);

@@ -2123,6 +2123,10 @@ LƯU Ý ĐẶC BIỆT KHI NHẬN DIỆN CỤM TRANG BÀI HỌC (TỪ TRANG ${chk
     if (dom.mindmapEmptyState) dom.mindmapEmptyState.classList.add('hidden');
 
     let markmapDrawn = false;
+    const hasSvgDom = dom.markmapSvg && dom.markmapSvg.children.length > 0;
+    if (!hasSvgDom) {
+      state.markmapInstance = null;
+    }
 
     // Chỉ dùng Markmap ngoài NẾU CẢ Transformer VÀ Markmap ĐỀU TỒN TẠI VÀ CHUYỂN ĐỔI THÀNH CÔNG
     if (window.markmap && window.markmap.Transformer && (window.markmap.Markmap || window.Markmap)) {
@@ -2145,7 +2149,8 @@ LƯU Ý ĐẶC BIỆT KHI NHẬN DIỆN CỤM TRANG BÀI HỌC (TỪ TRANG ${chk
             }
           };
 
-          if (!state.markmapInstance || !state.markmapInstance.setData) {
+          if (!state.markmapInstance || !hasSvgDom || !state.markmapInstance.setData) {
+            if (dom.markmapSvg) dom.markmapSvg.innerHTML = '';
             state.markmapInstance = MarkmapClass.create(dom.markmapSvg, options, res.root);
           } else {
             state.markmapInstance.setData(res.root);
@@ -2158,15 +2163,16 @@ LƯU Ý ĐẶC BIỆT KHI NHẬN DIỆN CỤM TRANG BÀI HỌC (TỪ TRANG ${chk
               if (state.markmapInstance && state.markmapInstance.fit) state.markmapInstance.fit();
             }, delay);
           });
-          markmapDrawn = true;
+          markmapDrawn = (dom.markmapSvg && dom.markmapSvg.children.length > 0);
         }
       } catch (e) {
         console.warn('Lỗi khi vẽ qua Markmap library:', e);
+        state.markmapInstance = null;
       }
     }
 
-    // NẾU MARKMAP CHƯA RENDER ĐƯỢC -> DÙNG NGAY BỘ VẼ PURE-SVG TỰ THÂN ĐẢM BẢO 100% HIỂN THỊ!
-    if (!markmapDrawn) {
+    // NẾU MARKMAP CHƯA RENDER ĐƯỢC HOẶC SVG VẪN RỖNG -> DÙNG NGAY BỘ VẼ PURE-SVG TỰ THÂN ĐẢM BẢO 100% HIỂN THỊ!
+    if (!markmapDrawn || !dom.markmapSvg || dom.markmapSvg.children.length === 0) {
       const tree = markdownToMarkmapTree(displayMarkdown);
       renderBuiltInSvgMindmap(tree, dom.markmapSvg);
       if (dom.mindmapEmptyState) dom.mindmapEmptyState.classList.add('hidden');
@@ -4210,25 +4216,18 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
 
   // ================= THƯ VIỆN SƠ ĐỒ TƯ DUY CÁ NHÂN (ĐỒNG BỘ TÀI KHOẢN ĐÁM MÂY) =================
   function openMindmapLibraryModal() {
-    if (btnOpenMindmapLibrary) {
-      btnOpenMindmapLibrary.click();
-    }
+    renderMindmapLibrary();
+    if (dom.modalMindmapLibrary) dom.modalMindmapLibrary.classList.remove('hidden');
+    const m = document.getElementById('modal-mindmap-library');
+    if (m) m.classList.remove('hidden');
   }
 
   function closeMindmapLibraryModal() {
-    if (dom.modalMindmapLibrary) {
-      dom.modalMindmapLibrary.classList.add('hidden');
-    }
+    if (dom.modalMindmapLibrary) dom.modalMindmapLibrary.classList.add('hidden');
+    const m = document.getElementById('modal-mindmap-library');
+    if (m) m.classList.add('hidden');
   }
 
-  if (dom.btnSaveMindmap) {
-    dom.btnSaveMindmap.addEventListener('click', () => {
-      if (btnSaveMindmap) btnSaveMindmap.click();
-    });
-  }
-  if (dom.btnOpenMindmapLibrary) {
-    dom.btnOpenMindmapLibrary.addEventListener('click', openMindmapLibraryModal);
-  }
   if (dom.btnCloseMindmapLibrary) dom.btnCloseMindmapLibrary.addEventListener('click', closeMindmapLibraryModal);
   if (dom.btnDoneMindmapLibrary) dom.btnDoneMindmapLibrary.addEventListener('click', closeMindmapLibraryModal);
   if (dom.modalMindmapLibrary) {
@@ -5119,8 +5118,11 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     // Tab 1: Sơ đồ tư duy
     if (user.mindmaps.length > 0) {
       const latestMm = user.mindmaps[0];
-      state.mindmapMarkdown = latestMm.markdownContent;
-      renderMindmap(latestMm.markdownContent);
+      const content = latestMm.markdownContent || latestMm.content || latestMm.markdown || '';
+      state.mindmapMarkdown = content;
+      if (dom.markmapSvg) dom.markmapSvg.innerHTML = '';
+      state.markmapInstance = null;
+      renderMindmap(content);
       if (dom.mindmapEmptyState) dom.mindmapEmptyState.classList.add('hidden');
       setTimeout(() => {
         if (state.markmapInstance && state.markmapInstance.fit) {
@@ -5129,6 +5131,7 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
       }, 300);
     } else {
       state.mindmapMarkdown = '';
+      state.markmapInstance = null;
       if (dom.markmapSvg) dom.markmapSvg.innerHTML = '';
       if (dom.mindmapEmptyState) dom.mindmapEmptyState.classList.remove('hidden');
     }
@@ -5136,7 +5139,7 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     // Tab 2: Tóm tắt & Gợi ý học tập
     if (user.summaries.length > 0) {
       const latestSum = user.summaries[0];
-      renderSummary(latestSum.summaryData);
+      renderSummary(latestSum.summaryData || latestSum.content || latestSum);
     } else {
       state.summaryData = null;
       if (dom.summaryEmptyState) dom.summaryEmptyState.classList.remove('hidden');
@@ -5155,7 +5158,7 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     // Tab 4: Thẻ lật thông minh
     if (user.flashcards.length > 0) {
       const latestBm = user.flashcards[0];
-      renderBeams(latestBm.cards);
+      renderBeams(latestBm.cards || latestBm.flashcards || latestBm);
     } else {
       state.beamData = [];
       if (dom.beamCardsGrid) dom.beamCardsGrid.classList.add('hidden');
@@ -5164,6 +5167,11 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
 
     // Reset tài liệu tải lên tạm thời
     state.currentDoc = { title: '', text: '', type: 'text', imageBase64: null, images: [] };
+
+    // Cập nhật lại danh sách Thư viện trong DOM chuẩn xác theo tài khoản này
+    renderMindmapLibrary();
+    renderSummaryLibrary();
+    renderBeamsLibrary();
 
     // Đóng Auth Gate
     if (modalAuthGate) {
@@ -5182,27 +5190,34 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     state.beamData = [];
     state.currentDoc = { title: '', text: '', type: 'text', imageBase64: null, images: [] };
 
-    // Tab 1
+    // Tab 1: Sơ đồ tư duy
+    state.markmapInstance = null;
     if (dom.markmapSvg) dom.markmapSvg.innerHTML = '';
     if (dom.mindmapEmptyState) dom.mindmapEmptyState.classList.remove('hidden');
+    if (mindmapLibraryList) mindmapLibraryList.innerHTML = '';
+    if (mindmapLibraryEmpty) mindmapLibraryEmpty.classList.remove('hidden');
     updateSavedMindmapsCount();
 
-    // Tab 2
+    // Tab 2: Tóm tắt
     if (dom.summaryEmptyState) dom.summaryEmptyState.classList.remove('hidden');
     if (dom.sectionTakeaways) dom.sectionTakeaways.classList.add('hidden');
     if (dom.sectionTerms) dom.sectionTerms.classList.add('hidden');
     if (dom.sectionStrategies) dom.sectionStrategies.classList.add('hidden');
+    if (summaryLibraryList) summaryLibraryList.innerHTML = '';
+    if (summaryLibraryEmpty) summaryLibraryEmpty.classList.remove('hidden');
     updateSavedSummariesCount();
 
-    // Tab 3
+    // Tab 3: Khảo thí
     if (dom.interactiveQuizContainer) dom.interactiveQuizContainer.classList.add('hidden');
     if (dom.quizResultCard) dom.quizResultCard.classList.add('hidden');
     if (dom.quizSubmitBar) dom.quizSubmitBar.classList.add('hidden');
     if (dom.quizEmptyState) dom.quizEmptyState.classList.remove('hidden');
 
-    // Tab 4
+    // Tab 4: Thẻ lật
     if (dom.beamCardsGrid) dom.beamCardsGrid.classList.add('hidden');
     if (dom.beamEmptyState) dom.beamEmptyState.classList.remove('hidden');
+    if (beamsLibraryList) beamsLibraryList.innerHTML = '';
+    if (beamsLibraryEmpty) beamsLibraryEmpty.classList.remove('hidden');
     updateSavedBeamsCount();
 
     // Header
@@ -5228,14 +5243,25 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     // Kiểm tra xem máy này có phiên đăng nhập đã ghi nhớ không
     const rememberedUsername = localStorage.getItem('smartedu_active_cloud_username');
     if (rememberedUsername && window.SmartEduCloud) {
+      const cleanUsername = rememberedUsername.toLowerCase();
       const localUsers = window.SmartEduCloud._getLocalUsers();
-      let existingUser = localUsers[rememberedUsername.toLowerCase()];
-      if (rememberedUsername.toLowerCase() === 'admin' && !existingUser) {
+      let existingUser = localUsers[cleanUsername];
+      if (cleanUsername === 'admin' && !existingUser) {
         window.SmartEduCloud._ensureSuperAdminAccount();
         existingUser = window.SmartEduCloud._getLocalUsers()['admin'];
       }
       if (existingUser) {
         applyUserSession(existingUser);
+
+        // ĐỒNG BỘ TỰ ĐỘNG VỚI FIREBASE CLOUD: Kéo dữ liệu mới nhất (sơ đồ mới lưu từ điện thoại/máy tính khác)
+        if (window.SmartEduCloud.isFirebaseReady && window.SmartEduCloud.getUserData) {
+          window.SmartEduCloud.getUserData(cleanUsername).then(freshUser => {
+            if (freshUser && state.currentUser && state.currentUser.username === cleanUsername) {
+              applyUserSession(freshUser);
+              console.log('☁️ Đã đồng bộ bài học & sơ đồ mới nhất từ Firebase cho:', cleanUsername);
+            }
+          }).catch(() => {});
+        }
         return;
       }
     }
@@ -5283,6 +5309,9 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
 
   // Nạp tài khoản mẫu cho giám khảo/học sinh trải nghiệm nhanh 1 chạm
   window.fillDemoAccount = async function() {
+    const localUsers = window.SmartEduCloud ? window.SmartEduCloud._getLocalUsers() : {};
+    const existing = localUsers['longphung9a13'];
+
     const demoUser = {
       username: 'longphung9a13',
       password: '123',
@@ -5295,7 +5324,7 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
         createdAt: '22/11/2026',
         lastLogin: new Date().toLocaleString('vi-VN')
       },
-      scores: [
+      scores: (existing && existing.scores && existing.scores.length > 0) ? existing.scores : [
         {
           id: 1732230001,
           date: '22/11/2026 08:30',
@@ -5317,9 +5346,9 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
           percentage: 100
         }
       ],
-      mindmaps: [],
-      summaries: [],
-      flashcards: []
+      mindmaps: (existing && existing.mindmaps && existing.mindmaps.length > 0) ? existing.mindmaps : [],
+      summaries: (existing && existing.summaries && existing.summaries.length > 0) ? existing.summaries : [],
+      flashcards: (existing && existing.flashcards && existing.flashcards.length > 0) ? existing.flashcards : []
     };
 
     if (window.SmartEduCloud) {
@@ -5502,7 +5531,7 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     localStorage.removeItem('smartedu_active_cloud_username');
     resetUIForGuest();
 
-    // 1. Đóng toàn bộ các modal tài khoản / quản trị
+    // 1. Đóng toàn bộ các modal tài khoản / quản trị / thư viện
     const mUser = document.getElementById('modal-user-account');
     if (mUser) {
       mUser.style.display = 'none';
@@ -5515,6 +5544,12 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
       mAdmin.classList.add('hidden');
       mAdmin.classList.remove('flex');
     }
+    const mMm = document.getElementById('modal-mindmap-library');
+    if (mMm) mMm.classList.add('hidden');
+    const mSum = document.getElementById('modal-summary-library');
+    if (mSum) mSum.classList.add('hidden');
+    const mBm = document.getElementById('modal-beams-library');
+    if (mBm) mBm.classList.add('hidden');
 
     // 2. Mở lại ngay khung Đăng Nhập (bỏ display: none, set display: flex)
     const authGate = document.getElementById('modal-auth-gate');
@@ -5650,11 +5685,25 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
         return;
       }
 
-      const title = state.currentDoc.title || 'Sơ đồ tư duy bài học';
-      const subject = detectSubjectFromTitle(title);
+      // 1. Tự động trích xuất tiêu đề bài học thông minh từ dòng # đầu tiên của Markdown
+      let cleanTitle = '';
+      const lines = state.mindmapMarkdown.split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('# ')) {
+          cleanTitle = trimmed.replace(/^#+\s*/, '').replace(/[#*`_]/g, '').trim();
+          break;
+        }
+      }
+      if (!cleanTitle && state.currentDoc.title) {
+        cleanTitle = state.currentDoc.title.replace(/\.(jpg|jpeg|png|webp|gif|pdf|docx?)$/i, '').trim();
+      }
+      if (!cleanTitle) cleanTitle = 'Sơ đồ tư duy bài học';
+
+      const subject = detectSubjectFromTitle(cleanTitle);
       const mindmapItem = {
         id: 'mm_' + Date.now(),
-        title: title,
+        title: cleanTitle,
         subject: subject,
         date: new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
         markdownContent: state.mindmapMarkdown
@@ -5666,7 +5715,8 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
 
       await window.SmartEduCloud.syncUserData(state.currentUser);
       updateSavedMindmapsCount();
-      showToast('Đã lưu sơ đồ tư duy vào tài khoản Web thành công!', 'success');
+      renderMindmapLibrary();
+      showToast(`Đã lưu sơ đồ: "${cleanTitle}" vào tài khoản Web!`, 'success');
     });
   }
 
@@ -5687,20 +5737,21 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
 
     if (mindmapLibraryEmpty) mindmapLibraryEmpty.classList.add('hidden');
     mindmapLibraryList.innerHTML = mindmaps.map((mm, idx) => `
-      <div class="p-3 hover:bg-slate-50 transition-colors flex items-center justify-between gap-3">
-        <div class="min-w-0">
+      <div class="p-3 hover:bg-slate-50 transition-colors flex items-center justify-between gap-3 border-b border-slate-100 last:border-b-0">
+        <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
-            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">${mm.subject || 'Sơ đồ'}</span>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 shrink-0">${mm.subject || 'Sơ đồ'}</span>
             <h5 class="text-xs sm:text-sm font-bold text-slate-900 truncate" title="${mm.title}">${mm.title}</h5>
           </div>
           <span class="text-[11px] text-slate-400 font-mono mt-0.5 block">${mm.date}</span>
         </div>
         <div class="flex items-center gap-1.5 shrink-0">
-          <button onclick="window.loadSavedMindmapById && window.loadSavedMindmapById('${mm.id}')" class="px-2.5 py-1 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg cursor-pointer shadow-2xs active:scale-95">
-            Mở xem
+          <button onclick="window.loadSavedMindmapById && window.loadSavedMindmapById('${mm.id}')" class="px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg cursor-pointer shadow-xs active:scale-95 flex items-center gap-1">
+            <i class="fa-solid fa-eye text-[11px]"></i>
+            <span>Mở xem</span>
           </button>
-          <button onclick="window.deleteSavedMindmapById && window.deleteSavedMindmapById('${mm.id}')" class="p-1 text-slate-400 hover:text-rose-600 cursor-pointer" title="Xóa sơ đồ này">
-            <i class="fa-solid fa-trash-can"></i>
+          <button onclick="window.deleteSavedMindmapById && window.deleteSavedMindmapById('${mm.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 cursor-pointer transition-colors" title="Xóa sơ đồ này">
+            <i class="fa-solid fa-trash-can text-xs"></i>
           </button>
         </div>
       </div>
@@ -5708,15 +5759,46 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
   }
 
   window.loadSavedMindmapById = function(id) {
-    if (!state.currentUser || !state.currentUser.mindmaps) return;
-    const item = state.currentUser.mindmaps.find(m => m.id === id);
-    if (item && item.markdownContent) {
-      state.mindmapMarkdown = item.markdownContent;
-      renderMindmap(item.markdownContent);
-      if (modalMindmapLibrary) modalMindmapLibrary.classList.add('hidden');
-      switchTab('tab-mindmap');
-      showToast(`Đã mở sơ đồ: "${item.title}"!`, 'info');
+    if (!state.currentUser || !state.currentUser.mindmaps) {
+      showToast('Vui lòng đăng nhập để mở sơ đồ tư duy!', 'warning');
+      return;
     }
+    const item = state.currentUser.mindmaps.find(m => String(m.id) === String(id));
+    if (!item) {
+      showToast('Không tìm thấy sơ đồ tư duy này trong tài khoản của bạn!', 'warning');
+      return;
+    }
+
+    const content = item.markdownContent || item.content || item.markdown || '';
+    if (!content) {
+      showToast('Nội dung sơ đồ này bị rỗng!', 'warning');
+      return;
+    }
+
+    state.mindmapMarkdown = content;
+
+    // 1. Đóng modal thư viện
+    if (modalMindmapLibrary) modalMindmapLibrary.classList.add('hidden');
+    const mModal = document.getElementById('modal-mindmap-library');
+    if (mModal) mModal.classList.add('hidden');
+
+    // 2. Chuyển sang Tab Sơ đồ tư duy trước để SVG có layout chiều rộng/cao chuẩn
+    switchTab('tab-mindmap');
+
+    // 3. Xóa cache instance cũ và render mới hoàn toàn
+    if (dom.markmapSvg) dom.markmapSvg.innerHTML = '';
+    state.markmapInstance = null;
+    renderMindmap(content);
+
+    // 4. Retry nhẹ sau khi layout ổn định để fit view chuẩn xác 100%
+    setTimeout(() => {
+      renderMindmap(content);
+      if (state.markmapInstance && state.markmapInstance.fit) {
+        state.markmapInstance.fit();
+      }
+    }, 150);
+
+    showToast(`Đã mở sơ đồ: "${item.title}"!`, 'info');
   };
 
   window.deleteSavedMindmapById = async function(id) {
@@ -5819,14 +5901,19 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
   }
 
   window.loadSavedSummaryById = function(id) {
-    if (!state.currentUser || !state.currentUser.summaries) return;
-    const item = state.currentUser.summaries.find(s => s.id === id);
+    if (!state.currentUser || !state.currentUser.summaries) {
+      showToast('Vui lòng đăng nhập để mở bài tóm tắt!', 'warning');
+      return;
+    }
+    const item = state.currentUser.summaries.find(s => String(s.id) === String(id));
     if (item && item.summaryData) {
       state.summaryData = item.summaryData;
-      renderSummary(item.summaryData);
       if (modalSummaryLibrary) modalSummaryLibrary.classList.add('hidden');
       switchTab('tab-summary');
+      renderSummary(item.summaryData);
       showToast(`Đã mở bài tóm tắt: "${item.title}"!`, 'info');
+    } else {
+      showToast('Không tìm thấy bài tóm tắt này trong tài khoản của bạn!', 'warning');
     }
   };
 
@@ -5971,14 +6058,19 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
   }
 
   window.loadSavedBeamsById = function(id) {
-    if (!state.currentUser || !state.currentUser.flashcards) return;
-    const item = state.currentUser.flashcards.find(b => b.id === id);
+    if (!state.currentUser || !state.currentUser.flashcards) {
+      showToast('Vui lòng đăng nhập để mở bộ thẻ!', 'warning');
+      return;
+    }
+    const item = state.currentUser.flashcards.find(b => String(b.id) === String(id));
     if (item && item.cards) {
       state.beamData = item.cards;
-      renderBeams(item.cards);
       if (modalBeamsLibrary) modalBeamsLibrary.classList.add('hidden');
       switchTab('tab-beam');
+      renderBeams(item.cards);
       showToast(`Đã mở bộ thẻ: "${item.title}"!`, 'info');
+    } else {
+      showToast('Không tìm thấy bộ thẻ này trong tài khoản của bạn!', 'warning');
     }
   };
 

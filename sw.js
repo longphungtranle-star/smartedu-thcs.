@@ -1,5 +1,5 @@
 // sw.js - Service Worker cho SmartEdu THCS (Hỗ trợ PWA & Bộ nhớ đệm Ngoại tuyến)
-const CACHE_NAME = 'smartedu-thcs-v18-dual-camera-perfect';
+const CACHE_NAME = 'smartedu-thcs-v19-privacy-mindmap-sync';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
