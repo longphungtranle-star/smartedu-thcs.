@@ -6709,11 +6709,11 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
           </p>
         </div>
         <div class="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100">
-          <button onclick="window.adminOpenMindmap && window.adminOpenMindmap('${mm.authorUsername}', ${mm.id})" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
+          <button onclick="window.adminOpenMindmap && window.adminOpenMindmap('${mm.authorUsername}', '${mm.id}')" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
             <i class="fa-solid fa-eye text-[11px]"></i>
             <span>Mở xem</span>
           </button>
-          <button onclick="window.adminDeletePost && window.adminDeletePost('${mm.authorUsername}', 'mindmap', ${mm.id})" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
+          <button onclick="window.adminDeletePost && window.adminDeletePost('${mm.authorUsername}', 'mindmap', '${mm.id}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
             <i class="fa-solid fa-trash text-[11px]"></i>
             <span>Xóa</span>
           </button>
@@ -6780,11 +6780,11 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
           </p>
         </div>
         <div class="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100">
-          <button onclick="window.adminOpenSummary && window.adminOpenSummary('${sm.authorUsername}', ${sm.id})" class="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
+          <button onclick="window.adminOpenSummary && window.adminOpenSummary('${sm.authorUsername}', '${sm.id}')" class="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
             <i class="fa-solid fa-eye text-[11px]"></i>
             <span>Xem lại</span>
           </button>
-          <button onclick="window.adminDeletePost && window.adminDeletePost('${sm.authorUsername}', 'summary', ${sm.id})" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
+          <button onclick="window.adminDeletePost && window.adminDeletePost('${sm.authorUsername}', 'summary', '${sm.id}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
             <i class="fa-solid fa-trash text-[11px]"></i>
             <span>Xóa</span>
           </button>
@@ -6945,11 +6945,11 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
           </p>
         </div>
         <div class="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100">
-          <button onclick="window.adminOpenFlashcard && window.adminOpenFlashcard('${fc.authorUsername}', ${fc.id})" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
+          <button onclick="window.adminOpenFlashcard && window.adminOpenFlashcard('${fc.authorUsername}', '${fc.id}')" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
             <i class="fa-solid fa-play text-[11px]"></i>
             <span>Luyện tập</span>
           </button>
-          <button onclick="window.adminDeletePost && window.adminDeletePost('${fc.authorUsername}', 'flashcard', ${fc.id})" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
+          <button onclick="window.adminDeletePost && window.adminDeletePost('${fc.authorUsername}', 'flashcard', '${fc.id}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all">
             <i class="fa-solid fa-trash text-[11px]"></i>
             <span>Xóa</span>
           </button>
@@ -7128,51 +7128,69 @@ Thầy cô có chắc chắn muốn xóa tài khoản học sinh "${fullname}" (
   // Hành động Admin: Mở xem sơ đồ tư duy của học sinh
   window.adminOpenMindmap = function(authorUsername, mindmapId) {
     const user = cachedAllAdminUsers.find(u => u.username === authorUsername);
-    if (!user || !user.mindmaps) return;
-    const mm = user.mindmaps.find(m => m.id === mindmapId);
-    if (!mm) return;
+    if (!user || !user.mindmaps) {
+      showToast('Không tìm thấy dữ liệu học sinh này!', 'warning');
+      return;
+    }
+    const mm = user.mindmaps.find(m => String(m.id) === String(mindmapId));
+    if (!mm) {
+      showToast('Không tìm thấy sơ đồ tư duy này!', 'warning');
+      return;
+    }
 
     closeSuperAdminModal();
-    const tabBtn = document.getElementById('tab-btn-mindmap');
+    const tabBtn = document.querySelector('.tab-btn[data-tab="tab-mindmap"]');
     if (tabBtn) tabBtn.click();
     setTimeout(() => {
-      renderMindmap(mm.content, mm.title);
-      showToast(`Đang xem sơ đồ tư duy của học sinh: ${user.profile?.name || authorUsername}`, 'info');
-    }, 200);
+      const content = mm.markdownContent || mm.content || '';
+      renderMindmap(content);
+      showToast(`Đang xem sơ đồ tư duy "${mm.title || ''}" của học sinh: ${user.profile?.name || authorUsername}`, 'info');
+    }, 150);
   };
 
   // Hành động Admin: Mở xem bài tóm tắt của học sinh
   window.adminOpenSummary = function(authorUsername, summaryId) {
     const user = cachedAllAdminUsers.find(u => u.username === authorUsername);
-    if (!user || !user.summaries) return;
-    const sm = user.summaries.find(s => s.id === summaryId);
-    if (!sm) return;
+    if (!user || !user.summaries) {
+      showToast('Không tìm thấy dữ liệu học sinh này!', 'warning');
+      return;
+    }
+    const sm = user.summaries.find(s => String(s.id) === String(summaryId));
+    if (!sm) {
+      showToast('Không tìm thấy bài tóm tắt này!', 'warning');
+      return;
+    }
 
     closeSuperAdminModal();
-    const tabBtn = document.getElementById('tab-btn-summary');
+    const tabBtn = document.querySelector('.tab-btn[data-tab="tab-summary"]');
     if (tabBtn) tabBtn.click();
     setTimeout(() => {
-      renderSummary(sm.content);
-      showToast(`Đang xem bài tóm tắt của học sinh: ${user.profile?.name || authorUsername}`, 'info');
-    }, 200);
+      const data = sm.summaryData || sm.content || sm;
+      renderSummary(data);
+      showToast(`Đang xem bài tóm tắt "${sm.title || ''}" của học sinh: ${user.profile?.name || authorUsername}`, 'info');
+    }, 150);
   };
 
   // Hành động Admin: Mở xem bộ thẻ lật của học sinh
   window.adminOpenFlashcard = function(authorUsername, flashcardId) {
     const user = cachedAllAdminUsers.find(u => u.username === authorUsername);
-    if (!user || !user.flashcards) return;
-    const fc = user.flashcards.find(f => f.id === flashcardId);
-    if (!fc) return;
+    if (!user || !user.flashcards) {
+      showToast('Không tìm thấy dữ liệu học sinh này!', 'warning');
+      return;
+    }
+    const fc = user.flashcards.find(f => String(f.id) === String(flashcardId));
+    if (!fc) {
+      showToast('Không tìm thấy bộ thẻ lật này!', 'warning');
+      return;
+    }
 
     closeSuperAdminModal();
-    const tabBtn = document.getElementById('tab-btn-flashcards');
+    const tabBtn = document.querySelector('.tab-btn[data-tab="tab-beam"]');
     if (tabBtn) tabBtn.click();
     setTimeout(() => {
-      if (typeof window.loadBeamsCardsIntoPlayer === 'function') {
-        window.loadBeamsCardsIntoPlayer(fc.cards, fc.title);
-      }
-      showToast(`Đang mở bộ thẻ lật của học sinh: ${user.profile?.name || authorUsername}`, 'info');
-    }, 200);
+      renderBeams(fc.cards || []);
+      showToast(`Đang mở bộ thẻ lật "${fc.title || ''}" của học sinh: ${user.profile?.name || authorUsername}`, 'info');
+    }, 150);
   };
 
   // Gắn sự kiện Admin
