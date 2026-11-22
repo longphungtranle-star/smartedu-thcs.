@@ -5370,14 +5370,14 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
       username: 'admin',
       password: '123',
       profile: {
-        name: 'Thầy/Cô Quản Trị Viên (Super Admin)',
+        name: 'Super Admin',
         role: 'superadmin',
         grade: 'Quản Lý',
-        className: 'Ban Giám Hiệu / Quản Trị',
-        school: 'Hệ Thống Giáo Dục THCS',
+        className: 'Quản Trị',
+        school: 'SmartEdu THCS',
         avatar: '👑',
-        createdAt: '22/11/2026',
-        lastLogin: new Date().toLocaleString('vi-VN')
+        createdAt: (window.getVietnamDateShort ? window.getVietnamDateShort() : '22/11/2026'),
+        lastLogin: (window.getVietnamTimeString ? window.getVietnamTimeString() : new Date().toLocaleString('vi-VN'))
       },
       scores: [],
       mindmaps: [],
@@ -5394,7 +5394,7 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     localStorage.setItem('smartedu_active_cloud_username', 'admin');
 
     applyUserSession(adminUser);
-    showToast('Kính chào Thầy/Cô Quản Trị Viên (Super Admin) đã đăng nhập thành công!', 'success');
+    showToast('Kính chào Super Admin đã đăng nhập thành công!', 'success');
 
     setTimeout(() => {
       if (typeof window.openSuperAdminModal === 'function') {
@@ -5590,29 +5590,44 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     const p = user.profile || {};
     const scoresCount = (user.scores && user.scores.length) || 0;
 
+    const isSuperAdmin = (user.username === 'admin' || (user.profile && user.profile.role === 'superadmin'));
+
     // Mobile Header
-    if (userAvatarMobile) userAvatarMobile.textContent = p.avatar || '👨‍🎓';
+    if (userAvatarMobile) userAvatarMobile.textContent = isSuperAdmin ? '👑' : (p.avatar || '👨‍🎓');
     if (userNameMobile) {
-      const shortName = p.name ? p.name.trim().split(' ').slice(-2).join(' ') : 'Hồ sơ';
-      userNameMobile.textContent = shortName;
+      if (isSuperAdmin) {
+        userNameMobile.textContent = 'Admin';
+      } else {
+        const shortName = p.name ? p.name.trim().split(' ').slice(-2).join(' ') : 'Hồ sơ';
+        userNameMobile.textContent = shortName;
+      }
     }
     if (btnLogoutMobile) btnLogoutMobile.classList.remove('hidden');
 
     // Desktop Header
-    if (userAvatarDesktop) userAvatarDesktop.textContent = p.avatar || '👨‍🎓';
-    if (userNameDesktop) userNameDesktop.textContent = p.name || user.username;
+    if (userAvatarDesktop) userAvatarDesktop.textContent = isSuperAdmin ? '👑' : (p.avatar || '👨‍🎓');
+    if (userNameDesktop) {
+      userNameDesktop.textContent = isSuperAdmin ? 'Super Admin' : (p.name || user.username);
+    }
     if (userSubtextDesktop) {
-      const cls = p.className ? `Lớp ${p.className}` : `Khối ${p.grade || 9}`;
-      userSubtextDesktop.textContent = `${cls} • ${scoresCount} bài đã thi`;
+      if (isSuperAdmin) {
+        userSubtextDesktop.textContent = 'Quản trị';
+      } else {
+        const cls = p.className ? `Lớp ${p.className}` : `Khối ${p.grade || 9}`;
+        userSubtextDesktop.textContent = `${cls} • ${scoresCount} bài đã thi`;
+      }
     }
     if (userBadgeCountDesktop) {
-      userBadgeCountDesktop.textContent = `${scoresCount} bài`;
-      userBadgeCountDesktop.classList.remove('hidden');
+      if (isSuperAdmin) {
+        userBadgeCountDesktop.classList.add('hidden');
+      } else {
+        userBadgeCountDesktop.textContent = `${scoresCount} bài`;
+        userBadgeCountDesktop.classList.remove('hidden');
+      }
     }
     if (btnLogoutHeader) btnLogoutHeader.classList.remove('hidden');
 
     // Hiển thị nút Super Admin nếu là admin
-    const isSuperAdmin = (user.username === 'admin' || (user.profile && user.profile.role === 'superadmin'));
     const btnSuperAdminMobile = document.getElementById('btn-super-admin-mobile');
     const btnSuperAdminDesktop = document.getElementById('btn-super-admin-desktop');
     if (btnSuperAdminMobile) {
@@ -5622,9 +5637,6 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     if (btnSuperAdminDesktop) {
       if (isSuperAdmin) btnSuperAdminDesktop.classList.remove('hidden');
       else btnSuperAdminDesktop.classList.add('hidden');
-    }
-    if (isSuperAdmin && userSubtextDesktop) {
-      userSubtextDesktop.textContent = '👑 Super Admin';
     }
   }
 
@@ -6938,7 +6950,7 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
                 <span class="text-[11px] text-slate-400 font-mono">@${u.username}</span>
               </div>
               <p class="text-[11px] text-slate-500 mt-0.5 truncate">
-                ${p.school || 'THCS Long Cang'} • Tham gia: ${p.createdAt || 'Mới'} • Đăng nhập: ${p.lastLogin || 'Chưa rõ'}
+                ${p.school || 'THCS Long Cang'} • Tham gia: ${p.createdAt || 'Mới'} • Đăng nhập: ${p.lastLogin || 'Chưa rõ'} (giờ VN)
               </p>
               <div class="flex items-center gap-2 mt-1.5 flex-wrap text-[10px] font-bold text-slate-600">
                 <span class="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md">🧠 ${mmCount} sơ đồ</span>

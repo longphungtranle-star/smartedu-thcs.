@@ -20,6 +20,47 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
 
 // ================= SMARTEDU CLOUD SYNC MODULE =================
 (function() {
+  // Helper lấy chuỗi ngày giờ theo chuẩn múi giờ Việt Nam (GMT+7: Asia/Ho_Chi_Minh)
+  function getVietnamTimeString(dateObj = new Date()) {
+    try {
+      return dateObj.toLocaleString('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        hour12: false,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    } catch (e) {
+      const d = new Date(dateObj.getTime() + (dateObj.getTimezoneOffset() + 420) * 60000);
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+    }
+  }
+
+  function getVietnamDateShort(dateObj = new Date()) {
+    try {
+      return dateObj.toLocaleString('vi-VN', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        hour12: false,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (e) {
+      const d = new Date(dateObj.getTime() + (dateObj.getTimezoneOffset() + 420) * 60000);
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${pad(d.getHours())}:${pad(d.getMinutes())} ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+    }
+  }
+
+  window.getVietnamTimeString = getVietnamTimeString;
+  window.getVietnamDateShort = getVietnamDateShort;
+
   const CloudDB = {
     isFirebaseReady: false,
     db: null,
@@ -71,14 +112,14 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
           username: 'admin',
           password: '123',
           profile: {
-            name: 'Thầy/Cô Quản Trị Viên (Super Admin)',
+            name: 'Super Admin',
             grade: 'Quản Lý',
             className: 'Ban Giám Hiệu / Quản Trị',
             school: 'Hệ Thống Giáo Dục THCS',
             avatar: '👑',
             role: 'superadmin',
-            createdAt: '22/11/2026',
-            lastLogin: new Date().toLocaleString('vi-VN')
+            createdAt: getVietnamDateShort(),
+            lastLogin: getVietnamTimeString()
           },
           scores: [],
           mindmaps: [],
@@ -166,8 +207,8 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
           className: profileData.className || '9A1',
           school: profileData.school || 'THCS',
           avatar: profileData.avatar || '👨‍🎓',
-          createdAt: new Date().toLocaleDateString('vi-VN'),
-          lastLogin: new Date().toLocaleString('vi-VN')
+          createdAt: getVietnamDateShort(),
+          lastLogin: getVietnamTimeString()
         },
         scores: [],
         mindmaps: [],
@@ -220,9 +261,9 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
 
         // Đảm bảo thông tin Super Admin đầy đủ
         adminUser.profile = adminUser.profile || {};
-        adminUser.profile.name = adminUser.profile.name || 'Thầy/Cô Quản Trị Viên (Super Admin)';
+        adminUser.profile.name = 'Super Admin';
         adminUser.profile.role = 'superadmin';
-        adminUser.profile.lastLogin = new Date().toLocaleString('vi-VN');
+        adminUser.profile.lastLogin = getVietnamTimeString();
         this._saveLocalUser(adminUser);
 
         // Đồng bộ ngầm lên Firestore nếu có (không await để đăng nhập lập tức)
@@ -251,9 +292,9 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
           if (userData.password && userData.password !== cleanPassword) {
             return { success: false, message: 'Mật khẩu hoặc mã PIN không chính xác!' };
           }
-          // Cập nhật lastLogin
+          // Cập nhật lastLogin chuẩn giờ Việt Nam (GMT+7)
           userData.profile = userData.profile || {};
-          userData.profile.lastLogin = new Date().toLocaleString('vi-VN');
+          userData.profile.lastLogin = getVietnamTimeString();
           await docRef.update({ 'profile.lastLogin': userData.profile.lastLogin });
 
           // Lưu cache vào local
@@ -280,7 +321,7 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
           return { success: false, message: 'Mật khẩu hoặc mã PIN không chính xác!' };
         }
         user.profile = user.profile || {};
-        user.profile.lastLogin = new Date().toLocaleString('vi-VN');
+        user.profile.lastLogin = getVietnamTimeString();
         this._setLocalUsers(localUsers);
         return { success: true, user: user };
       }
