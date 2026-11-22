@@ -36,10 +36,10 @@ Phần mềm tích hợp Trí tuệ nhân tạo đa phương thức (Google Gemi
 ### 2. Nhận Diện & Kết Xuất Công Thức Toán - Lý - Hóa Toàn Diện (KaTeX)
 - **Mức độ Cấp 2 (THCS):**
   - **Toán học:** Phương trình bậc hai một ẩn ($ax^2 + bx + c = 0$), định lý Viète ($x_1+x_2 = -\frac{b}{a}$, $x_1 x_2 = \frac{c}{a}$), căn bậc hai $\sqrt{A}$, hệ phương trình bậc nhất hai ẩn, biểu thức hình học ($\triangle ABC, \perp, \parallel, \widehat{ABC}$).
-  - **Khoa học tự nhiên:** Định luật Ôm ($I = \frac{U}{R}$), công suất điện ($P = U \cdot I$), điện năng ($A = P \cdot t$), định luật Jun-Len-xơ ($Q = I^2 R t$), phương trình hóa học và phản ứng quang hợp ($6\text{CO}_2 + 6\text{H}_2\text{O} \rightarrow \text{C}_6\text{H}_{12}\text{O}_6 + 6\text{O}_2$).
+  - **Khoa học tự nhiên:** Định luật Ôm ($I = \frac{U}{R}$), công suất điện ($P = U \cdot I$), điện năng ($A = P \cdot t$), định luật Jun-Len-xơ ($Q = I^2 R t$), phương trình hóa học và phản ứng quang hợp (${6\text{CO}_2 + 6\text{H}_2\text{O} \rightarrow \text{C}_6\text{H}_{12}\text{O}_6 + 6\text{O}_2}$).
 - **Mở rộng Cấp 3 (THPT):**
   - **Toán học:** Đạo hàm $f'(x)$, Tích phân $\int_a^b f(x)dx$, Giới hạn $\lim_{x \to x_0}$, Lượng giác ($\sin, \cos, \tan$), Hình học không gian $Oxyz$ ($\vec{u} = (x; y; z)$), Số phức $z = a + bi$, Logarit $\log_a b$.
-  - **Vật lý:** Dao động điều hòa ($x = A\cos(\omega t + \varphi)$), sóng cơ & sóng dừng ($\lambda = \frac{v}{f}$), dòng điện xoay chiều, từ trường $\vec{B}$, phản ứng hạt nhân.
+  - **Vật lý:** Dao động điều hòa ($x = A \cos(\omega t + \varphi)$), sóng cơ & sóng dừng ($\lambda = \frac{v}{f}$), dòng điện xoay chiều, từ trường $\vec{B}$, phản ứng hạt nhân.
   - **Hóa học:** Cân bằng hóa học ($\rightleftharpoons$), phản ứng oxi hóa khử, phương trình ion thu gọn ($\text{Fe}^{3+} + 3\text{OH}^- \rightarrow \text{Fe(OH)}_3\downarrow$), hóa học hữu cơ.
 - **Bộ phân giải & tự sửa lỗi JSON LaTeX:** Tự động chuẩn hóa dấu escape ngược (`\\frac`, `\\sqrt`, `\\Delta`, `\\Omega`...) đảm bảo dữ liệu công thức toán học không bao giờ bị lỗi parse.
 
@@ -47,7 +47,7 @@ Phần mềm tích hợp Trí tuệ nhân tạo đa phương thức (Google Gemi
 - **Tầng 1 (Engine chính):** `Markmap.js` & `D3.js v7` cho đồ họa vector mượt mà, hỗ trợ zoom, kéo thả pan và thu gọn/mở rộng từng nhánh con.
 - **Tầng 2 (Engine tự thân độc lập):** Bộ vẽ thuần JavaScript & SVG DOM (`renderBuiltInSvgMindmap`) hoạt động 100% offline, không cần nạp bất kỳ thư viện ngoài nào.
 - **Thư viện Sơ đồ tư duy cá nhân (Mindmap Library):** Lưu trữ không giới hạn các sơ đồ đã học vào `localStorage` để mở xem lại bất cứ lúc nào.
-- **Xuất ảnh đa định dạng:** Xuất file vector SVG hoặc ảnh PNG HD 300 DPI kích thước lớn $3600 \times 2700\text{ px}$ tâm đối xứng.
+- **Xuất ảnh đa định dạng:** Xuất file vector SVG hoặc ảnh PNG HD 300 DPI kích thước lớn **3600 × 2700 px** tâm đối xứng.
 
 ### 4. Tab 2: Tóm Tắt Bài Học & Trợ Lý Giọng Đọc AI (TTS)
 - **Tóm tắt tinh gọn:** Key Takeaways (3-5 ý cốt lõi), Bảng đối chiếu thuật ngữ - định nghĩa, Kỹ thuật Feynman giải thích siêu đơn giản trong 2 câu.
