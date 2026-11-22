@@ -5710,6 +5710,13 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
       };
 
       if (!state.currentUser.mindmaps) state.currentUser.mindmaps = [];
+      // Tránh trùng lặp nếu học sinh bấm lưu nhiều lần cùng 1 bài
+      const existingMmIdx = state.currentUser.mindmaps.findIndex(m => 
+        m.title === cleanTitle || m.markdownContent === state.mindmapMarkdown
+      );
+      if (existingMmIdx !== -1) {
+        state.currentUser.mindmaps.splice(existingMmIdx, 1);
+      }
       state.currentUser.mindmaps.unshift(mindmapItem);
       if (state.currentUser.mindmaps.length > 50) state.currentUser.mindmaps.length = 50;
 
@@ -5843,23 +5850,29 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
         return;
       }
 
-      const title = state.currentDoc.title || 'Tóm tắt bài học';
-      const subject = detectSubjectFromTitle(title);
+      let cleanTitle = state.currentDoc.title || 'Tóm tắt bài học';
+      cleanTitle = cleanTitle.replace(/\.(jpg|jpeg|png|webp|gif|pdf|docx?)$/i, '').trim();
+      const subject = detectSubjectFromTitle(cleanTitle);
       const summaryItem = {
         id: 'sum_' + Date.now(),
-        title: title,
+        title: cleanTitle,
         subject: subject,
         date: new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
         summaryData: state.summaryData
       };
 
       if (!state.currentUser.summaries) state.currentUser.summaries = [];
+      const existingSumIdx = state.currentUser.summaries.findIndex(s => s.title === cleanTitle);
+      if (existingSumIdx !== -1) {
+        state.currentUser.summaries.splice(existingSumIdx, 1);
+      }
       state.currentUser.summaries.unshift(summaryItem);
       if (state.currentUser.summaries.length > 50) state.currentUser.summaries.length = 50;
 
       await window.SmartEduCloud.syncUserData(state.currentUser);
       updateSavedSummariesCount();
-      showToast('Đã lưu bài tóm tắt & gợi ý học tập vào tài khoản Web!', 'success');
+      renderSummaryLibrary();
+      showToast(`Đã lưu bài tóm tắt: "${cleanTitle}" vào tài khoản Web!`, 'success');
     });
   }
 
