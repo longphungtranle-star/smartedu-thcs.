@@ -1632,42 +1632,58 @@ LƯU Ý ĐẶC BIỆT KHI NHẬN DIỆN CỤM TRANG BÀI HỌC (TỪ TRANG ${chk
   }
 
   // ================= TAB NAVIGATION LOGIC =================
+  function switchTab(targetId) {
+    if (!targetId) return;
+    let cleanId = targetId;
+    if (cleanId === 'mindmap') cleanId = 'tab-mindmap';
+    if (cleanId === 'summary') cleanId = 'tab-summary';
+    if (cleanId === 'quiz') cleanId = 'tab-quiz';
+    if (cleanId === 'beam' || cleanId === 'flashcard') cleanId = 'tab-beam';
+    if (!cleanId.startsWith('tab-')) cleanId = 'tab-' + cleanId;
+
+    // Update Tab Buttons UI
+    dom.tabButtons.forEach(b => {
+      const bTab = b.getAttribute('data-tab');
+      if (bTab === cleanId) {
+        b.classList.add('active', 'text-indigo-600', 'border-indigo-600', 'bg-white', 'shadow-xs');
+        b.classList.remove('border-transparent', 'text-slate-500');
+      } else {
+        b.classList.remove('active', 'text-indigo-600', 'border-indigo-600', 'bg-white', 'shadow-xs');
+        b.classList.add('border-transparent', 'text-slate-500');
+      }
+    });
+
+    // Update Panes
+    dom.tabPanes.forEach(pane => {
+      if (pane.id === cleanId) {
+        pane.classList.remove('hidden');
+      } else {
+        pane.classList.add('hidden');
+      }
+    });
+
+    // If switched to Mindmap and instance exists, fit & center view
+    if (cleanId === 'tab-mindmap' && state.markmapInstance) {
+      setTimeout(() => state.markmapInstance.fit && state.markmapInstance.fit(), 80);
+      setTimeout(() => state.markmapInstance.fit && state.markmapInstance.fit(), 250);
+      setTimeout(() => state.markmapInstance.fit && state.markmapInstance.fit(), 450);
+    }
+
+    // If switched to Summary, trigger KaTeX math rendering immediately
+    if (cleanId === 'tab-summary') {
+      const sumEl = dom.tabSummary || document.getElementById('tab-summary');
+      if (sumEl) {
+        setTimeout(() => renderAllMath(sumEl), 40);
+        setTimeout(() => renderAllMath(sumEl), 200);
+      }
+    }
+  }
+  window.switchTab = switchTab;
+
   dom.tabButtons.forEach(btn => {
     btn.addEventListener('click', () => {
       const targetId = btn.getAttribute('data-tab');
-      
-      // Update Tab Buttons UI
-      dom.tabButtons.forEach(b => {
-        b.classList.remove('active', 'text-indigo-600', 'border-indigo-600', 'bg-white', 'shadow-xs');
-        b.classList.add('border-transparent', 'text-slate-500');
-      });
-      btn.classList.add('active', 'text-indigo-600', 'border-indigo-600', 'bg-white', 'shadow-xs');
-      btn.classList.remove('border-transparent', 'text-slate-500');
-
-      // Update Panes
-      dom.tabPanes.forEach(pane => {
-        if (pane.id === targetId) {
-          pane.classList.remove('hidden');
-        } else {
-          pane.classList.add('hidden');
-        }
-      });
-
-      // If switched to Mindmap and instance exists, fit & center view
-      if (targetId === 'tab-mindmap' && state.markmapInstance) {
-        setTimeout(() => state.markmapInstance.fit(), 80);
-        setTimeout(() => state.markmapInstance.fit(), 250);
-        setTimeout(() => state.markmapInstance.fit(), 450);
-      }
-
-      // If switched to Summary, trigger KaTeX math rendering immediately
-      if (targetId === 'tab-summary') {
-        const sumEl = dom.tabSummary || document.getElementById('tab-summary');
-        if (sumEl) {
-          setTimeout(() => renderAllMath(sumEl), 40);
-          setTimeout(() => renderAllMath(sumEl), 200);
-        }
-      }
+      switchTab(targetId);
     });
   });
 
@@ -3626,8 +3642,17 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     }
   });
 
+  const btnCameraAction = document.getElementById('btn-camera-action');
+  if (btnCameraAction) {
+    btnCameraAction.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      dom.cameraInput.click();
+    });
+  }
+
   dom.dropZone.addEventListener('click', (e) => {
-    if (e.target.closest('#camera-input') || e.target.closest('label[for="camera-input"]')) {
+    if (e.target.closest('#camera-input') || e.target.closest('#btn-camera-action') || e.target.closest('label[for="camera-input"]')) {
       return;
     }
     if (e.target === dom.fileInput) return;
