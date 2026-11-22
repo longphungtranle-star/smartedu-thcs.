@@ -1,5 +1,5 @@
 // sw.js - Service Worker cho SmartEdu THCS (Hỗ trợ PWA & Bộ nhớ đệm Ngoại tuyến)
-const CACHE_NAME = 'smartedu-thcs-v10-mindmap-katex';
+const CACHE_NAME = 'smartedu-thcs-v1';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -7,9 +7,7 @@ const ASSETS_TO_CACHE = [
   './app.js',
   './sample_data.js',
   './manifest.json',
-  './icon.svg',
-  './icon-192.png',
-  './icon-512.png'
+  './icon.svg'
 ];
 
 // Cài đặt Service Worker và lưu đệm tài nguyên
