@@ -1,5 +1,5 @@
 // sw.js - Service Worker cho SmartEdu THCS (Hỗ trợ PWA & Bộ nhớ đệm Ngoại tuyến)
-const CACHE_NAME = 'smartedu-thcs-v7-clean-auth';
+const CACHE_NAME = 'smartedu-thcs-v8-responsive-header';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

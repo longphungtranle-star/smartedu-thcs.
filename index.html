@@ -51,7 +51,7 @@
   <!-- Google Firebase Firestore Cloud Database SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-  <script src="firebase_config.js?v=20261122_18"></script>
+  <script src="firebase_config.js?v=20261122_19"></script>
   
   <!-- Early Safety Handlers: đảm bảo 100% các nút auth/admin hoạt động tức thì từ mili-giây đầu tiên -->
   <script>
@@ -166,42 +166,42 @@
 
         <!-- Action Buttons for Mobile & Tablet (< lg) -->
         <div class="flex items-center gap-1 sm:gap-1.5 lg:hidden shrink-0">
-          <button id="btn-quick-guide-mobile" onclick="window.toggleUserGuide && window.toggleUserGuide()" class="px-2 py-1 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg flex items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Xem hướng dẫn sử dụng nhanh">
+          <button id="btn-quick-guide-mobile" onclick="window.toggleUserGuide && window.toggleUserGuide()" class="px-1.5 sm:px-2 py-1 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg flex items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Xem hướng dẫn sử dụng nhanh">
             <i class="fa-solid fa-circle-question text-indigo-600 text-xs"></i>
-            <span class="text-[11px]">HD</span>
+            <span class="hidden sm:inline text-[11px]">HD</span>
           </button>
-          <button id="btn-install-pwa-mobile" class="hidden px-2 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Cài ứng dụng SmartEdu lên màn hình chính điện thoại">
+          <button id="btn-install-pwa-mobile" class="hidden px-1.5 sm:px-2 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Cài ứng dụng SmartEdu lên màn hình chính điện thoại">
             <i class="fa-solid fa-download text-indigo-600 text-xs"></i>
-            <span class="text-[11px]">Cài</span>
+            <span class="hidden sm:inline text-[11px]">Cài</span>
           </button>
-          <button id="btn-share-qr-mobile" class="px-2 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg flex items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Mã QR chia sẻ & quét trải nghiệm trên điện thoại">
+          <button id="btn-share-qr-mobile" class="px-1.5 sm:px-2 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg flex items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Mã QR chia sẻ & quét trải nghiệm trên điện thoại">
             <i class="fa-solid fa-qrcode text-indigo-600 text-xs"></i>
-            <span class="text-[11px]">QR</span>
+            <span class="hidden sm:inline text-[11px]">QR</span>
           </button>
-          <button id="open-key-modal-btn" onclick="window.openKeyModal && window.openKeyModal()" class="px-2 py-1 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg flex items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Mở quản lý kho API Key">
+          <button id="open-key-modal-btn" onclick="window.openKeyModal && window.openKeyModal()" class="px-1.5 sm:px-2 py-1 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg flex items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Mở quản lý kho API Key">
             <span class="relative flex h-2 w-2">
               <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
-            <span class="text-[11px] font-bold text-slate-800">Key</span>
+            <span class="hidden sm:inline text-[11px] font-bold text-slate-800">Key</span>
             <i class="fa-solid fa-rotate text-slate-400 text-[9px]"></i>
           </button>
-          <button id="btn-user-account-mobile" onclick="window.openUserAccountModal && window.openUserAccountModal()" class="px-2 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg flex items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Tài khoản học sinh & Theo dõi tiến độ">
+          <button id="btn-user-account-mobile" onclick="window.openUserAccountModal && window.openUserAccountModal()" class="px-1.5 sm:px-2 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg flex items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Tài khoản học sinh & Theo dõi tiến độ">
             <span id="user-avatar-mobile" class="text-xs">👨‍🎓</span>
-            <span id="user-name-mobile" class="text-[11px] font-bold max-w-[64px] truncate">Hồ sơ</span>
+            <span id="user-name-mobile" class="hidden sm:inline text-[11px] font-bold max-w-[64px] truncate">Hồ sơ</span>
           </button>
-          <button id="btn-super-admin-mobile" onclick="window.openSuperAdminModal && window.openSuperAdminModal()" class="hidden px-2 py-1 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Bảng điều khiển Quản trị Toàn trường">
+          <button id="btn-super-admin-mobile" onclick="window.openSuperAdminModal && window.openSuperAdminModal()" class="hidden px-1.5 sm:px-2 py-1 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Bảng điều khiển Quản trị Toàn trường">
             <span class="text-xs">👑</span>
-            <span class="text-[11px] font-bold">Admin</span>
+            <span class="hidden sm:inline text-[11px] font-bold">Admin</span>
           </button>
-          <button id="btn-logout-mobile" onclick="window.logoutUser && window.logoutUser()" class="px-1.5 py-1 text-xs font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 rounded-lg flex items-center justify-center shadow-xs shrink-0 cursor-pointer active:scale-95" title="Đăng xuất tài khoản">
-            <i class="fa-solid fa-arrow-right-from-bracket text-[11px]"></i>
+          <button id="btn-logout-mobile" onclick="window.logoutUser && window.logoutUser()" class="px-1.5 sm:px-2 py-1 text-xs font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 rounded-lg flex items-center justify-center shadow-xs shrink-0 cursor-pointer active:scale-95" title="Đăng xuất tài khoản">
+            <i class="fa-solid fa-arrow-right-from-bracket text-rose-500 text-[11px]"></i>
           </button>
         </div>
       </div>
 
       <!-- Sample Lessons Row (and Desktop Actions) -->
-      <div class="flex items-center justify-start lg:justify-end gap-1.5 sm:gap-2 w-full lg:w-auto overflow-x-auto no-scrollbar py-0.5 touch-scroll-x border-t border-slate-100 lg:border-t-0 pt-1.5 lg:pt-0">
+      <div class="flex items-center justify-start lg:justify-end gap-1.5 sm:gap-2 w-full max-w-full lg:w-auto overflow-x-auto no-scrollbar py-0.5 touch-scroll-x border-t border-slate-100 lg:border-t-0 pt-1.5 lg:pt-0">
         <!-- Sample Lessons Buttons for Cấp 2 -->
         <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
           <button id="load-sample-toan9-btn" onclick="window.loadSpecificLessonById && window.loadSpecificLessonById('toan9')" class="shrink-0 px-2 sm:px-2.5 py-1.5 text-xs font-bold text-indigo-900 bg-indigo-100 hover:bg-indigo-200 border border-indigo-300 rounded-lg flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap" title="Nạp bài mẫu Toán 9: Hệ hai phương trình bậc nhất hai ẩn">
@@ -2336,6 +2336,6 @@
   </footer>
 
   <!-- Main App Script -->
-  <script src="app.js?v=20261122_18"></script>
+  <script src="app.js?v=20261122_19"></script>
 </body>
 </html>
