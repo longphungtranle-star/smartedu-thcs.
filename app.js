@@ -6840,19 +6840,47 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     }
   }
 
+  // Lọc bỏ tài khoản mẫu / dữ liệu bài mẫu (Toán 9, KHTN 9, longphung9a13...) để Super Admin chỉ thấy dữ liệu thực tế
+  function isAdminSampleUser(u) {
+    if (!u) return true;
+    const uname = (u.username || '').trim().toLowerCase();
+    const name = (u.profile?.name || '').toLowerCase();
+    if (uname === 'admin' || uname === 'longphung9a13' || uname.startsWith('demo') || uname.startsWith('test')) return true;
+    if (name.includes('bài mẫu') || name.includes('mẫu') || name.includes('demo') || name.includes('long phụng')) return true;
+    return false;
+  }
+
+  function isAdminSampleItem(item) {
+    if (!item) return true;
+    const author = (item.authorUsername || item.studentUsername || '').trim().toLowerCase();
+    if (author === 'longphung9a13' || author === 'admin' || author.startsWith('demo') || author.startsWith('test')) return true;
+    const title = (item.title || '').toLowerCase();
+    if (title.includes('bài mẫu') || title.includes('mẫu toán') || title.includes('mẫu khtn') || 
+        title.includes('hệ hai phương trình') || title.includes('định luật ôm') || title.includes('demo')) {
+      return true;
+    }
+    return false;
+  }
+
   // Cập nhật thẻ số liệu thống kê
   function updateAdminStats() {
-    const students = cachedAllAdminUsers.filter(u => u.username !== 'admin');
+    const students = cachedAllAdminUsers.filter(u => !isAdminSampleUser(u));
     let totalMindmaps = 0;
     let totalSummaries = 0;
     let totalScores = 0;
     let totalFlashcards = 0;
 
     cachedAllAdminUsers.forEach(u => {
-      totalMindmaps += (u.mindmaps?.length || 0);
-      totalSummaries += (u.summaries?.length || 0);
-      totalScores += (u.scores?.length || 0);
-      totalFlashcards += (u.flashcards?.length || 0);
+      if (isAdminSampleUser(u)) return;
+      const validMm = (u.mindmaps || []).filter(mm => !isAdminSampleItem(mm));
+      const validSm = (u.summaries || []).filter(sm => !isAdminSampleItem(sm));
+      const validSc = (u.scores || []).filter(sc => !isAdminSampleItem(sc));
+      const validFc = (u.flashcards || []).filter(fc => !isAdminSampleItem(fc));
+
+      totalMindmaps += validMm.length;
+      totalSummaries += validSm.length;
+      totalScores += validSc.length;
+      totalFlashcards += validFc.length;
     });
 
     if (adminStatUsers) adminStatUsers.textContent = students.length;
@@ -6905,7 +6933,7 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     if (!adminUsersList) return;
     const query = (adminSearchUsers?.value || '').trim().toLowerCase();
     const students = cachedAllAdminUsers.filter(u => {
-      if (u.username === 'admin') return false;
+      if (isAdminSampleUser(u)) return false;
       if (!query) return true;
       const name = (u.profile?.name || '').toLowerCase();
       const uname = (u.username || '').toLowerCase();
@@ -6931,10 +6959,10 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
 
     adminUsersList.innerHTML = students.map((u, idx) => {
       const p = u.profile || {};
-      const mmCount = u.mindmaps?.length || 0;
-      const smCount = u.summaries?.length || 0;
-      const scCount = u.scores?.length || 0;
-      const fcCount = u.flashcards?.length || 0;
+      const mmCount = (u.mindmaps || []).filter(mm => !isAdminSampleItem(mm)).length;
+      const smCount = (u.summaries || []).filter(sm => !isAdminSampleItem(sm)).length;
+      const scCount = (u.scores || []).filter(sc => !isAdminSampleItem(sc)).length;
+      const fcCount = (u.flashcards || []).filter(fc => !isAdminSampleItem(fc)).length;
       return `
         <div class="bg-white p-3.5 rounded-2xl border border-slate-200 hover:border-indigo-200 hover:shadow-xs transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div class="flex items-center gap-3 min-w-0">
@@ -6982,8 +7010,10 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     
     let allMindmaps = [];
     cachedAllAdminUsers.forEach(u => {
+      if (isAdminSampleUser(u)) return;
       if (u.mindmaps && Array.isArray(u.mindmaps)) {
         u.mindmaps.forEach(mm => {
+          if (isAdminSampleItem(mm)) return;
           allMindmaps.push({
             ...mm,
             authorUsername: u.username,
@@ -7053,8 +7083,10 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
 
     let allSummaries = [];
     cachedAllAdminUsers.forEach(u => {
+      if (isAdminSampleUser(u)) return;
       if (u.summaries && Array.isArray(u.summaries)) {
         u.summaries.forEach(sm => {
+          if (isAdminSampleItem(sm)) return;
           allSummaries.push({
             ...sm,
             authorUsername: u.username,
@@ -7125,8 +7157,10 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
 
     let allScores = [];
     cachedAllAdminUsers.forEach(u => {
+      if (isAdminSampleUser(u)) return;
       if (u.scores && Array.isArray(u.scores)) {
         u.scores.forEach(sc => {
+          if (isAdminSampleItem(sc)) return;
           allScores.push({
             ...sc,
             studentUsername: u.username,
@@ -7218,8 +7252,10 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
 
     let allFlashcards = [];
     cachedAllAdminUsers.forEach(u => {
+      if (isAdminSampleUser(u)) return;
       if (u.flashcards && Array.isArray(u.flashcards)) {
         u.flashcards.forEach(fc => {
+          if (isAdminSampleItem(fc)) return;
           allFlashcards.push({
             ...fc,
             authorUsername: u.username,
@@ -7286,8 +7322,10 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
   window.exportAdminScoresCSV = function() {
     let allScores = [];
     cachedAllAdminUsers.forEach(u => {
+      if (isAdminSampleUser(u)) return;
       if (u.scores && Array.isArray(u.scores)) {
         u.scores.forEach(sc => {
+          if (isAdminSampleItem(sc)) return;
           allScores.push({
             ...sc,
             studentUsername: u.username,
@@ -7335,8 +7373,10 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
 
     let allScores = [];
     cachedAllAdminUsers.forEach(u => {
+      if (isAdminSampleUser(u)) return;
       if (u.scores && Array.isArray(u.scores)) {
         u.scores.forEach(sc => {
+          if (isAdminSampleItem(sc)) return;
           allScores.push({
             ...sc,
             studentName: u.profile?.name || u.username,
