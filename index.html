@@ -378,9 +378,7 @@
 
       <!-- Mode 1: File & Image Upload Area -->
       <div id="drop-zone-container" class="mt-4">
-        <!-- Hidden file inputs đặt an toàn bên ngoài để tránh xung đột sự kiện click -->
-        <input type="file" id="file-input" class="hidden" accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*" multiple>
-        <input type="file" id="camera-input" class="hidden" accept="image/*,.pdf,.docx,.doc" capture="environment" multiple>
+        <input type="file" id="file-input" class="hidden" accept=".docx,.doc,.pdf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*" multiple>
 
         <div id="drop-zone" class="border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/30 hover:bg-indigo-50/60 rounded-xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-3">
           <div class="w-14 h-14 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-2xl shadow-inner">
@@ -389,7 +387,7 @@
 
           <div>
             <p class="text-xs sm:text-sm font-semibold text-slate-800">
-              Kéo thả một hoặc <span class="text-indigo-600 hover:underline">bấm vào đây để chọn tài liệu Word / PDF / Ảnh bài học</span>
+              Kéo thả một hoặc <span class="text-indigo-600 hover:underline">chọn nhiều tài liệu / ảnh bài học cùng lúc</span>
             </p>
             <p class="text-xs text-slate-500 mt-1 flex flex-wrap items-center justify-center gap-1.5">
               <span class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200 text-[11px]"><i class="fa-solid fa-file-word"></i> Nhiều file Word</span>
@@ -400,10 +398,11 @@
 
           <!-- Mobile Camera Quick Action -->
           <div class="pt-2 flex items-center gap-2" onclick="event.stopPropagation()">
-            <label for="camera-input" class="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95" title="Dành cho điện thoại: Mở trực tiếp camera chụp bài tập">
+            <label for="camera-input" class="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg cursor-pointer flex items-center gap-1.5 shadow-xs active:scale-95">
               <i class="fa-solid fa-camera text-indigo-600"></i>
-              <span>Chụp ảnh bài học (Camera điện thoại)</span>
+              <span>Chụp ảnh bài học / hình vẽ ngay</span>
             </label>
+            <input type="file" id="camera-input" class="hidden" accept="image/*" capture="environment">
           </div>
         </div>
       </div>
@@ -2344,6 +2343,6 @@
   </footer>
 
   <!-- Main App Script -->
-  <script src="app.js?v=20261122_25"></script>
+  <script src="app.js?v=20261122_26"></script>
 </body>
 </html>
