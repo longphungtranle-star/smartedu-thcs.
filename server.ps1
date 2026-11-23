@@ -1,42 +1,12 @@
-﻿# SmartEdu THCS - Local Development Server with Multi-Port Fallback & Auto-Launch
-$candidatePorts = @(8080, 8081, 8082, 8083, 3000, 5000, 8000, 8888)
+$port = 8080
 $baseDir = $PSScriptRoot
-$listener = $null
-$port = $null
-
-foreach ($p in $candidatePorts) {
-    try {
-        $test = New-Object System.Net.HttpListener
-        $test.Prefixes.Add("http://localhost:$p/")
-        $test.Start()
-        $listener = $test
-        $port = $p
-        break
-    } catch {
-        if ($test -ne $null) {
-            try { $test.Close() } catch {}
-        }
-    }
-}
-
-if ($null -eq $listener) {
-    Write-Host "[LỖI] Không thể mở bất kỳ cổng nào trong danh sách: $($candidatePorts -join ', ')." -ForegroundColor Red
-    Write-Host "Vui lòng kiểm tra và đóng các ứng dụng hoặc server đang chiếm cổng rồi thử lại." -ForegroundColor Yellow
-    exit 1
-}
-
-Write-Host "==========================================================" -ForegroundColor Green
-Write-Host "  SmartEdu THCS Local Server đang hoạt động tại:         " -ForegroundColor Green
-Write-Host "  👉 URL: http://localhost:$port/                          " -ForegroundColor Cyan
-Write-Host "  (Nhấn biểu tượng Thùng Rác 🗑️ hoặc đóng Terminal để tắt)" -ForegroundColor Yellow
-Write-Host "==========================================================" -ForegroundColor Green
-
-# Tự động mở trình duyệt nếu chưa mở
-try {
-    Start-Process "http://localhost:$port/"
-} catch {}
+$listener = New-Object System.Net.HttpListener
+$listener.Prefixes.Add("http://localhost:$port/")
 
 try {
+    $listener.Start()
+    Write-Host "SmartEdu THCS Web Server is running at http://localhost:$port/"
+    
     while ($listener.IsListening) {
         $context = $listener.GetContext()
         $request = $context.Request
@@ -116,10 +86,5 @@ try {
         $response.Close()
     }
 } finally {
-    if ($listener -ne $null) {
-        try {
-            if ($listener.IsListening) { $listener.Stop() }
-            $listener.Close()
-        } catch {}
-    }
+    $listener.Stop()
 }

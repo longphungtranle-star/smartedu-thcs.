@@ -1,5 +1,5 @@
 // sw.js - Service Worker cho SmartEdu THCS (Hỗ trợ PWA & Bộ nhớ đệm Ngoại tuyến)
-const CACHE_NAME = 'smartedu-thcs-v25-fix-429-quota';
+const CACHE_NAME = 'smartedu-thcs-v22-strict-user-isolation';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -9,8 +9,7 @@ const ASSETS_TO_CACHE = [
   './manifest.json',
   './icon.svg',
   './icon-192.png',
-  './icon-512.png',
-  './firebase_config.js'
+  './icon-512.png'
 ];
 
 // Cài đặt Service Worker và lưu đệm tài nguyên

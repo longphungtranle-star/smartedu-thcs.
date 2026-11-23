@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // API Key Rotation Pool
     apiKeys: [], // [{ key: string, status: 'ready'|'rate_limited'|'error', successCount: number }]
     currentKeyIndex: 0,
-    selectedModel: 'gemini-1.5-flash',
+    selectedModel: 'gemini-3.5-flash-lite',
 
     // User Accounts & Progress Tracking
     accounts: [],
@@ -296,12 +296,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ================= API KEY ROTATION POOL LOGIC =================
-  // Thứ tự ưu tiên mô hình chính thức của Google Gemini v1beta (Hạn ngạch cao nhất, phản xạ nhanh)
+  // Đưa Gemini 3.5 Flash Lite lên số 1: Tối ưu thông lượng cao nhất, tạo đề thi & trích xuất siêu nhanh
   const CASCADE_MODELS = [
-    'gemini-1.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash-8b',
-    'gemini-1.5-pro'
+    'gemini-3.5-flash-lite',    // Ưu tiên số 1: Tạo đề nhanh nhất, chuẩn xác nhất, thông lượng cao
+    'gemini-flash-lite-latest' // Dự phòng cấp 1: Bản cập nhật flash-lite mới nhất
   ];
 
   function getModelCandidates(preferred) {
@@ -444,17 +442,17 @@ document.addEventListener('DOMContentLoaded', () => {
       if (storedModel && (storedModel === 'auto' || CASCADE_MODELS.includes(storedModel))) {
         state.selectedModel = storedModel;
       } else {
-        state.selectedModel = 'gemini-1.5-flash';
-        localStorage.setItem('smartedu_selected_model', 'gemini-1.5-flash');
+        state.selectedModel = 'gemini-flash-lite-latest';
+        localStorage.setItem('smartedu_selected_model', 'gemini-flash-lite-latest');
       }
       if (dom.selectGeminiModel) {
         dom.selectGeminiModel.value = state.selectedModel;
       }
 
-      // Tự động khôi phục key về trạng thái sẵn sàng với mô hình chính thức
+      // Tự động khôi phục key về trạng thái sẵn sàng với mô hình Flash Lite Siêu Tốc
       state.apiKeys.forEach(k => {
         k.status = 'ready';
-        k.workingModel = 'gemini-1.5-flash';
+        k.workingModel = 'gemini-flash-lite-latest';
         k.errorDetail = '';
       });
       localStorage.setItem('smartedu_api_keys', JSON.stringify(state.apiKeys));
@@ -472,19 +470,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateKeyPoolUI() {
-    const now = Date.now();
-    let hasRecovered = false;
-    state.apiKeys.forEach(k => {
-      if (k.status === 'rate_limited' && k.rateLimitedUntil && now > k.rateLimitedUntil) {
-        k.status = 'ready';
-        k.errorDetail = '';
-        hasRecovered = true;
-      }
-    });
-    if (hasRecovered) saveApiKeysToStorage();
-
     const total = state.apiKeys.length;
-    const activeKeys = state.apiKeys.filter(k => k.status !== 'error' && (k.status !== 'rate_limited' || (k.rateLimitedUntil && now > k.rateLimitedUntil)));
+    const activeKeys = state.apiKeys.filter(k => k.status !== 'error' && k.status !== 'rate_limited');
     
     dom.keyPoolCount.textContent = total;
     if (total === 0) {
@@ -789,14 +776,11 @@ document.addEventListener('DOMContentLoaded', () => {
             continue;
           }
 
-          // Rate Limit (429): Key này hết ngạch -> tự động phục hồi sau 30s & chuyển key tiếp theo
+          // Rate Limit (429): Key này hết ngạch -> xoay sang Key kế tiếp
           if (response.status === 429) {
             keyItem.status = 'rate_limited';
-            keyItem.rateLimitedUntil = Date.now() + 30000; // Tự động phục hồi sau 30 giây
             saveApiKeysToStorage();
-            updateKeyPoolUI();
             showToast(`Key #${keyIndex + 1} chạm giới hạn ngạch 429. Đang chuyển sang key tiếp theo...`, 'warning');
-            await new Promise(r => setTimeout(r, 1200)); // Tạm dừng 1.2s tránh spam dồn ngạch theo chùm
             break; // sang key tiếp theo trong bể xoay vòng
           }
 
@@ -5105,10 +5089,19 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
 
   // ================= CÔ LẬP VÀ ĐỒNG BỘ DỮ LIỆU RIÊNG TỪNG TÀI KHOẢN =================
 
-  // Nạp toàn bộ dữ liệu CỦA RIÊNG HỌC SINH ĐANG ĐĂNG NHẬP lên giao diện (không lẫn lộn người khác)
+  // Nạp toàn bộ dữ liệu CỦA RIÊNG HỌC SINH ĐANG ĐĂNG NHẬP lên giao diện (cô lập 100%, không lẫn lộn tài khoản khác)
   function applyUserSession(user) {
     if (!user) return;
+
+    // BƯỚC 1: Xóa trắng toàn bộ giao diện và bộ nhớ tạm của phiên trước đó
+    resetUIForGuest();
+
+    // BƯỚC 2: Gán người dùng hiện tại và chuẩn hóa các mảng dữ liệu riêng biệt
     state.currentUser = user;
+    user.scores = Array.isArray(user.scores) ? user.scores : [];
+    user.mindmaps = Array.isArray(user.mindmaps) ? user.mindmaps : [];
+    user.summaries = Array.isArray(user.summaries) ? user.summaries : [];
+    user.flashcards = Array.isArray(user.flashcards) ? user.flashcards : [];
 
     // Đóng Auth Gate NGAY LẬP TỨC ở đầu hàm
     const authGate = document.getElementById('modal-auth-gate');
@@ -5117,10 +5110,6 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
       authGate.classList.add('hidden');
       authGate.classList.remove('flex');
     }
-    user.scores = user.scores || [];
-    user.mindmaps = user.mindmaps || [];
-    user.summaries = user.summaries || [];
-    user.flashcards = user.flashcards || [];
 
     // 1. Cập nhật thanh tiêu đề Header
     updateHeaderAccountUI();
@@ -5149,6 +5138,7 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
       state.mindmapMarkdown = '';
       state.markmapInstance = null;
       if (dom.markmapSvg) dom.markmapSvg.innerHTML = '';
+      if (dom.markdownInput) dom.markdownInput.value = '';
       if (dom.mindmapEmptyState) dom.mindmapEmptyState.classList.remove('hidden');
     }
 
@@ -5158,6 +5148,11 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
       renderSummary(latestSum.summaryData || latestSum.content || latestSum);
     } else {
       state.summaryData = null;
+      if (dom.listTakeaways) dom.listTakeaways.innerHTML = '';
+      if (dom.tableTermsBody) dom.tableTermsBody.innerHTML = '';
+      if (dom.feynmanText) dom.feynmanText.textContent = '';
+      if (dom.mnemonicsText) dom.mnemonicsText.textContent = '';
+      if (dom.spacedList) dom.spacedList.innerHTML = '';
       if (dom.summaryEmptyState) dom.summaryEmptyState.classList.remove('hidden');
       if (dom.sectionTakeaways) dom.sectionTakeaways.classList.add('hidden');
       if (dom.sectionTerms) dom.sectionTerms.classList.add('hidden');
@@ -5166,6 +5161,10 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
 
     // Tab 3: Khảo thí & Chấm điểm (Xóa trắng kết quả phiên trước, sẵn sàng cho bài thi mới)
     state.quizData = [];
+    state.quizUserAnswers = {};
+    state.quizSubmitted = false;
+    if (dom.quizQuestionsContainer) dom.quizQuestionsContainer.innerHTML = '';
+    if (dom.quizResultSummary) dom.quizResultSummary.innerHTML = '';
     if (dom.interactiveQuizContainer) dom.interactiveQuizContainer.classList.add('hidden');
     if (dom.quizResultCard) dom.quizResultCard.classList.add('hidden');
     if (dom.quizSubmitBar) dom.quizSubmitBar.classList.add('hidden');
@@ -5177,35 +5176,25 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
       renderBeams(latestBm.cards || latestBm.flashcards || latestBm);
     } else {
       state.beamData = [];
-      if (dom.beamCardsGrid) dom.beamCardsGrid.classList.add('hidden');
+      if (dom.beamCardsGrid) {
+        dom.beamCardsGrid.innerHTML = '';
+        dom.beamCardsGrid.classList.add('hidden');
+      }
+      if (dom.printableBeamsGrid) dom.printableBeamsGrid.innerHTML = '';
+      if (dom.printableBeamsContainer) dom.printableBeamsContainer.classList.add('hidden');
+      if (dom.beamMasteryCount) dom.beamMasteryCount.textContent = '0/0';
+      if (dom.beamMasteryBar) dom.beamMasteryBar.style.width = '0%';
       if (dom.beamEmptyState) dom.beamEmptyState.classList.remove('hidden');
     }
 
-    // Reset toàn bộ tài liệu đã nạp ở khung input của phiên làm việc trước
-    state.uploadedFiles = [];
+    // Reset tài liệu tải lên tạm thời
     state.currentDoc = { title: '', text: '', type: 'text', imageBase64: null, images: [], wordCount: 0 };
-    if (dom.uploadedFilesContainer) dom.uploadedFilesContainer.classList.add('hidden');
-    if (dom.uploadedFilesItems) dom.uploadedFilesItems.innerHTML = '';
-    if (dom.uploadedFilesCount) dom.uploadedFilesCount.textContent = '0';
+    state.uploadedFiles = [];
     if (dom.docPreviewCard) dom.docPreviewCard.classList.add('hidden');
-    if (dom.btnOcrImage) dom.btnOcrImage.classList.add('hidden');
+    if (dom.docTitle) dom.docTitle.textContent = '';
+    if (dom.docMeta) dom.docMeta.textContent = '';
     if (dom.rawTextInput) dom.rawTextInput.value = '';
-    if (dom.extractedTextArea) dom.extractedTextArea.value = '';
     if (dom.fileInput) dom.fileInput.value = '';
-    if (dom.cameraInput) dom.cameraInput.value = '';
-    const addMoreF1 = document.getElementById('btn-add-more-files-input');
-    if (addMoreF1) addMoreF1.value = '';
-    const addMoreC1 = document.getElementById('btn-add-more-camera-input');
-    if (addMoreC1) addMoreC1.value = '';
-
-    // Dừng âm thanh và bộ đếm thời gian
-    stopAllSpeech();
-    if (state.quizTimerInterval) {
-      clearInterval(state.quizTimerInterval);
-      state.quizTimerInterval = null;
-    }
-    state.quizUserAnswers = {};
-    state.quizSubmitted = false;
 
     // Cập nhật lại danh sách Thư viện trong DOM chuẩn xác theo tài khoản này
     renderMindmapLibrary();
@@ -5220,79 +5209,91 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     }
   }
 
-  // Xóa trắng toàn bộ giao diện và dữ liệu trên màn hình khi khách chưa đăng nhập / khi đăng xuất
+  // Xóa trắng toàn bộ giao diện và dữ liệu trên màn hình khi khách chưa đăng nhập / khi chuyển đổi tài khoản
   function resetUIForGuest() {
     state.currentUser = null;
     state.mindmapMarkdown = '';
+    state.markmapInstance = null;
     state.summaryData = null;
     state.quizData = [];
+    state.quizUserAnswers = {};
+    state.quizSubmitted = false;
     state.beamData = [];
+    state.focusBeamIndex = 0;
     state.currentDoc = { title: '', text: '', type: 'text', imageBase64: null, images: [], wordCount: 0 };
     state.uploadedFiles = [];
 
-    // Xóa sạch toàn bộ tài liệu đã nạp ở khung input
-    if (dom.uploadedFilesContainer) dom.uploadedFilesContainer.classList.add('hidden');
-    if (dom.uploadedFilesItems) dom.uploadedFilesItems.innerHTML = '';
-    if (dom.uploadedFilesCount) dom.uploadedFilesCount.textContent = '0';
-    if (dom.docPreviewCard) dom.docPreviewCard.classList.add('hidden');
-    if (dom.btnOcrImage) dom.btnOcrImage.classList.add('hidden');
-    if (dom.rawTextInput) dom.rawTextInput.value = '';
-    if (dom.extractedTextArea) dom.extractedTextArea.value = '';
-    if (dom.markdownInput) dom.markdownInput.value = '';
-    if (dom.fileInput) dom.fileInput.value = '';
-    if (dom.cameraInput) dom.cameraInput.value = '';
-    const addMoreF2 = document.getElementById('btn-add-more-files-input');
-    if (addMoreF2) addMoreF2.value = '';
-    const addMoreC2 = document.getElementById('btn-add-more-camera-input');
-    if (addMoreC2) addMoreC2.value = '';
-
-    // Dừng âm thanh và bộ đếm thời gian
-    stopAllSpeech();
-    if (state.quizTimerInterval) {
-      clearInterval(state.quizTimerInterval);
-      state.quizTimerInterval = null;
-    }
-    state.quizUserAnswers = {};
-    state.quizSubmitted = false;
-
     // Tab 1: Sơ đồ tư duy
-    state.markmapInstance = null;
     if (dom.markmapSvg) dom.markmapSvg.innerHTML = '';
+    if (dom.markdownInput) dom.markdownInput.value = '';
     if (dom.mindmapEmptyState) dom.mindmapEmptyState.classList.remove('hidden');
     if (mindmapLibraryList) mindmapLibraryList.innerHTML = '';
     if (mindmapLibraryEmpty) mindmapLibraryEmpty.classList.remove('hidden');
-    updateSavedMindmapsCount();
+    const mmCountEl = document.getElementById('saved-mindmaps-count');
+    if (mmCountEl) mmCountEl.textContent = '0';
+    if (dom.savedMindmapsCount) dom.savedMindmapsCount.textContent = '0';
+    if (mindmapLibraryStatus) mindmapLibraryStatus.textContent = 'Đã lưu 0 sơ đồ';
 
     // Tab 2: Tóm tắt
-    if (dom.summaryEmptyState) dom.summaryEmptyState.classList.remove('hidden');
-    if (dom.sectionTakeaways) dom.sectionTakeaways.classList.add('hidden');
-    if (dom.sectionTerms) dom.sectionTerms.classList.add('hidden');
-    if (dom.sectionStrategies) dom.sectionStrategies.classList.add('hidden');
     if (dom.listTakeaways) dom.listTakeaways.innerHTML = '';
     if (dom.tableTermsBody) dom.tableTermsBody.innerHTML = '';
     if (dom.feynmanText) dom.feynmanText.textContent = '';
     if (dom.mnemonicsText) dom.mnemonicsText.textContent = '';
     if (dom.spacedList) dom.spacedList.innerHTML = '';
+    if (dom.sectionTakeaways) dom.sectionTakeaways.classList.add('hidden');
+    if (dom.sectionTerms) dom.sectionTerms.classList.add('hidden');
+    if (dom.sectionStrategies) dom.sectionStrategies.classList.add('hidden');
+    if (dom.summaryEmptyState) dom.summaryEmptyState.classList.remove('hidden');
     if (summaryLibraryList) summaryLibraryList.innerHTML = '';
     if (summaryLibraryEmpty) summaryLibraryEmpty.classList.remove('hidden');
-    updateSavedSummariesCount();
+    const sumCountEl = document.getElementById('saved-summaries-count');
+    if (sumCountEl) sumCountEl.textContent = '0';
+    if (summaryLibraryStatus) summaryLibraryStatus.textContent = 'Đã lưu 0 bài tóm tắt';
 
     // Tab 3: Khảo thí
+    if (dom.quizQuestionsContainer) dom.quizQuestionsContainer.innerHTML = '';
+    if (dom.quizResultSummary) dom.quizResultSummary.innerHTML = '';
     if (dom.interactiveQuizContainer) dom.interactiveQuizContainer.classList.add('hidden');
     if (dom.quizResultCard) dom.quizResultCard.classList.add('hidden');
     if (dom.quizSubmitBar) dom.quizSubmitBar.classList.add('hidden');
     if (dom.quizEmptyState) dom.quizEmptyState.classList.remove('hidden');
-    if (dom.quizQuestionsList) dom.quizQuestionsList.innerHTML = '';
 
     // Tab 4: Thẻ lật
     if (dom.beamCardsGrid) {
-      dom.beamCardsGrid.classList.add('hidden');
       dom.beamCardsGrid.innerHTML = '';
+      dom.beamCardsGrid.classList.add('hidden');
     }
+    if (dom.printableBeamsGrid) dom.printableBeamsGrid.innerHTML = '';
+    if (dom.printableBeamsContainer) dom.printableBeamsContainer.classList.add('hidden');
+    if (dom.beamMasteryCount) dom.beamMasteryCount.textContent = '0/0';
+    if (dom.beamMasteryBar) dom.beamMasteryBar.style.width = '0%';
     if (dom.beamEmptyState) dom.beamEmptyState.classList.remove('hidden');
     if (beamsLibraryList) beamsLibraryList.innerHTML = '';
     if (beamsLibraryEmpty) beamsLibraryEmpty.classList.remove('hidden');
-    updateSavedBeamsCount();
+    const bmCountEl = document.getElementById('saved-beams-count');
+    if (bmCountEl) bmCountEl.textContent = '0';
+    if (beamsLibraryStatus) beamsLibraryStatus.textContent = 'Đã lưu 0 bộ thẻ';
+
+    // Scratchpad tải file / text
+    if (dom.docPreviewCard) dom.docPreviewCard.classList.add('hidden');
+    if (dom.docTitle) dom.docTitle.textContent = '';
+    if (dom.docMeta) dom.docMeta.textContent = '';
+    if (dom.rawTextInput) dom.rawTextInput.value = '';
+    if (dom.fileInput) dom.fileInput.value = '';
+    const ocrStatus = document.getElementById('ocr-status-text');
+    if (ocrStatus) ocrStatus.textContent = '';
+
+    // Modal Hồ sơ cá nhân
+    if (accHistoryTableBody) accHistoryTableBody.innerHTML = '';
+    if (accHistoryEmpty) accHistoryEmpty.classList.remove('hidden');
+    if (accStatTotalTests) accStatTotalTests.textContent = '0';
+    if (accStatMaxScore) accStatMaxScore.textContent = '0.0';
+    if (accStatAvgScore) accStatAvgScore.textContent = '0.0';
+    if (accStatTotalCorrect) accStatTotalCorrect.textContent = '0';
+    if (accBadgesList) accBadgesList.innerHTML = '';
+    if (inputAccountId) inputAccountId.value = '';
+    if (accFormUsernameDisplay) accFormUsernameDisplay.textContent = '@...';
+    if (inputAccountName) inputAccountName.value = '';
 
     // Header
     updateHeaderAccountUI();
@@ -6115,6 +6116,7 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
 
       await window.SmartEduCloud.syncUserData(state.currentUser);
       updateSavedBeamsCount();
+      renderBeamsLibrary();
       showToast('Đã lưu bộ thẻ học tập vào tài khoản Web thành công!', 'success');
     });
   }
@@ -6546,11 +6548,6 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
                   ${s.toFixed(1)} đ
                 </span>
               </td>
-              <td class="p-2 sm:px-3 text-center whitespace-nowrap">
-                <button onclick="window.studentDeleteQuizScore && window.studentDeleteQuizScore('${item.id}', '${(item.title || '').replace(/'/g, "\\'")}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer active:scale-95" title="Xóa kết quả bài nộp này">
-                  <i class="fa-solid fa-trash-can text-xs"></i>
-                </button>
-              </td>
             </tr>
           `;
         }).join('');
@@ -6577,34 +6574,18 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
   // Mở Modal Hồ Sơ Cá Nhân (chỉ nạp dữ liệu của người dùng hiện tại)
   function openUserAccountModal(tab = 'progress') {
     if (!state.currentUser) {
-      if (typeof showToast === 'function') {
-        showToast('Vui lòng đăng nhập để xem Tiến độ & Lịch sử khảo thí!', 'info');
-      }
-      if (modalAuthGate) {
-        modalAuthGate.style.display = 'flex';
-        modalAuthGate.classList.remove('hidden');
-        modalAuthGate.classList.add('flex');
-        if (typeof switchAuthGateMode === 'function') switchAuthGateMode('login');
-      }
+      if (modalAuthGate) modalAuthGate.classList.remove('hidden');
       return;
     }
     renderAccountProgressUI();
     fillCurrentProfileForm();
     switchAccountModalTab(tab);
-    if (modalUserAccount) {
-      modalUserAccount.style.display = 'flex';
-      modalUserAccount.classList.remove('hidden');
-      modalUserAccount.classList.add('flex');
-    }
+    if (modalUserAccount) modalUserAccount.classList.remove('hidden');
   }
 
   // Đóng Modal Hồ Sơ Cá Nhân
   function closeUserAccountModal() {
-    if (modalUserAccount) {
-      modalUserAccount.style.display = 'none';
-      modalUserAccount.classList.add('hidden');
-      modalUserAccount.classList.remove('flex');
-    }
+    if (modalUserAccount) modalUserAccount.classList.add('hidden');
   }
 
   function switchAccountModalTab(tab) {
@@ -7286,7 +7267,7 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     if (allScores.length === 0) {
       adminScoresTableBody.innerHTML = `
         <tr>
-          <td colspan="10" class="p-8 text-center text-slate-400 bg-slate-50">
+          <td colspan="9" class="p-8 text-center text-slate-400 bg-slate-50">
             <i class="fa-solid fa-award text-2xl mb-1 text-slate-300"></i>
             <p class="font-bold">Chưa có kết quả khảo thí nào!</p>
           </td>
@@ -7334,12 +7315,6 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
           </td>
           <td class="py-2.5 px-3 text-slate-400 font-mono text-[11px] whitespace-nowrap">
             ${sc.date || ''}
-          </td>
-          <td class="py-2.5 px-3 text-center whitespace-nowrap">
-            <button onclick="window.adminDeleteScore && window.adminDeleteScore('${sc.studentUsername}', '${sc.id}', '${(sc.title || '').replace(/'/g, "\\'")}', '${(sc.studentName || '').replace(/'/g, "\\'")}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs font-bold inline-flex items-center gap-1 cursor-pointer transition-all active:scale-95" title="Xóa kết quả bài thi này của học sinh">
-              <i class="fa-solid fa-trash text-[11px]"></i>
-              <span>Xóa</span>
-            </button>
           </td>
         </tr>
       `;
@@ -7558,105 +7533,35 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
 
   // Hành động Admin: Xóa tài khoản học sinh
   window.adminDeleteStudent = async function(username, fullname) {
-    const confirmDel = confirm(`⚠️ CẢNH BÁO QUẢN TRỊ VIÊN:\nThầy cô có chắc chắn muốn xóa tài khoản học sinh "${fullname}" (@${username}) cùng toàn bộ sơ đồ, bài tóm tắt và điểm số của em này không?`);
+    const confirmDel = confirm(`⚠️ CẢNH BÁO QUẢN TRỊ VIÊN:
+Thầy cô có chắc chắn muốn xóa tài khoản học sinh "${fullname}" (@${username}) cùng toàn bộ sơ đồ, bài tóm tắt và điểm số của em này?`);
     if (!confirmDel) return;
 
-    // 1. CẬP NHẬT TỨC THÌ (Mất liền trong 0.01s trước mắt người dùng)
-    const cleanUsername = (username || '').trim().toLowerCase();
-    cachedAllAdminUsers = cachedAllAdminUsers.filter(u => (u.username || '').trim().toLowerCase() !== cleanUsername);
-    renderAdminUsersTab();
-    updateAdminStats();
-    showToast(`Đã xóa vĩnh viễn tài khoản của em ${fullname}!`, 'success');
-
-    // 2. ĐỒNG BỘ NGẦM LÊN CLOUD VÀ LOCAL STORAGE
     if (window.SmartEduCloud) {
-      await window.SmartEduCloud.adminDeleteUser(username);
+      const res = await window.SmartEduCloud.adminDeleteUser(username);
+      if (res.success) {
+        showToast(res.message, 'success');
+        await loadSuperAdminData();
+      } else {
+        showToast(res.message, 'error');
+      }
     }
   };
 
   // Hành động Admin: Xóa bài viết cụ thể (mindmap, summary, flashcard)
   window.adminDeletePost = async function(username, postType, postId) {
     const typeLabel = postType === 'mindmap' ? 'sơ đồ tư duy' : postType === 'summary' ? 'bài tóm tắt' : 'bộ thẻ lật';
-    const confirmDel = confirm(`Thầy cô có chắc chắn muốn xóa ${typeLabel} này không?`);
+    const confirmDel = confirm(`Thầy cô có chắc chắn muốn xóa ${typeLabel} này?`);
     if (!confirmDel) return;
 
-    // 1. CẬP NHẬT TỨC THÌ (Mất liền)
-    const cleanUsername = (username || '').trim().toLowerCase();
-    const targetUser = cachedAllAdminUsers.find(u => (u.username || '').trim().toLowerCase() === cleanUsername);
-    if (targetUser) {
-      if (postType === 'mindmap' && targetUser.mindmaps) {
-        targetUser.mindmaps = targetUser.mindmaps.filter(m => String(m.id) !== String(postId));
-      } else if (postType === 'summary' && targetUser.summaries) {
-        targetUser.summaries = targetUser.summaries.filter(s => String(s.id) !== String(postId));
-      } else if (postType === 'flashcard' && targetUser.flashcards) {
-        targetUser.flashcards = targetUser.flashcards.filter(f => String(f.id) !== String(postId));
+    if (window.SmartEduCloud) {
+      const res = await window.SmartEduCloud.adminDeleteUserPost(username, postType, postId);
+      if (res.success) {
+        showToast(res.message, 'success');
+        await loadSuperAdminData();
+      } else {
+        showToast(res.message, 'error');
       }
-    }
-    renderCurrentAdminTab();
-    updateAdminStats();
-    showToast(`Đã xóa ${typeLabel} thành công!`, 'success');
-
-    // 2. ĐỒNG BỘ NGẦM
-    if (window.SmartEduCloud) {
-      await window.SmartEduCloud.adminDeleteUserPost(username, postType, postId);
-    }
-  };
-
-  // Hành động Admin: Xóa kết quả bài khảo thí của học sinh (Xem điểm cả trường)
-  window.adminDeleteScore = async function(username, scoreId, scoreTitle, studentName) {
-    const isSuperAdmin = state.currentUser && (state.currentUser.username === 'admin' || state.currentUser.profile?.role === 'superadmin');
-    if (!isSuperAdmin) {
-      showToast('Chỉ Quản trị viên (Super Admin) mới có quyền xóa điểm!', 'warning');
-      return;
-    }
-
-    const confirmDel = confirm(`⚠️ CẢNH BÁO QUẢN TRỊ VIÊN:\nThầy cô có chắc chắn muốn xóa kết quả bài thi "${scoreTitle || 'Khảo thí'}" của học sinh "${studentName || username}" không?`);
-    if (!confirmDel) return;
-
-    // 1. CẬP NHẬT TỨC THÌ (Mất liền trong 0.01s trên bảng điểm cả trường)
-    const cleanUsername = (username || '').trim().toLowerCase();
-    const targetUser = cachedAllAdminUsers.find(u => (u.username || '').trim().toLowerCase() === cleanUsername);
-    if (targetUser && targetUser.scores) {
-      targetUser.scores = targetUser.scores.filter(sc => String(sc.id) !== String(scoreId));
-    }
-    if (state.currentUser && (state.currentUser.username || '').trim().toLowerCase() === cleanUsername && state.currentUser.scores) {
-      state.currentUser.scores = state.currentUser.scores.filter(sc => String(sc.id) !== String(scoreId));
-    }
-    renderAdminScoresTab();
-    updateAdminStats();
-    showToast(`Đã xóa bài thi của học sinh ${studentName || username}!`, 'success');
-
-    // 2. ĐỒNG BỘ NGẦM LÊN CLOUD VÀ LOCAL STORAGE
-    if (window.SmartEduCloud) {
-      await window.SmartEduCloud.adminDeleteUserPost(username, 'score', scoreId);
-    }
-  };
-
-  // Hành động Cá nhân / Học sinh: Xóa kết quả bài nộp của chính mình
-  window.studentDeleteQuizScore = async function(scoreId, scoreTitle) {
-    if (!state.currentUser) return;
-    const confirmDel = confirm(`Em có chắc chắn muốn xóa kết quả bài thi "${scoreTitle || 'này'}" không?\nDữ liệu thống kê tiến độ sẽ được tính toán lại ngay sau khi xóa.`);
-    if (!confirmDel) return;
-
-    // 1. CẬP NHẬT TỨC THÌ (Mất liền và vẽ lại tiến độ ngay tức thì)
-    if (state.currentUser.scores && Array.isArray(state.currentUser.scores)) {
-      state.currentUser.scores = state.currentUser.scores.filter(sc => String(sc.id) !== String(scoreId));
-    }
-    // Cập nhật cả trong cachedAllAdminUsers nếu đang mở
-    const curUname = (state.currentUser.username || '').trim().toLowerCase();
-    const inAdminCache = cachedAllAdminUsers.find(u => (u.username || '').trim().toLowerCase() === curUname);
-    if (inAdminCache && inAdminCache.scores) {
-      inAdminCache.scores = inAdminCache.scores.filter(sc => String(sc.id) !== String(scoreId));
-    }
-
-    renderAccountProgressUI();
-    showToast(`Đã xóa bài nộp "${scoreTitle || ''}" thành công!`, 'success');
-
-    // 2. ĐỒNG BỘ NGẦM
-    if (window.SmartEduCloud) {
-      await window.SmartEduCloud.syncUserData(state.currentUser);
-    } else {
-      localStorage.setItem('smartedu_user_' + state.currentUser.username, JSON.stringify(state.currentUser));
     }
   };
 

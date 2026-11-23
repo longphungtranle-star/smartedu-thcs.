@@ -167,6 +167,11 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
           const doc = await docRef.get();
           if (doc.exists) {
             const data = doc.data();
+            data.username = cleanUsername;
+            data.scores = Array.isArray(data.scores) ? data.scores : [];
+            data.mindmaps = Array.isArray(data.mindmaps) ? data.mindmaps : [];
+            data.summaries = Array.isArray(data.summaries) ? data.summaries : [];
+            data.flashcards = Array.isArray(data.flashcards) ? data.flashcards : [];
             this._saveLocalUser(data);
             return data;
           }
@@ -180,12 +185,26 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
         const scopedRaw = localStorage.getItem(`smartedu_user_${cleanUsername}_data`);
         if (scopedRaw) {
           const parsed = JSON.parse(scopedRaw);
-          if (parsed && parsed.username) return parsed;
+          if (parsed && parsed.username && parsed.username.toLowerCase() === cleanUsername) {
+            parsed.scores = Array.isArray(parsed.scores) ? parsed.scores : [];
+            parsed.mindmaps = Array.isArray(parsed.mindmaps) ? parsed.mindmaps : [];
+            parsed.summaries = Array.isArray(parsed.summaries) ? parsed.summaries : [];
+            parsed.flashcards = Array.isArray(parsed.flashcards) ? parsed.flashcards : [];
+            return parsed;
+          }
         }
       } catch (e) {}
 
       const localUsers = this._getLocalUsers();
-      return localUsers[cleanUsername] || null;
+      const localUser = localUsers[cleanUsername];
+      if (localUser) {
+        localUser.scores = Array.isArray(localUser.scores) ? localUser.scores : [];
+        localUser.mindmaps = Array.isArray(localUser.mindmaps) ? localUser.mindmaps : [];
+        localUser.summaries = Array.isArray(localUser.summaries) ? localUser.summaries : [];
+        localUser.flashcards = Array.isArray(localUser.flashcards) ? localUser.flashcards : [];
+        return localUser;
+      }
+      return null;
     },
 
     // Đăng ký tài khoản mới lên Web
@@ -292,6 +311,13 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
           if (userData.password && userData.password !== cleanPassword) {
             return { success: false, message: 'Mật khẩu hoặc mã PIN không chính xác!' };
           }
+          // Đảm bảo dữ liệu các mảng cô lập tuyệt đối theo tài khoản này
+          userData.username = cleanUsername;
+          userData.scores = Array.isArray(userData.scores) ? userData.scores : [];
+          userData.mindmaps = Array.isArray(userData.mindmaps) ? userData.mindmaps : [];
+          userData.summaries = Array.isArray(userData.summaries) ? userData.summaries : [];
+          userData.flashcards = Array.isArray(userData.flashcards) ? userData.flashcards : [];
+
           // Cập nhật lastLogin chuẩn giờ Việt Nam (GMT+7)
           userData.profile = userData.profile || {};
           userData.profile.lastLogin = getVietnamTimeString();
@@ -306,6 +332,11 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
           const localUsers = this._getLocalUsers();
           const localUser = localUsers[cleanUsername];
           if (localUser && localUser.password === cleanPassword) {
+            localUser.username = cleanUsername;
+            localUser.scores = Array.isArray(localUser.scores) ? localUser.scores : [];
+            localUser.mindmaps = Array.isArray(localUser.mindmaps) ? localUser.mindmaps : [];
+            localUser.summaries = Array.isArray(localUser.summaries) ? localUser.summaries : [];
+            localUser.flashcards = Array.isArray(localUser.flashcards) ? localUser.flashcards : [];
             return { success: true, user: localUser, isOffline: true };
           }
           return { success: false, message: 'Không thể kết nối đến máy chủ: ' + (e.message || e) };
@@ -320,6 +351,11 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
         if (user.password && user.password !== cleanPassword) {
           return { success: false, message: 'Mật khẩu hoặc mã PIN không chính xác!' };
         }
+        user.username = cleanUsername;
+        user.scores = Array.isArray(user.scores) ? user.scores : [];
+        user.mindmaps = Array.isArray(user.mindmaps) ? user.mindmaps : [];
+        user.summaries = Array.isArray(user.summaries) ? user.summaries : [];
+        user.flashcards = Array.isArray(user.flashcards) ? user.flashcards : [];
         user.profile = user.profile || {};
         user.profile.lastLogin = getVietnamTimeString();
         this._setLocalUsers(localUsers);
@@ -329,8 +365,15 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
 
     // Lưu toàn bộ dữ liệu tài khoản lên Web
     async syncUserData(userData) {
-      if (!userData || !userData.username) return;
+      if (!userData || !userData.username) return false;
       const cleanUsername = userData.username.trim().toLowerCase();
+
+      // Đảm bảo dữ liệu các mảng cô lập tuyệt đối theo tài khoản này
+      userData.username = cleanUsername;
+      userData.scores = Array.isArray(userData.scores) ? userData.scores : [];
+      userData.mindmaps = Array.isArray(userData.mindmaps) ? userData.mindmaps : [];
+      userData.summaries = Array.isArray(userData.summaries) ? userData.summaries : [];
+      userData.flashcards = Array.isArray(userData.flashcards) ? userData.flashcards : [];
 
       // Lưu cache cục bộ trước
       this._saveLocalUser(userData);
@@ -379,20 +422,10 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
         return { success: false, message: 'Không thể xóa tài khoản Super Admin gốc của hệ thống!' };
       }
 
-      // 1. Xóa triệt để mọi key lưu trữ riêng của học sinh trong localStorage
-      try {
-        localStorage.removeItem(`smartedu_user_${cleanUsername}_data`);
-        localStorage.removeItem(`smartedu_user_${cleanUsername}`);
-        localStorage.removeItem(`smartedu_cloud_${cleanUsername}`);
-        localStorage.removeItem(`smartedu_cached_${cleanUsername}`);
-      } catch (e) {}
-
-      // 2. Xóa khỏi danh mục tài khoản thiết bị
       const localUsers = this._getLocalUsers();
       delete localUsers[cleanUsername];
       this._setLocalUsers(localUsers);
 
-      // 3. Xóa vĩnh viễn trên Firebase Firestore nếu đang kết nối
       if (this.isFirebaseReady && this.db) {
         try {
           await this.db.collection('users').doc(cleanUsername).delete();
