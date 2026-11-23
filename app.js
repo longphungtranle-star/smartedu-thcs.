@@ -6530,6 +6530,11 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
                   ${s.toFixed(1)} đ
                 </span>
               </td>
+              <td class="p-2 sm:px-3 text-center whitespace-nowrap">
+                <button onclick="window.studentDeleteQuizScore && window.studentDeleteQuizScore('${item.id}', '${(item.title || '').replace(/'/g, "\\'")}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer active:scale-95" title="Xóa kết quả bài nộp này">
+                  <i class="fa-solid fa-trash-can text-xs"></i>
+                </button>
+              </td>
             </tr>
           `;
         }).join('');
@@ -6556,18 +6561,34 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
   // Mở Modal Hồ Sơ Cá Nhân (chỉ nạp dữ liệu của người dùng hiện tại)
   function openUserAccountModal(tab = 'progress') {
     if (!state.currentUser) {
-      if (modalAuthGate) modalAuthGate.classList.remove('hidden');
+      if (typeof showToast === 'function') {
+        showToast('Vui lòng đăng nhập để xem Tiến độ & Lịch sử khảo thí!', 'info');
+      }
+      if (modalAuthGate) {
+        modalAuthGate.style.display = 'flex';
+        modalAuthGate.classList.remove('hidden');
+        modalAuthGate.classList.add('flex');
+        if (typeof switchAuthGateMode === 'function') switchAuthGateMode('login');
+      }
       return;
     }
     renderAccountProgressUI();
     fillCurrentProfileForm();
     switchAccountModalTab(tab);
-    if (modalUserAccount) modalUserAccount.classList.remove('hidden');
+    if (modalUserAccount) {
+      modalUserAccount.style.display = 'flex';
+      modalUserAccount.classList.remove('hidden');
+      modalUserAccount.classList.add('flex');
+    }
   }
 
   // Đóng Modal Hồ Sơ Cá Nhân
   function closeUserAccountModal() {
-    if (modalUserAccount) modalUserAccount.classList.add('hidden');
+    if (modalUserAccount) {
+      modalUserAccount.style.display = 'none';
+      modalUserAccount.classList.add('hidden');
+      modalUserAccount.classList.remove('flex');
+    }
   }
 
   function switchAccountModalTab(tab) {
@@ -7249,7 +7270,7 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     if (allScores.length === 0) {
       adminScoresTableBody.innerHTML = `
         <tr>
-          <td colspan="9" class="p-8 text-center text-slate-400 bg-slate-50">
+          <td colspan="10" class="p-8 text-center text-slate-400 bg-slate-50">
             <i class="fa-solid fa-award text-2xl mb-1 text-slate-300"></i>
             <p class="font-bold">Chưa có kết quả khảo thí nào!</p>
           </td>
@@ -7297,6 +7318,12 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
           </td>
           <td class="py-2.5 px-3 text-slate-400 font-mono text-[11px] whitespace-nowrap">
             ${sc.date || ''}
+          </td>
+          <td class="py-2.5 px-3 text-center whitespace-nowrap">
+            <button onclick="window.adminDeleteScore && window.adminDeleteScore('${sc.studentUsername}', '${sc.id}', '${(sc.title || '').replace(/'/g, "\\'")}', '${(sc.studentName || '').replace(/'/g, "\\'")}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs font-bold inline-flex items-center gap-1 cursor-pointer transition-all active:scale-95" title="Xóa kết quả bài thi này của học sinh">
+              <i class="fa-solid fa-trash text-[11px]"></i>
+              <span>Xóa</span>
+            </button>
           </td>
         </tr>
       `;
@@ -7545,6 +7572,51 @@ Thầy cô có chắc chắn muốn xóa tài khoản học sinh "${fullname}" (
         showToast(res.message, 'error');
       }
     }
+  };
+
+  // Hành động Admin: Xóa kết quả bài khảo thí của học sinh (Xem điểm cả trường)
+  window.adminDeleteScore = async function(username, scoreId, scoreTitle, studentName) {
+    const isSuperAdmin = state.currentUser && (state.currentUser.username === 'admin' || state.currentUser.profile?.role === 'superadmin');
+    if (!isSuperAdmin) {
+      showToast('Chỉ Quản trị viên (Super Admin) mới có quyền xóa điểm!', 'warning');
+      return;
+    }
+
+    const confirmDel = confirm(`⚠️ CẢNH BÁO QUẢN TRỊ VIÊN:\nThầy cô có chắc chắn muốn xóa kết quả bài thi "${scoreTitle || 'Khảo thí'}" của học sinh "${studentName || username}"?`);
+    if (!confirmDel) return;
+
+    if (window.SmartEduCloud) {
+      const res = await window.SmartEduCloud.adminDeleteUserPost(username, 'score', scoreId);
+      if (res.success) {
+        if (state.currentUser && state.currentUser.username === username && state.currentUser.scores) {
+          state.currentUser.scores = state.currentUser.scores.filter(sc => String(sc.id) !== String(scoreId));
+        }
+        showToast(`Đã xóa bài thi của học sinh ${studentName || username}!`, 'success');
+        await loadSuperAdminData();
+      } else {
+        showToast(res.message || 'Lỗi khi xóa điểm!', 'error');
+      }
+    }
+  };
+
+  // Hành động Cá nhân / Học sinh: Xóa kết quả bài nộp của chính mình
+  window.studentDeleteQuizScore = async function(scoreId, scoreTitle) {
+    if (!state.currentUser) return;
+    const confirmDel = confirm(`Em có chắc chắn muốn xóa kết quả bài thi "${scoreTitle || 'này'}" không?\nDữ liệu thống kê tiến độ sẽ được tính toán lại ngay sau khi xóa.`);
+    if (!confirmDel) return;
+
+    if (state.currentUser.scores && Array.isArray(state.currentUser.scores)) {
+      state.currentUser.scores = state.currentUser.scores.filter(sc => String(sc.id) !== String(scoreId));
+    }
+
+    if (window.SmartEduCloud) {
+      await window.SmartEduCloud.syncUserData(state.currentUser);
+    } else {
+      localStorage.setItem('smartedu_user_' + state.currentUser.username, JSON.stringify(state.currentUser));
+    }
+
+    renderAccountProgressUI();
+    showToast(`Đã xóa bài nộp "${scoreTitle || ''}" thành công!`, 'success');
   };
 
   // Hành động Admin: Mở xem sơ đồ tư duy của học sinh
