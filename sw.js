@@ -1,5 +1,5 @@
 // sw.js - Service Worker cho SmartEdu THCS (Hỗ trợ PWA & Bộ nhớ đệm Ngoại tuyến)
-const CACHE_NAME = 'smartedu-thcs-v23-delete-scores';
+const CACHE_NAME = 'smartedu-thcs-v24-instant-delete';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

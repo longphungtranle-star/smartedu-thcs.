@@ -379,10 +379,20 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
         return { success: false, message: 'Không thể xóa tài khoản Super Admin gốc của hệ thống!' };
       }
 
+      // 1. Xóa triệt để mọi key lưu trữ riêng của học sinh trong localStorage
+      try {
+        localStorage.removeItem(`smartedu_user_${cleanUsername}_data`);
+        localStorage.removeItem(`smartedu_user_${cleanUsername}`);
+        localStorage.removeItem(`smartedu_cloud_${cleanUsername}`);
+        localStorage.removeItem(`smartedu_cached_${cleanUsername}`);
+      } catch (e) {}
+
+      // 2. Xóa khỏi danh mục tài khoản thiết bị
       const localUsers = this._getLocalUsers();
       delete localUsers[cleanUsername];
       this._setLocalUsers(localUsers);
 
+      // 3. Xóa vĩnh viễn trên Firebase Firestore nếu đang kết nối
       if (this.isFirebaseReady && this.db) {
         try {
           await this.db.collection('users').doc(cleanUsername).delete();

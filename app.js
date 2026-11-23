@@ -7542,35 +7542,47 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
 
   // Hành động Admin: Xóa tài khoản học sinh
   window.adminDeleteStudent = async function(username, fullname) {
-    const confirmDel = confirm(`⚠️ CẢNH BÁO QUẢN TRỊ VIÊN:
-Thầy cô có chắc chắn muốn xóa tài khoản học sinh "${fullname}" (@${username}) cùng toàn bộ sơ đồ, bài tóm tắt và điểm số của em này?`);
+    const confirmDel = confirm(`⚠️ CẢNH BÁO QUẢN TRỊ VIÊN:\nThầy cô có chắc chắn muốn xóa tài khoản học sinh "${fullname}" (@${username}) cùng toàn bộ sơ đồ, bài tóm tắt và điểm số của em này không?`);
     if (!confirmDel) return;
 
+    // 1. CẬP NHẬT TỨC THÌ (Mất liền trong 0.01s trước mắt người dùng)
+    const cleanUsername = (username || '').trim().toLowerCase();
+    cachedAllAdminUsers = cachedAllAdminUsers.filter(u => (u.username || '').trim().toLowerCase() !== cleanUsername);
+    renderAdminUsersTab();
+    updateAdminStats();
+    showToast(`Đã xóa vĩnh viễn tài khoản của em ${fullname}!`, 'success');
+
+    // 2. ĐỒNG BỘ NGẦM LÊN CLOUD VÀ LOCAL STORAGE
     if (window.SmartEduCloud) {
-      const res = await window.SmartEduCloud.adminDeleteUser(username);
-      if (res.success) {
-        showToast(res.message, 'success');
-        await loadSuperAdminData();
-      } else {
-        showToast(res.message, 'error');
-      }
+      await window.SmartEduCloud.adminDeleteUser(username);
     }
   };
 
   // Hành động Admin: Xóa bài viết cụ thể (mindmap, summary, flashcard)
   window.adminDeletePost = async function(username, postType, postId) {
     const typeLabel = postType === 'mindmap' ? 'sơ đồ tư duy' : postType === 'summary' ? 'bài tóm tắt' : 'bộ thẻ lật';
-    const confirmDel = confirm(`Thầy cô có chắc chắn muốn xóa ${typeLabel} này?`);
+    const confirmDel = confirm(`Thầy cô có chắc chắn muốn xóa ${typeLabel} này không?`);
     if (!confirmDel) return;
 
-    if (window.SmartEduCloud) {
-      const res = await window.SmartEduCloud.adminDeleteUserPost(username, postType, postId);
-      if (res.success) {
-        showToast(res.message, 'success');
-        await loadSuperAdminData();
-      } else {
-        showToast(res.message, 'error');
+    // 1. CẬP NHẬT TỨC THÌ (Mất liền)
+    const cleanUsername = (username || '').trim().toLowerCase();
+    const targetUser = cachedAllAdminUsers.find(u => (u.username || '').trim().toLowerCase() === cleanUsername);
+    if (targetUser) {
+      if (postType === 'mindmap' && targetUser.mindmaps) {
+        targetUser.mindmaps = targetUser.mindmaps.filter(m => String(m.id) !== String(postId));
+      } else if (postType === 'summary' && targetUser.summaries) {
+        targetUser.summaries = targetUser.summaries.filter(s => String(s.id) !== String(postId));
+      } else if (postType === 'flashcard' && targetUser.flashcards) {
+        targetUser.flashcards = targetUser.flashcards.filter(f => String(f.id) !== String(postId));
       }
+    }
+    renderCurrentAdminTab();
+    updateAdminStats();
+    showToast(`Đã xóa ${typeLabel} thành công!`, 'success');
+
+    // 2. ĐỒNG BỘ NGẦM
+    if (window.SmartEduCloud) {
+      await window.SmartEduCloud.adminDeleteUserPost(username, postType, postId);
     }
   };
 
@@ -7582,20 +7594,25 @@ Thầy cô có chắc chắn muốn xóa tài khoản học sinh "${fullname}" (
       return;
     }
 
-    const confirmDel = confirm(`⚠️ CẢNH BÁO QUẢN TRỊ VIÊN:\nThầy cô có chắc chắn muốn xóa kết quả bài thi "${scoreTitle || 'Khảo thí'}" của học sinh "${studentName || username}"?`);
+    const confirmDel = confirm(`⚠️ CẢNH BÁO QUẢN TRỊ VIÊN:\nThầy cô có chắc chắn muốn xóa kết quả bài thi "${scoreTitle || 'Khảo thí'}" của học sinh "${studentName || username}" không?`);
     if (!confirmDel) return;
 
+    // 1. CẬP NHẬT TỨC THÌ (Mất liền trong 0.01s trên bảng điểm cả trường)
+    const cleanUsername = (username || '').trim().toLowerCase();
+    const targetUser = cachedAllAdminUsers.find(u => (u.username || '').trim().toLowerCase() === cleanUsername);
+    if (targetUser && targetUser.scores) {
+      targetUser.scores = targetUser.scores.filter(sc => String(sc.id) !== String(scoreId));
+    }
+    if (state.currentUser && (state.currentUser.username || '').trim().toLowerCase() === cleanUsername && state.currentUser.scores) {
+      state.currentUser.scores = state.currentUser.scores.filter(sc => String(sc.id) !== String(scoreId));
+    }
+    renderAdminScoresTab();
+    updateAdminStats();
+    showToast(`Đã xóa bài thi của học sinh ${studentName || username}!`, 'success');
+
+    // 2. ĐỒNG BỘ NGẦM LÊN CLOUD VÀ LOCAL STORAGE
     if (window.SmartEduCloud) {
-      const res = await window.SmartEduCloud.adminDeleteUserPost(username, 'score', scoreId);
-      if (res.success) {
-        if (state.currentUser && state.currentUser.username === username && state.currentUser.scores) {
-          state.currentUser.scores = state.currentUser.scores.filter(sc => String(sc.id) !== String(scoreId));
-        }
-        showToast(`Đã xóa bài thi của học sinh ${studentName || username}!`, 'success');
-        await loadSuperAdminData();
-      } else {
-        showToast(res.message || 'Lỗi khi xóa điểm!', 'error');
-      }
+      await window.SmartEduCloud.adminDeleteUserPost(username, 'score', scoreId);
     }
   };
 
@@ -7605,18 +7622,26 @@ Thầy cô có chắc chắn muốn xóa tài khoản học sinh "${fullname}" (
     const confirmDel = confirm(`Em có chắc chắn muốn xóa kết quả bài thi "${scoreTitle || 'này'}" không?\nDữ liệu thống kê tiến độ sẽ được tính toán lại ngay sau khi xóa.`);
     if (!confirmDel) return;
 
+    // 1. CẬP NHẬT TỨC THÌ (Mất liền và vẽ lại tiến độ ngay tức thì)
     if (state.currentUser.scores && Array.isArray(state.currentUser.scores)) {
       state.currentUser.scores = state.currentUser.scores.filter(sc => String(sc.id) !== String(scoreId));
     }
+    // Cập nhật cả trong cachedAllAdminUsers nếu đang mở
+    const curUname = (state.currentUser.username || '').trim().toLowerCase();
+    const inAdminCache = cachedAllAdminUsers.find(u => (u.username || '').trim().toLowerCase() === curUname);
+    if (inAdminCache && inAdminCache.scores) {
+      inAdminCache.scores = inAdminCache.scores.filter(sc => String(sc.id) !== String(scoreId));
+    }
 
+    renderAccountProgressUI();
+    showToast(`Đã xóa bài nộp "${scoreTitle || ''}" thành công!`, 'success');
+
+    // 2. ĐỒNG BỘ NGẦM
     if (window.SmartEduCloud) {
       await window.SmartEduCloud.syncUserData(state.currentUser);
     } else {
       localStorage.setItem('smartedu_user_' + state.currentUser.username, JSON.stringify(state.currentUser));
     }
-
-    renderAccountProgressUI();
-    showToast(`Đã xóa bài nộp "${scoreTitle || ''}" thành công!`, 'success');
   };
 
   // Hành động Admin: Mở xem sơ đồ tư duy của học sinh
