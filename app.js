@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // API Key Rotation Pool
     apiKeys: [], // [{ key: string, status: 'ready'|'rate_limited'|'error', successCount: number }]
     currentKeyIndex: 0,
-    selectedModel: 'gemini-3.5-flash-lite',
+    selectedModel: 'gemini-1.5-flash',
 
     // User Accounts & Progress Tracking
     accounts: [],
@@ -296,10 +296,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ================= API KEY ROTATION POOL LOGIC =================
-  // Đưa Gemini 3.5 Flash Lite lên số 1: Tối ưu thông lượng cao nhất, tạo đề thi & trích xuất siêu nhanh
+  // Thứ tự ưu tiên mô hình chính thức của Google Gemini v1beta (Hạn ngạch cao nhất, phản xạ nhanh)
   const CASCADE_MODELS = [
-    'gemini-3.5-flash-lite',    // Ưu tiên số 1: Tạo đề nhanh nhất, chuẩn xác nhất, thông lượng cao
-    'gemini-flash-lite-latest' // Dự phòng cấp 1: Bản cập nhật flash-lite mới nhất
+    'gemini-1.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash-8b',
+    'gemini-1.5-pro'
   ];
 
   function getModelCandidates(preferred) {
@@ -442,17 +444,17 @@ document.addEventListener('DOMContentLoaded', () => {
       if (storedModel && (storedModel === 'auto' || CASCADE_MODELS.includes(storedModel))) {
         state.selectedModel = storedModel;
       } else {
-        state.selectedModel = 'gemini-flash-lite-latest';
-        localStorage.setItem('smartedu_selected_model', 'gemini-flash-lite-latest');
+        state.selectedModel = 'gemini-1.5-flash';
+        localStorage.setItem('smartedu_selected_model', 'gemini-1.5-flash');
       }
       if (dom.selectGeminiModel) {
         dom.selectGeminiModel.value = state.selectedModel;
       }
 
-      // Tự động khôi phục key về trạng thái sẵn sàng với mô hình Flash Lite Siêu Tốc
+      // Tự động khôi phục key về trạng thái sẵn sàng với mô hình chính thức
       state.apiKeys.forEach(k => {
         k.status = 'ready';
-        k.workingModel = 'gemini-flash-lite-latest';
+        k.workingModel = 'gemini-1.5-flash';
         k.errorDetail = '';
       });
       localStorage.setItem('smartedu_api_keys', JSON.stringify(state.apiKeys));
@@ -470,8 +472,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateKeyPoolUI() {
+    const now = Date.now();
+    let hasRecovered = false;
+    state.apiKeys.forEach(k => {
+      if (k.status === 'rate_limited' && k.rateLimitedUntil && now > k.rateLimitedUntil) {
+        k.status = 'ready';
+        k.errorDetail = '';
+        hasRecovered = true;
+      }
+    });
+    if (hasRecovered) saveApiKeysToStorage();
+
     const total = state.apiKeys.length;
-    const activeKeys = state.apiKeys.filter(k => k.status !== 'error' && k.status !== 'rate_limited');
+    const activeKeys = state.apiKeys.filter(k => k.status !== 'error' && (k.status !== 'rate_limited' || (k.rateLimitedUntil && now > k.rateLimitedUntil)));
     
     dom.keyPoolCount.textContent = total;
     if (total === 0) {
@@ -776,11 +789,14 @@ document.addEventListener('DOMContentLoaded', () => {
             continue;
           }
 
-          // Rate Limit (429): Key này hết ngạch -> xoay sang Key kế tiếp
+          // Rate Limit (429): Key này hết ngạch -> tự động phục hồi sau 30s & chuyển key tiếp theo
           if (response.status === 429) {
             keyItem.status = 'rate_limited';
+            keyItem.rateLimitedUntil = Date.now() + 30000; // Tự động phục hồi sau 30 giây
             saveApiKeysToStorage();
+            updateKeyPoolUI();
             showToast(`Key #${keyIndex + 1} chạm giới hạn ngạch 429. Đang chuyển sang key tiếp theo...`, 'warning');
+            await new Promise(r => setTimeout(r, 1200)); // Tạm dừng 1.2s tránh spam dồn ngạch theo chùm
             break; // sang key tiếp theo trong bể xoay vòng
           }
 
