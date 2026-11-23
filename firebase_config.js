@@ -207,6 +207,57 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
       return null;
     },
 
+    // Lắng nghe dữ liệu thời gian thực (Real-time onSnapshot) cho 1 tài khoản
+    subscribeUser(username, callback) {
+      if (!username) return () => {};
+      const cleanUsername = username.trim().toLowerCase();
+      if (!this.isFirebaseReady || !this.db) return () => {};
+
+      try {
+        const unsubscribe = this.db.collection('users').doc(cleanUsername).onSnapshot((doc) => {
+          if (doc.exists) {
+            const data = doc.data();
+            data.username = cleanUsername;
+            data.scores = Array.isArray(data.scores) ? data.scores : [];
+            data.mindmaps = Array.isArray(data.mindmaps) ? data.mindmaps : [];
+            data.summaries = Array.isArray(data.summaries) ? data.summaries : [];
+            data.flashcards = Array.isArray(data.flashcards) ? data.flashcards : [];
+            this._saveLocalUser(data);
+            if (typeof callback === 'function') callback(data);
+          }
+        }, (err) => {
+          console.warn('Real-time listener error cho @' + cleanUsername + ':', err);
+        });
+        return unsubscribe;
+      } catch (e) {
+        console.warn('Không thể tạo Real-time listener:', e);
+        return () => {};
+      }
+    },
+
+    // Lắng nghe dữ liệu thời gian thực (Real-time onSnapshot) cho toàn bộ học sinh (Super Admin)
+    subscribeAllUsers(callback) {
+      if (!this.isFirebaseReady || !this.db) return () => {};
+      try {
+        const unsubscribe = this.db.collection('users').onSnapshot((snapshot) => {
+          const allUsers = { ...this._getLocalUsers() };
+          snapshot.forEach((doc) => {
+            allUsers[doc.id] = doc.data();
+          });
+          this._setLocalUsers(allUsers);
+          if (typeof callback === 'function') {
+            callback(Object.values(allUsers));
+          }
+        }, (err) => {
+          console.warn('Real-time listener error cho all users:', err);
+        });
+        return unsubscribe;
+      } catch (e) {
+        console.warn('Không thể tạo Real-time listener cho all users:', e);
+        return () => {};
+      }
+    },
+
     // Đăng ký tài khoản mới lên Web
     async registerUser(username, password, profileData) {
       const cleanUsername = (username || '').trim().toLowerCase();
@@ -463,18 +514,20 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
       const user = localUsers[cleanUsername];
       if (!user) return { success: false, message: 'Không tìm thấy tài khoản!' };
 
+      const strId = String(postId);
       if (postType === 'mindmap' && user.mindmaps) {
-        user.mindmaps = user.mindmaps.filter(m => m.id !== postId);
+        user.mindmaps = user.mindmaps.filter(m => String(m.id) !== strId);
       } else if (postType === 'summary' && user.summaries) {
-        user.summaries = user.summaries.filter(s => s.id !== postId);
+        user.summaries = user.summaries.filter(s => String(s.id) !== strId);
       } else if (postType === 'score' && user.scores) {
-        user.scores = user.scores.filter(sc => sc.id != postId);
+        user.scores = user.scores.filter(sc => String(sc.id) !== strId);
       } else if (postType === 'flashcard' && user.flashcards) {
-        user.flashcards = user.flashcards.filter(f => f.id !== postId);
+        user.flashcards = user.flashcards.filter(f => String(f.id) !== strId);
       }
 
       await this.syncUserData(user);
-      return { success: true, message: 'Đã xóa bài viết thành công!' };
+      const label = postType === 'score' ? 'điểm số bài kiểm tra' : postType === 'mindmap' ? 'sơ đồ tư duy' : postType === 'summary' ? 'bài tóm tắt' : 'bộ thẻ lật';
+      return { success: true, message: `Đã xóa ${label} thành công!` };
     },
 
     // Các hàm phụ trợ lưu trữ cache an toàn (hỗ trợ cả Array legacy và Object)

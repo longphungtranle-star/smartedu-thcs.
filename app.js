@@ -442,18 +442,28 @@ document.addEventListener('DOMContentLoaded', () => {
       if (storedModel && (storedModel === 'auto' || CASCADE_MODELS.includes(storedModel))) {
         state.selectedModel = storedModel;
       } else {
-        state.selectedModel = 'gemini-flash-lite-latest';
-        localStorage.setItem('smartedu_selected_model', 'gemini-flash-lite-latest');
+        state.selectedModel = 'gemini-3.5-flash-lite';
+        localStorage.setItem('smartedu_selected_model', 'gemini-3.5-flash-lite');
       }
       if (dom.selectGeminiModel) {
         dom.selectGeminiModel.value = state.selectedModel;
       }
 
-      // Tự động khôi phục key về trạng thái sẵn sàng với mô hình Flash Lite Siêu Tốc
+      // Tự động khôi phục key về trạng thái sẵn sàng
+      const now = Date.now();
       state.apiKeys.forEach(k => {
-        k.status = 'ready';
-        k.workingModel = 'gemini-flash-lite-latest';
-        k.errorDetail = '';
+        if (k.status === 'rate_limited') {
+          if (!k.rateLimitedAt || (now - k.rateLimitedAt > 40000)) {
+            k.status = 'ready';
+            k.errorDetail = '';
+          }
+        } else if (k.status !== 'error') {
+          k.status = 'ready';
+          k.errorDetail = '';
+        }
+        if (!k.workingModel || !CASCADE_MODELS.includes(k.workingModel)) {
+          k.workingModel = 'gemini-3.5-flash-lite';
+        }
       });
       localStorage.setItem('smartedu_api_keys', JSON.stringify(state.apiKeys));
     } catch (e) {
@@ -568,10 +578,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const candidates = getModelCandidates(state.selectedModel);
-    showLoading('Đang kiểm tra kết nối API Key...', `Thử nghiệm Key #${index + 1} qua bộ lọc tự động nhận diện model...`);
+    showLoading('Đang kiểm tra kết nối API Key...', `Thử nghiệm Key #${index + 1} qua bộ lọc đa tầng mô hình AI...`);
 
     let isSuccess = false;
     let finalError = '';
+    let isRateLimited = false;
 
     for (const modelCandidate of candidates) {
       const controller = new AbortController();
@@ -608,19 +619,16 @@ document.addEventListener('DOMContentLoaded', () => {
         finalError = `[HTTP ${res.status}] ${rawErrMsg}`;
 
         // 💡 Cơ chế Failover tự động: Nếu model gặp 404, 503, 500
-        // Tự động chuyển ngay sang model kế tiếp trong 0.1 giây mà không gián đoạn
         if (res.status === 404 || res.status === 503 || res.status === 500) {
-          console.info(`Model ${modelCandidate} mã ${res.status}. Tự động Failover sang model kế tiếp trong 0.1s...`);
+          console.info(`Model ${modelCandidate} mã ${res.status}. Tự động Failover sang model kế tiếp...`);
           continue;
         }
 
-        // Nếu lỗi 429 (Hết ngạch)
+        // Nếu lỗi 429 trên model này, thử ngay model kế tiếp thay vì dừng kiểm tra
         if (res.status === 429) {
-          item.status = 'rate_limited';
-          item.errorDetail = 'Hết hạn ngạch 429 (Too Many Requests)';
-          saveApiKeysToStorage();
-          showToast(`Key #${index + 1} chạm giới hạn ngạch 429.`, 'warning');
-          break;
+          console.info(`Model ${modelCandidate} chạm 429. Thử tiếp model khác cho key này...`);
+          isRateLimited = true;
+          continue;
         }
 
         // Nếu lỗi 400, 401 hoặc 403 (Sai mã key hoặc chưa cấp quyền)
@@ -636,7 +644,7 @@ document.addEventListener('DOMContentLoaded', () => {
         clearTimeout(timeoutId);
         state.activeAbortController = null;
         if (err.name === 'AbortError' || err === 'TIMEOUT' || err.message === 'TIMEOUT') {
-          continue; // Timeout trên model này, thử ngay model tiếp theo
+          continue;
         } else {
           finalError = `Lỗi mạng: ${err.message}`;
         }
@@ -645,15 +653,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     hideLoading();
 
-    if (!isSuccess && item.status !== 'rate_limited') {
-      item.status = 'error';
-      item.errorDetail = finalError || 'Không kết nối được với Google';
-      saveApiKeysToStorage();
-      showToast(`Key #${index + 1}: ${item.errorDetail}`, 'error');
+    if (!isSuccess && item.status !== 'error') {
+      if (isRateLimited) {
+        item.status = 'rate_limited';
+        item.rateLimitedAt = Date.now();
+        item.errorDetail = 'Hết hạn ngạch tạm thời trên tất cả model (429). Sẽ tự phục hồi sau 40s.';
+        saveApiKeysToStorage();
+        showToast(`Key #${index + 1}: Hết ngạch tạm thời (429). Hệ thống sẽ tự khôi phục sau 40s!`, 'warning');
+      } else {
+        item.status = 'error';
+        item.errorDetail = finalError || 'Không kết nối được với Google';
+        saveApiKeysToStorage();
+        showToast(`Key #${index + 1}: ${item.errorDetail}`, 'error');
+      }
     }
   }
 
-  // CORE CALL FUNCTION WITH AUTOMATIC KEY ROTATION & HIGH-SPEED FAILOVER (0.1S)
+  // CORE CALL FUNCTION WITH AUTOMATIC MULTI-MODEL FAILOVER & SMART KEY ROTATION
   async function callGeminiWithRotation(prompt, inlineImageBase64 = null, options = {}) {
     if (state.apiKeys.length === 0) {
       dom.keyModal.classList.remove('hidden');
@@ -665,13 +681,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const { isJson = false, maxTokens = 4000, taskName = 'Đang xử lý bằng AI...', timeoutMs = 25000 } = options;
-    const maxAttempts = state.apiKeys.length;
-    let attempts = 0;
-    let lastErrorMessage = '';
     state.userAbortedOperation = false;
+
+    // Tự động khôi phục các key đã hết thời gian hạ nhiệt cooldown (sau 40 giây kể từ khi 429)
+    const now = Date.now();
+    state.apiKeys.forEach(k => {
+      if (k.status === 'rate_limited' && (!k.rateLimitedAt || (now - k.rateLimitedAt > 40000))) {
+        k.status = 'ready';
+        k.errorDetail = '';
+      }
+    });
 
     // Lấy danh sách mô hình ưu tiên theo tầng bảo hiểm (Cascade list)
     const baseCandidates = getModelCandidates(state.selectedModel);
+    const totalKeys = state.apiKeys.length;
+    // Cho phép xoay tối đa 2 vòng qua toàn bộ key để vượt qua tình huống quá tải đột xuất (Spike/Burst)
+    const maxAttempts = totalKeys * 2;
+    let attempts = 0;
+    let lastErrorMessage = '';
+    let consecutive429Count = 0;
 
     while (attempts < maxAttempts) {
       if (state.userAbortedOperation) {
@@ -679,16 +707,34 @@ document.addEventListener('DOMContentLoaded', () => {
         throw new Error("Thao tác đã bị dừng theo yêu cầu của bạn.");
       }
 
-      const keyIndex = state.currentKeyIndex;
+      // Ưu tiên tìm key có trạng thái 'ready'
+      let keyIndex = -1;
+      for (let i = 0; i < totalKeys; i++) {
+        const checkIdx = (state.currentKeyIndex + i) % totalKeys;
+        if (state.apiKeys[checkIdx].status === 'ready') {
+          keyIndex = checkIdx;
+          break;
+        }
+      }
+      // Nếu không có key nào 'ready' (tất cả đều bị rate_limited tạm thời), chọn key hiện tại và tự động cấp quyền lại
+      if (keyIndex === -1) {
+        keyIndex = state.currentKeyIndex;
+        if (state.apiKeys[keyIndex].status !== 'error') {
+          state.apiKeys[keyIndex].status = 'ready';
+        }
+      }
+
+      state.currentKeyIndex = (keyIndex + 1) % totalKeys;
       const keyItem = state.apiKeys[keyIndex];
-      state.currentKeyIndex = (state.currentKeyIndex + 1) % state.apiKeys.length;
 
       // Nếu key này đã từng chạy thành công với một model cụ thể, ưu tiên model đó lên đầu
       const keyCandidates = keyItem.workingModel
         ? [keyItem.workingModel, ...baseCandidates.filter(m => m !== keyItem.workingModel)]
         : baseCandidates;
 
-      // Thử tuần tự các model theo thứ tự ưu tiên (Failover 0.1s không làm gián đoạn)
+      let allModels429OnThisKey = true;
+
+      // Thử tuần tự các model theo thứ tự ưu tiên trên CÙNG 1 KEY này
       for (const activeModel of keyCandidates) {
         if (state.userAbortedOperation) break;
 
@@ -769,19 +815,19 @@ document.addEventListener('DOMContentLoaded', () => {
           const rawErrMsg = errJson.error?.message || `Lỗi HTTP ${response.status}`;
           lastErrorMessage = rawErrMsg;
 
-          // 💡 Cơ chế Failover tự động: Quá tải cục bộ (503), lỗi máy chủ (500) hoặc Model 404
-          // Hệ thống tự động chuyển sang model kế tiếp trong 0.1s mà không làm gián đoạn hay báo lỗi ra màn hình
+          // 💡 Failover tự động nếu Model 404 (chưa hỗ trợ ở vùng này) hoặc 503, 500 (máy chủ Google bận):
+          // Chuyển sang model kế tiếp trong danh sách ngay trên key này
           if (response.status === 404 || response.status === 503 || response.status === 500) {
-            console.info(`Model ${activeModel} gặp mã ${response.status}. Failover sang model kế tiếp trong 0.1s...`);
+            console.info(`Model ${activeModel} gặp mã ${response.status}. Chuyển sang model dự phòng kế tiếp...`);
+            allModels429OnThisKey = false;
             continue;
           }
 
-          // Rate Limit (429): Key này hết ngạch -> xoay sang Key kế tiếp
+          // 💡 ĐẶC BIỆT KHI GẶP RATE LIMIT 429:
+          // Nếu model hiện tại chạm ngạch 429, thử model còn lại trong 2 model (gemini-3.5-flash-lite & gemini-flash-lite-latest)
           if (response.status === 429) {
-            keyItem.status = 'rate_limited';
-            saveApiKeysToStorage();
-            showToast(`Key #${keyIndex + 1} chạm giới hạn ngạch 429. Đang chuyển sang key tiếp theo...`, 'warning');
-            break; // sang key tiếp theo trong bể xoay vòng
+            console.warn(`Model ${activeModel} chạm ngạch 429 trên Key #${keyIndex + 1}. Thử model dự phòng kế tiếp...`);
+            continue;
           }
 
           // Sai mã key hoặc bị cấm quyền (400, 401, 403)
@@ -790,9 +836,11 @@ document.addEventListener('DOMContentLoaded', () => {
             keyItem.errorDetail = `Lỗi ${response.status}: ${rawErrMsg}`;
             saveApiKeysToStorage();
             showToast(`Key #${keyIndex + 1}: ${rawErrMsg}. Đang chuyển key tiếp theo...`, 'warning');
+            allModels429OnThisKey = false;
             break; // sang key tiếp theo trong bể xoay vòng
           }
 
+          allModels429OnThisKey = false;
           continue;
 
         } catch (err) {
@@ -805,16 +853,45 @@ document.addEventListener('DOMContentLoaded', () => {
           }
 
           if (err.name === 'AbortError' || err === 'TIMEOUT' || err.message === 'TIMEOUT') {
-            console.warn(`Model ${activeModel} timeout ${Math.round(timeoutMs/1000)}s. Failover sang model kế tiếp...`);
+            console.warn(`Model ${activeModel} timeout. Thử model kế tiếp...`);
+            allModels429OnThisKey = false;
             continue;
           }
 
           console.warn(`Model ${activeModel} error:`, err);
+          allModels429OnThisKey = false;
           continue;
         }
       }
 
+      // Nếu tất cả các model trên key này đều chạm ngạch 429:
+      if (allModels429OnThisKey) {
+        keyItem.status = 'rate_limited';
+        keyItem.rateLimitedAt = Date.now();
+        saveApiKeysToStorage();
+        consecutive429Count++;
+        showToast(`Key #${keyIndex + 1} chạm giới hạn ngạch 429. Đang chuyển sang key tiếp theo...`, 'warning');
+
+        // Nghỉ nhẹ 300ms - 800ms để tránh việc gửi 9 request dồn dập trong vài mili-giây
+        const backoffMs = Math.min(300 * consecutive429Count, 1200);
+        await new Promise(r => setTimeout(r, backoffMs));
+      } else {
+        consecutive429Count = 0;
+      }
+
       attempts++;
+
+      // Nếu đã quay hết 1 vòng (attempts === totalKeys) mà vẫn chưa thành công:
+      // Nghỉ 1.5 giây cho cửa sổ RPM của Google hạ nhiệt và thử tiếp vòng 2
+      if (attempts === totalKeys && attempts < maxAttempts) {
+        showLoading(taskName, 'Đang chờ Google hạ nhiệt hạn ngạch (1.5s)...');
+        await new Promise(r => setTimeout(r, 1500));
+        state.apiKeys.forEach(k => {
+          if (k.status === 'rate_limited') {
+            k.status = 'ready';
+          }
+        });
+      }
     }
 
     hideLoading();
@@ -5119,6 +5196,29 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     updateSavedSummariesCount();
     updateSavedBeamsCount();
 
+    // Kích hoạt lắng nghe thời gian thực (Real-time onSnapshot) cho tài khoản này từ Firebase Cloud
+    if (state.activeUserUnsubscribe) {
+      try { state.activeUserUnsubscribe(); } catch (e) {}
+      state.activeUserUnsubscribe = null;
+    }
+    if (window.SmartEduCloud && window.SmartEduCloud.subscribeUser && user.username !== 'admin') {
+      state.activeUserUnsubscribe = window.SmartEduCloud.subscribeUser(user.username, (freshUser) => {
+        if (!freshUser || !state.currentUser || state.currentUser.username !== freshUser.username) return;
+        state.currentUser.scores = freshUser.scores || [];
+        state.currentUser.mindmaps = freshUser.mindmaps || [];
+        state.currentUser.summaries = freshUser.summaries || [];
+        state.currentUser.flashcards = freshUser.flashcards || [];
+        updateHeaderAccountUI();
+        updateSavedMindmapsCount();
+        updateSavedSummariesCount();
+        updateSavedBeamsCount();
+        renderMindmapLibrary();
+        renderSummaryLibrary();
+        renderBeamsLibrary();
+        renderAccountProgressUI();
+      });
+    }
+
     // 3. Khởi tạo/Hiển thị dữ liệu CỦA RIÊNG HỌC SINH NÀY lên các Tab:
     // Tab 1: Sơ đồ tư duy
     if (user.mindmaps.length > 0) {
@@ -5327,18 +5427,20 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
       }
       if (existingUser) {
         applyUserSession(existingUser);
-
-        // ĐỒNG BỘ TỰ ĐỘNG VỚI FIREBASE CLOUD: Kéo dữ liệu mới nhất (sơ đồ mới lưu từ điện thoại/máy tính khác)
-        if (window.SmartEduCloud.isFirebaseReady && window.SmartEduCloud.getUserData) {
-          window.SmartEduCloud.getUserData(cleanUsername).then(freshUser => {
-            if (freshUser && state.currentUser && state.currentUser.username === cleanUsername) {
-              applyUserSession(freshUser);
-              console.log('☁️ Đã đồng bộ bài học & sơ đồ mới nhất từ Firebase cho:', cleanUsername);
-            }
-          }).catch(() => {});
-        }
-        return;
       }
+
+      // Kéo dữ liệu thời gian thực từ Firebase Cloud ngay lập tức
+      if (window.SmartEduCloud.getUserData) {
+        try {
+          const freshUser = await window.SmartEduCloud.getUserData(cleanUsername);
+          if (freshUser) {
+            applyUserSession(freshUser);
+            console.log('☁️ Đã đồng bộ bài học & sơ đồ mới nhất từ Firebase cho:', cleanUsername);
+            return;
+          }
+        } catch (e) {}
+      }
+      if (existingUser) return;
     }
 
     // Nếu chưa có phiên đăng nhập -> Xóa dữ liệu tạm và hiển thị Khung Đăng Nhập
@@ -6891,12 +6993,24 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     // Hiển thị trạng thái cloud
     if (adminStatCloud) {
       if (window.SmartEduCloud.isFirebaseReady) {
-        adminStatCloud.textContent = 'Google Cloud Online';
+        adminStatCloud.textContent = 'Google Cloud Online (Thời gian thực)';
         adminStatCloud.className = 'text-[11px] font-bold text-emerald-700 mt-1 truncate';
       } else {
         adminStatCloud.textContent = 'Bộ nhớ Máy này';
         adminStatCloud.className = 'text-[11px] font-bold text-amber-700 mt-1 truncate';
       }
+    }
+
+    // Kích hoạt Real-Time Listener thời gian thực cho Super Admin (nếu chưa gắn)
+    if (!state.adminRealtimeSubscribed && window.SmartEduCloud.subscribeAllUsers) {
+      state.adminRealtimeSubscribed = true;
+      window.SmartEduCloud.subscribeAllUsers((allUsersList) => {
+        if (Array.isArray(allUsersList)) {
+          cachedAllAdminUsers = allUsersList;
+          updateAdminStats();
+          renderCurrentAdminTab();
+        }
+      });
     }
 
     try {
@@ -6916,25 +7030,17 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     }
   }
 
-  // Lọc bỏ tài khoản mẫu / dữ liệu bài mẫu (Toán 9, KHTN 9, longphung9a13...) để Super Admin chỉ thấy dữ liệu thực tế
+  // Chỉ loại bỏ tài khoản 'admin' khỏi danh sách học sinh (để hiển thị 100% tất cả học sinh thực tế trên Firebase)
   function isAdminSampleUser(u) {
     if (!u) return true;
     const uname = (u.username || '').trim().toLowerCase();
-    const name = (u.profile?.name || '').toLowerCase();
-    if (uname === 'admin' || uname === 'longphung9a13' || uname.startsWith('demo') || uname.startsWith('test')) return true;
-    if (name.includes('bài mẫu') || name.includes('mẫu') || name.includes('demo') || name.includes('long phụng')) return true;
+    if (uname === 'admin') return true;
     return false;
   }
 
   function isAdminSampleItem(item) {
     if (!item) return true;
-    const author = (item.authorUsername || item.studentUsername || '').trim().toLowerCase();
-    if (author === 'longphung9a13' || author === 'admin' || author.startsWith('demo') || author.startsWith('test')) return true;
-    const title = (item.title || '').toLowerCase();
-    if (title.includes('bài mẫu') || title.includes('mẫu toán') || title.includes('mẫu khtn') || 
-        title.includes('hệ hai phương trình') || title.includes('định luật ôm') || title.includes('demo')) {
-      return true;
-    }
+    if (item.isSample === true) return true;
     return false;
   }
 
@@ -7267,7 +7373,7 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     if (allScores.length === 0) {
       adminScoresTableBody.innerHTML = `
         <tr>
-          <td colspan="9" class="p-8 text-center text-slate-400 bg-slate-50">
+          <td colspan="10" class="p-8 text-center text-slate-400 bg-slate-50">
             <i class="fa-solid fa-award text-2xl mb-1 text-slate-300"></i>
             <p class="font-bold">Chưa có kết quả khảo thí nào!</p>
           </td>
@@ -7315,6 +7421,12 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
           </td>
           <td class="py-2.5 px-3 text-slate-400 font-mono text-[11px] whitespace-nowrap">
             ${sc.date || ''}
+          </td>
+          <td class="py-2.5 px-3 text-center whitespace-nowrap">
+            <button onclick="window.adminDeletePost && window.adminDeletePost('${sc.studentUsername}', 'score', '${sc.id}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs font-bold inline-flex items-center gap-1 cursor-pointer transition-all active:scale-95" title="Xóa điểm số bài kiểm tra này">
+              <i class="fa-solid fa-trash text-[11px]"></i>
+              <span>Xóa</span>
+            </button>
           </td>
         </tr>
       `;
@@ -7548,9 +7660,9 @@ Thầy cô có chắc chắn muốn xóa tài khoản học sinh "${fullname}" (
     }
   };
 
-  // Hành động Admin: Xóa bài viết cụ thể (mindmap, summary, flashcard)
+  // Hành động Admin: Xóa bài viết / điểm số cụ thể (mindmap, summary, score, flashcard)
   window.adminDeletePost = async function(username, postType, postId) {
-    const typeLabel = postType === 'mindmap' ? 'sơ đồ tư duy' : postType === 'summary' ? 'bài tóm tắt' : 'bộ thẻ lật';
+    const typeLabel = postType === 'mindmap' ? 'sơ đồ tư duy' : postType === 'summary' ? 'bài tóm tắt' : postType === 'score' ? 'kết quả bài kiểm tra' : 'bộ thẻ lật';
     const confirmDel = confirm(`Thầy cô có chắc chắn muốn xóa ${typeLabel} này?`);
     if (!confirmDel) return;
 
@@ -7558,6 +7670,19 @@ Thầy cô có chắc chắn muốn xóa tài khoản học sinh "${fullname}" (
       const res = await window.SmartEduCloud.adminDeleteUserPost(username, postType, postId);
       if (res.success) {
         showToast(res.message, 'success');
+        if (state.currentUser && state.currentUser.username === username) {
+          if (postType === 'score' && state.currentUser.scores) {
+            state.currentUser.scores = state.currentUser.scores.filter(sc => String(sc.id) !== String(postId));
+          } else if (postType === 'mindmap' && state.currentUser.mindmaps) {
+            state.currentUser.mindmaps = state.currentUser.mindmaps.filter(m => String(m.id) !== String(postId));
+          } else if (postType === 'summary' && state.currentUser.summaries) {
+            state.currentUser.summaries = state.currentUser.summaries.filter(s => String(s.id) !== String(postId));
+          } else if (postType === 'flashcard' && state.currentUser.flashcards) {
+            state.currentUser.flashcards = state.currentUser.flashcards.filter(f => String(f.id) !== String(postId));
+          }
+          updateHeaderAccountUI();
+          renderAccountProgressUI();
+        }
         await loadSuperAdminData();
       } else {
         showToast(res.message, 'error');

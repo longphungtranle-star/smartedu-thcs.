@@ -51,7 +51,7 @@
   <!-- Google Firebase Firestore Cloud Database SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-  <script src="firebase_config.js?v=20261123_70"></script>
+  <script src="firebase_config.js?v=20261123_95"></script>
   
   <!-- Early Safety Handlers: đảm bảo 100% các nút auth/admin hoạt động tức thì từ mili-giây đầu tiên -->
   <script>
@@ -213,13 +213,6 @@
             <i class="fa-solid fa-bolt text-amber-600 text-xs"></i>
             <span>Mẫu KHTN 9</span>
           </button>
-
-          <!-- Nút Đổi tài khoản / Mở Khung Đăng Nhập tiện lợi trực tiếp trên Mobile -->
-          <button id="btn-quick-login-toggle-mobile" onclick="window.logoutUser && window.logoutUser()" class="lg:hidden shrink-0 px-2 sm:px-2.5 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-300 rounded-lg flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap" title="Đăng xuất hoặc chuyển tài khoản khác">
-            <i class="fa-solid fa-arrow-right-from-bracket text-rose-600 text-xs"></i>
-            <span>Đổi nick / Đăng nhập</span>
-          </button>
-        </div>
         </div>
 
         <!-- PWA Install Button (Desktop >= lg) -->
@@ -2163,6 +2156,7 @@
                   <th class="py-2.5 px-3 text-center">Đúng / Tổng</th>
                   <th class="py-2.5 px-3 text-center">Đánh giá</th>
                   <th class="py-2.5 px-3">Thời gian</th>
+                  <th class="py-2.5 px-3 text-center">Thao tác</th>
                 </tr>
               </thead>
               <tbody id="admin-scores-table-body" class="divide-y divide-slate-100 text-slate-700 font-medium">
@@ -2296,10 +2290,10 @@
           Do bảo mật của điện thoại, bạn cần mở bằng <strong>Google Chrome</strong> chính thức để cài ứng dụng:
         </p>
         <div class="pt-1 flex flex-col gap-1.5">
-          <a href="intent://smartedu-thcs.vercel.app#Intent;scheme=https;package=com.android.chrome;end" class="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold text-center flex items-center justify-center gap-1.5 shadow-xs active:scale-95 cursor-pointer">
+          <a id="link-open-in-chrome" href="intent://websmartthcs.vercel.app#Intent;scheme=https;package=com.android.chrome;end" onclick="this.href='intent://' + window.location.host + '#Intent;scheme=https;package=com.android.chrome;end'" class="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold text-center flex items-center justify-center gap-1.5 shadow-xs active:scale-95 cursor-pointer">
             <i class="fa-brands fa-chrome text-sm"></i> Bấm để Chuyển sang Google Chrome
           </a>
-          <button onclick="navigator.clipboard.writeText('https://smartedu-thcs.vercel.app').then(() => alert('Đã sao chép liên kết! Bạn mở ứng dụng Chrome trên điện thoại rồi dán vào là cài được ngay.'))" class="w-full py-1.5 bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 rounded-lg text-[11px] font-semibold text-center flex items-center justify-center gap-1 shadow-2xs active:scale-95 cursor-pointer">
+          <button onclick="navigator.clipboard.writeText(window.location.origin).then(() => alert('Đã sao chép liên kết! Bạn mở ứng dụng Chrome trên điện thoại rồi dán vào là cài được ngay.'))" class="w-full py-1.5 bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 rounded-lg text-[11px] font-semibold text-center flex items-center justify-center gap-1 shadow-2xs active:scale-95 cursor-pointer">
             <i class="fa-solid fa-copy text-xs"></i> Sao chép link trang web
           </button>
         </div>
@@ -2349,6 +2343,6 @@
   </footer>
 
   <!-- Main App Script -->
-  <script src="app.js?v=20261123_70"></script>
+  <script src="app.js?v=20261123_95"></script>
 </body>
 </html>
