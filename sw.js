@@ -1,5 +1,5 @@
 // sw.js - Service Worker cho SmartEdu THCS (Hỗ trợ PWA & Bộ nhớ đệm Ngoại tuyến)
-const CACHE_NAME = 'smartedu-thcs-v27-realtime-firebase-sync';
+const CACHE_NAME = 'smartedu-thcs-v28-pure-cloud-sync';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

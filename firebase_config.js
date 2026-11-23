@@ -240,13 +240,15 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
       if (!this.isFirebaseReady || !this.db) return () => {};
       try {
         const unsubscribe = this.db.collection('users').onSnapshot((snapshot) => {
-          const allUsers = { ...this._getLocalUsers() };
+          const cloudUsers = {};
           snapshot.forEach((doc) => {
-            allUsers[doc.id] = doc.data();
+            const data = doc.data() || {};
+            data.username = doc.id;
+            cloudUsers[doc.id] = data;
           });
-          this._setLocalUsers(allUsers);
+          this._setLocalUsers(cloudUsers);
           if (typeof callback === 'function') {
-            callback(Object.values(allUsers));
+            callback(Object.values(cloudUsers));
           }
         }, (err) => {
           console.warn('Real-time listener error cho all users:', err);
@@ -449,21 +451,24 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
     // Lấy toàn bộ danh sách tài khoản & bài học của tất cả học sinh trên hệ thống (Dạng mảng Array)
     async getAllUsers() {
       this._ensureSuperAdminAccount();
-      const allUsers = { ...this._getLocalUsers() };
 
       if (this.isFirebaseReady && this.db) {
         try {
           const snapshot = await this.db.collection('users').get();
+          const cloudUsers = {};
           snapshot.forEach(doc => {
-            allUsers[doc.id] = doc.data();
+            const data = doc.data() || {};
+            data.username = doc.id;
+            cloudUsers[doc.id] = data;
           });
           // Đồng bộ lại local cache
-          this._setLocalUsers(allUsers);
+          this._setLocalUsers(cloudUsers);
+          return Object.values(cloudUsers);
         } catch (e) {
           console.warn('⚠️ Lỗi nạp danh sách người dùng từ Firebase (dùng cache):', e);
         }
       }
-      return Object.values(allUsers);
+      return Object.values(this._getLocalUsers());
     },
 
     // Super Admin xóa một tài khoản học sinh
@@ -510,8 +515,14 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
     // Super Admin xóa một bài (sơ đồ, tóm tắt, điểm thi, hoặc thẻ lật) của một học sinh
     async adminDeleteUserPost(username, postType, postId) {
       const cleanUsername = (username || '').trim().toLowerCase();
-      const localUsers = this._getLocalUsers();
-      const user = localUsers[cleanUsername];
+      let user = null;
+      if (this.isFirebaseReady && this.db) {
+        user = await this.getUserData(cleanUsername);
+      }
+      if (!user) {
+        const localUsers = this._getLocalUsers();
+        user = localUsers[cleanUsername];
+      }
       if (!user) return { success: false, message: 'Không tìm thấy tài khoản!' };
 
       const strId = String(postId);
