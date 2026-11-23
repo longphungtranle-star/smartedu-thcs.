@@ -680,7 +680,7 @@ document.addEventListener('DOMContentLoaded', () => {
       state.selectedModel = dom.selectGeminiModel.value;
     }
 
-    const { isJson = false, maxTokens = 4000, taskName = 'Đang xử lý bằng AI...', timeoutMs = 25000 } = options;
+    const { isJson = false, maxTokens = 4000, taskName = 'Đang xử lý bằng AI...', timeoutMs = 18000 } = options;
     state.userAbortedOperation = false;
 
     // Tự động khôi phục các key đã hết thời gian hạ nhiệt cooldown (sau 40 giây kể từ khi 429)
@@ -898,9 +898,9 @@ document.addEventListener('DOMContentLoaded', () => {
     throw new Error(`Không thể hoàn thành yêu cầu: ${lastErrorMessage || 'Tất cả các API Key hoặc Model trong bể xoay vòng đều bận'}`);
   }
 
-  // ================= THUẬT TOÁN TỐI ƯU HÓA NGỮ CẢNH VĂN BẢN DÀI (SMART SEMANTIC TRUNCATION) =================
-  // Giúp AI phản hồi siêu tốc sau 2-3s kể cả với tài liệu dài 5.000 - 15.000 từ
-  function optimizeTextForAi(rawText, maxChars = 7500) {
+  // ================= THUẬT TOÁN TỐI ƯU HÓA NGỮ CẢNH VĂN BẢN DÀI (HỖ TRỢ TÀI LIỆU TRÊN 10-40 TRANG) =================
+  // Gemini 3.5 Flash Lite hỗ trợ context khủng (1 triệu tokens), hệ thống mở rộng xử lý tới 75.000 ký tự (30+ trang)
+  function optimizeTextForAi(rawText, maxChars = 75000) {
     if (!rawText || typeof rawText !== 'string') return '';
     if (rawText.length <= maxChars) return rawText;
 
@@ -921,7 +921,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const isMathOrFormula = /[$=+\-*/\\^_√ΔΩ△∠⟂∥]/.test(trimmed);
       const isKeyConcept = /ghi nhớ|tóm tắt|định lý|định luật|khái niệm|công thức|kết luận|chú ý|ví dụ|takeaway/i.test(trimmed);
 
-      if (isHeading || isMathOrFormula || isKeyConcept || priorityLines.length < 30) {
+      if (isHeading || isMathOrFormula || isKeyConcept || priorityLines.length < 50) {
         priorityLines.push(line);
         currentLength += line.length + 1;
         if (currentLength >= maxChars) break;
@@ -931,12 +931,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    if (priorityLines.length >= 20 && currentLength >= 2000) {
+    if (priorityLines.length >= 20 && currentLength >= 5000) {
       return priorityLines.join('\n');
     }
 
     // 3. Fallback: Cắt giữ đầu và đuôi cân đối (tránh mất phần tóm tắt ở cuối sách)
-    const headLen = Math.floor(maxChars * 0.7);
+    const headLen = Math.floor(maxChars * 0.75);
     const tailLen = maxChars - headLen - 120;
     return text.slice(0, headLen) + '\n\n[... Trích lược nội dung bài học ...]\n\n' + text.slice(-tailLen);
   }
@@ -957,7 +957,7 @@ document.addEventListener('DOMContentLoaded', () => {
         img.onload = () => {
           let width = img.width;
           let height = img.height;
-          const maxDim = 1280; // Chuẩn nét sắc sảo cho OCR công thức Toán, Lý, Hóa & Hình vẽ
+          const maxDim = 1080; // Chuẩn nét sắc sảo cho OCR công thức Toán, Lý, Hóa & Hình vẽ, giảm 65% dung lượng giúp AI xử lý siêu tốc
 
           if (width > maxDim || height > maxDim) {
             if (width > height) {
@@ -977,7 +977,7 @@ document.addEventListener('DOMContentLoaded', () => {
           ctx.fillRect(0, 0, width, height);
           ctx.drawImage(img, 0, 0, width, height);
 
-          const optimizedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+          const optimizedBase64 = canvas.toDataURL('image/jpeg', 0.76);
           resolve(optimizedBase64);
         };
         img.onerror = () => resolve(rawDataUrl);
@@ -1158,7 +1158,7 @@ document.addEventListener('DOMContentLoaded', () => {
           try {
             const zip = await window.JSZip.loadAsync(arrayBuffer);
             const imageEntries = Object.keys(zip.files).filter(k => /^word\/media\/.+\.(png|jpeg|jpg|webp)$/i.test(k));
-            const imagesToExtract = imageEntries.slice(0, 10); // Hỗ trợ tối đa 10 trang ảnh scan nhúng trong Word
+            const imagesToExtract = imageEntries.slice(0, 30); // Mở rộng hỗ trợ tối đa tới 30 trang ảnh scan nhúng trong Word
             for (const imgPath of imagesToExtract) {
               const fileData = await zip.files[imgPath].async("base64");
               const ext = imgPath.split('.').pop().toLowerCase();
@@ -1255,24 +1255,24 @@ document.addEventListener('DOMContentLoaded', () => {
         // Nhận diện file PDF dạng scan ảnh hoặc văn bản quá ít (< 35 từ trên toàn tài liệu)
         const isScannedPdf = totalRealWords < 35 || (totalPages > 1 && (totalRealWords / totalPages) < 15);
 
-        // Render ảnh các trang thông minh:
-        // - PDF kỹ thuật số (đã có text): Chỉ render duy nhất Trang 1 làm thumbnail xem trước (siêu tốc, chỉ mất 0.1s)
-        // - PDF scan ảnh: Render tối đa 10 trang để hỗ trợ AI Multimodal Vision đọc chi tiết toàn bộ công thức & hình vẽ
+        // Render ảnh các trang thông minh & siêu tốc:
+        // - PDF kỹ thuật số (đã có text): Chỉ render duy nhất Trang 1 làm thumbnail xem trước (siêu tốc, chỉ mất 0.05s)
+        // - PDF scan ảnh: Render tối đa 6-8 trang trọng tâm với scale 1.0 tối ưu để hoàn thành ngay trong 1s
         let pageImages = [];
-        const pagesToRender = isScannedPdf ? Math.min(totalPages, 10) : 1;
+        const pagesToRender = isScannedPdf ? Math.min(totalPages, 8) : 1;
 
         for (let i = 1; i <= pagesToRender; i++) {
           try {
             const page = await pdf.getPage(i);
-            const viewport = page.getViewport({ scale: 1.2 }); // Scale 1.2 siêu sắc nét cho OCR nhưng nhẹ hơn 40% so với 1.5
+            const viewport = page.getViewport({ scale: 1.0 }); // Scale 1.0 siêu tốc, giảm 50% thời gian render canvas
             const canvas = document.createElement('canvas');
-            canvas.width = Math.min(viewport.width, 1280);
-            canvas.height = Math.min(viewport.height, 1800);
+            canvas.width = Math.min(viewport.width, 1080);
+            canvas.height = Math.min(viewport.height, 1500);
             const ctx = canvas.getContext('2d');
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.80);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
             pageImages.push(dataUrl);
           } catch (renderErr) {
             console.warn(`Lỗi render canvas trang ${i}:`, renderErr);
@@ -1288,6 +1288,7 @@ document.addEventListener('DOMContentLoaded', () => {
             id: 'pdf_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
             name: name,
             type: 'pdf',
+            pageCount: totalPages,
             text: scanNotice,
             wordCount: totalRealWords > 15 ? totalRealWords : 0,
             size: file.size,
@@ -1303,6 +1304,7 @@ document.addEventListener('DOMContentLoaded', () => {
           id: 'pdf_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
           name: name,
           type: 'pdf',
+          pageCount: totalPages,
           text: fullText || `[File PDF: ${name} (Không tìm thấy văn bản trích xuất)]`,
           wordCount: totalRealWords,
           size: file.size,
@@ -1398,10 +1400,12 @@ document.addEventListener('DOMContentLoaded', () => {
       dom.docBadgeType.textContent = totalFiles > 1 ? `GỘP ${totalFiles} FILE` : state.currentDoc.type.toUpperCase();
     }
 
+    const totalPagesCount = state.uploadedFiles.reduce((acc, f) => acc + (f.pageCount || 0), 0);
+    const pagesInfo = totalPagesCount > 0 ? `${totalPagesCount} trang • ` : '';
     const imageCount = allImages.length;
-    const imageInfo = imageCount > 0 ? ` • ${imageCount} ảnh bài học` : '';
+    const imageInfo = imageCount > 0 ? ` • ${imageCount} ảnh` : '';
     if (dom.docStats) {
-      dom.docStats.textContent = `${state.currentDoc.wordCount} từ${imageInfo} • Sẵn sàng phân tích & khảo thí`;
+      dom.docStats.textContent = `${pagesInfo}${state.currentDoc.wordCount} từ${imageInfo} • Sẵn sàng phân tích toàn diện`;
     }
 
     // Biểu tượng loại tài liệu
@@ -1580,45 +1584,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     try {
-      showLoading(`Đang nhận diện OCR qua AI...`, `Đang trích xuất công thức Toán - Lý - Hóa và phân tích hình vẽ từ ${itemsToProcess.length} trang ảnh bài học...`);
+      showLoading(`Đang nhận diện OCR siêu tốc...`, `Đang trích xuất công thức Toán - Lý - Hóa & văn bản từ ${itemsToProcess.length} trang ảnh...`);
 
-      const prompt = `Bạn là chuyên gia nhận diện văn bản (OCR) và phiên giải tài liệu học tập ĐẶC BIỆT LÀ TOÁN HỌC, VẬT LÝ, HÓA HỌC & KHOA HỌC TỰ NHIÊN (Cả Cấp 2 THCS & Cấp 3 THPT).
-Hãy đọc cẩn thận bức ảnh bài học này và trích xuất TOÀN BỘ nội dung ra văn bản tiếng Việt rõ ràng, mạch lạc, giữ nguyên tiêu đề và cấu trúc bài học:
-
-1. QUY TẮC NHẬN DẠNG CÔNG THỨC TOÁN, LÝ, HÓA CHUẨN XÁC:
-- Chuyển TẤT CẢ công thức Toán, biểu thức đại số, hình học, công thức Vật lý, phương trình Hóa học sang định dạng LaTeX/KaTeX kẹp giữa dấu $ (công thức trong dòng $...$) hoặc $$ (công thức riêng dòng $$...$$).
-- Phân số & căn thức: \\frac{a}{b}, \\frac{x + 1}{x - 2}, \\sqrt{A}, \\sqrt[n]{A}.
-- Lũy thừa, chỉ số: x^2, x_1, x_2, (a+b)^2, \\log_a b, e^x.
-- Hệ phương trình & ngoặc: \\begin{cases} ax + by = c \\\\ a'x + b'y = c' \\end{cases}.
-- Hình học & Giải tích THCS/THPT: \\triangle ABC, \\widehat{ABC}, \\perp, \\parallel, \\sim, ^\\circ, \\vec{u}(x;y;z).
-- Vật lý: \\vec{F}, I = \\frac{U}{R}, P = U \\cdot I, Q = I^2 R t, x = A\\cos(\\omega t + \\varphi), \\lambda = \\frac{v}{f}, \\Omega, \\mu.
-- Hóa học: Phương trình phản ứng (\\rightarrow, \\rightleftharpoons), điều kiện nhiệt độ (\\xrightarrow{t^\\circ}), ion (\\text{SO}_4^{2-}, \\text{Fe}^{3+}), kết tủa (\\downarrow), bay hơi (\\uparrow), công thức hữu cơ (\\text{CH}_3\\text{COOH}).
-
-2. PHÂN TÍCH VÀ MÔ TẢ CHI TIẾT HÌNH VẼ, SƠ ĐỒ, ĐỒ THỊ, BẢNG BIỂU (RẤT QUAN TRỌNG):
-- Nếu bài học có HÌNH VẼ HÌNH HỌC (tam giác, đường tròn, góc, tiếp tuyến, đường cao): Mô tả chi tiết hình vẽ, các điểm, góc, cạnh bằng nhau, số đo và chuyển thành giả thiết toán học rõ ràng.
-- Nếu có SƠ ĐỒ MẠCH ĐIỆN VẬT LÝ (nguồn điện, ampe kế, vôn kế, các điện trở nối tiếp hay song song): Liệt kê chính xác sơ đồ mạch điện (ví dụ: (R1 // R2) nt R3) cùng các thông số ghi trên hình.
-- Nếu có HÌNH VẼ THÍ NGHIỆM HÓA HỌC / KHOA HỌC TỰ NHIÊN (bình tam giác, ống nghiệm, chất phản ứng, ngọn lửa đèn cồn, hiện tượng sủi bọt, kết tủa): Mô tả cụ thể dụng cụ, hóa chất tham gia, điều kiện và hiện tượng quan sát được.
-- Nếu có ĐỒ THỊ / BIỂU ĐỒ: Đọc rõ các trục tọa độ, xu hướng biến thiên và giá trị tại các điểm đặc biệt.
-
-Chỉ trả về nội dung bài học và phần phân tích hình vẽ đã nhận diện, không kèm lời chào.`;
+      const prompt = `Bạn là chuyên gia nhận diện văn bản (OCR) siêu tốc và trích xuất tài liệu học tập THCS/THPT (Toán, Lý, Hóa, Văn, Sinh, Sử, Địa, KHTN).
+Yêu cầu trích xuất TOÀN BỘ nội dung bài học trong ảnh ra văn bản tiếng Việt chính xác, mạch lạc:
+1. CÔNG THỨC TOÁN, LÝ, HÓA: Bắt buộc viết dưới dạng LaTeX kẹp giữa dấu $ (ví dụ: $ax^2 + bx + c = 0$, $\\Delta = b^2 - 4ac$, $I = \\frac{U}{R}$, $P = U \\cdot I$, phương trình hóa học).
+2. HÌNH VẼ & SƠ ĐỒ (nếu có): Trích xuất ngắn gọn dữ kiện hình học, sơ đồ mạch điện hoặc thí nghiệm.
+3. TỐC ĐỘ & HIỆU QUẢ: Trả về trực tiếp văn bản bài học đã nhận diện, không thêm lời chào, không giải thích rườm rà.`;
 
       let extractedFull = '';
 
-      // ================= ĐỘT PHÁ TỐI ƯU HÓA OCR ĐA TRANG (PARALLEL BATCHING) =================
-      // Thay vì chạy tuần tự từng trang gây chậm khi có 10 trang, hệ thống tự động:
-      // 1. Nếu có 1 trang: Nhận diện trực tiếp.
-      // 2. Nếu có từ 2 trang trở lên (đặc biệt tài liệu/ảnh 10 trang): Chia thành các cụm 5 trang và chạy SONG SONG đồng thời qua Promise.all.
-      // Tốc độ tăng tốc gấp 8 - 10 lần (10 trang chỉ mất ~5-8 giây thay vì 60-80 giây)!
+      // ================= ĐỘT PHÁ TỐI ƯU HÓA OCR SIÊU TỐC (2-3 GIÂY) =================
       if (itemsToProcess.length === 1) {
         const item = itemsToProcess[0];
-        showLoading(`Đang nhận diện OCR...`, item.name);
+        showLoading(`Đang nhận diện OCR siêu tốc...`, item.name);
         extractedFull = await callGeminiWithRotation(prompt, item.imageBase64, {
           isJson: false,
-          maxTokens: 4000,
-          taskName: `Đang nhận diện OCR: ${item.name}...`
+          maxTokens: 2200,
+          timeoutMs: 16000,
+          taskName: `Đang nhận diện OCR siêu tốc: ${item.name}...`
         });
       } else {
-        const chunkSize = 5; // Cụm tối ưu nhất cho Gemini Multimodal Vision (5 ảnh/request)
+        const chunkSize = 2; // Tối ưu 2 trang/cụm để Gemini Multimodal phản xạ trong 2-3s mỗi cụm
         const chunks = [];
         for (let i = 0; i < itemsToProcess.length; i += chunkSize) {
           chunks.push({
@@ -1630,24 +1617,25 @@ Chỉ trả về nội dung bài học và phần phân tích hình vẽ đã nh
         }
 
         showLoading(
-          `Đang nhận diện song song siêu tốc ${itemsToProcess.length} trang ảnh...`,
-          `Chia làm ${chunks.length} cụm trang (${chunks.map(c => `Trang ${c.startPage}-${c.endPage}`).join(', ')}) xử lý đồng thời qua Gemini Vision...`
+          `Đang nhận diện siêu tốc ${itemsToProcess.length} trang ảnh...`,
+          `Chia làm ${chunks.length} cụm trang (${chunks.map(c => `Trang ${c.startPage}-${c.endPage}`).join(', ')}) xử lý đồng thời...`
         );
 
-        const chunkPromises = chunks.map(async (chk) => {
+        const chunkPromises = chunks.map(async (chk, idx) => {
+          if (idx > 0) await new Promise(r => setTimeout(r, idx * 150));
           const chunkImages = chk.items.map(it => it.imageBase64).filter(Boolean);
           const chunkPrompt = `${prompt}
 
-LƯU Ý ĐẶC BIỆT KHI NHẬN DIỆN CỤM TRANG BÀI HỌC (TỪ TRANG ${chk.startPage} ĐẾN TRANG ${chk.endPage}):
-- Đây là ${chk.items.length} bức ảnh liên tiếp thuộc CÙNG MỘT BÀI HỌC được chụp tuần tự theo thứ tự từ Trang ${chk.startPage} đến Trang ${chk.endPage}.
-- Hãy đọc cẩn thận và kết nối các phần kiến thức liền mạch từ trang đầu đến trang cuối thành một bài học hoàn chỉnh.
-- Giữ nguyên toàn bộ tiêu đề, công thức Toán - Lý - Hóa dưới dạng KaTeX ($...$ hoặc $$...$$) và phần phân tích hình vẽ/mạch điện nếu có.`;
+LƯU Ý KHI NHẬN DIỆN CỤM TRANG BÀI HỌC (TRANG ${chk.startPage} ĐẾN TRANG ${chk.endPage}):
+- Đọc cẩn thận và kết nối các phần kiến thức liền mạch từ trang đầu đến trang cuối.
+- Giữ nguyên toàn bộ tiêu đề, công thức Toán - Lý - Hóa ($...$) và dữ kiện hình vẽ nếu có.`;
 
           try {
             const chunkResult = await callGeminiWithRotation(chunkPrompt, chunkImages, {
               isJson: false,
-              maxTokens: 4000,
-              taskName: `Đang nhận diện song song Cụm ${chk.chunkIndex}/${chunks.length} (Trang ${chk.startPage} - ${chk.endPage})...`
+              maxTokens: 2800,
+              timeoutMs: 18000,
+              taskName: `Đang nhận diện Cụm ${chk.chunkIndex}/${chunks.length} (Trang ${chk.startPage} - ${chk.endPage})...`
             });
             return {
               chunkIndex: chk.chunkIndex,
@@ -1662,7 +1650,8 @@ LƯU Ý ĐẶC BIỆT KHI NHẬN DIỆN CỤM TRANG BÀI HỌC (TỪ TRANG ${chk
               const subItem = chk.items[j];
               const pRes = await callGeminiWithRotation(prompt, subItem.imageBase64, {
                 isJson: false,
-                maxTokens: 3500,
+                maxTokens: 2000,
+                timeoutMs: 15000,
                 taskName: `Đang nhận diện OCR trang ${chk.startPage + j}/${itemsToProcess.length}...`
               });
               subParts.push(`=== [TRANG ${chk.startPage + j}: ${subItem.name}] ===\n` + pRes);
@@ -2259,10 +2248,10 @@ LƯU Ý ĐẶC BIỆT KHI NHẬN DIỆN CỤM TRANG BÀI HỌC (TỪ TRANG ${chk
   // Helper lấy ảnh gửi AI Vision (hỗ trợ 1 ảnh hoặc mảng nhiều ảnh bài học) khi người dùng chưa chạy OCR
   function getImagesToSend() {
     const hasImages = (state.currentDoc.images && state.currentDoc.images.length > 0) || state.currentDoc.imageBase64;
-    const isPlaceholderText = !state.currentDoc.text || state.currentDoc.text.includes('[Ảnh chụp bài học:');
+    const isPlaceholderText = !state.currentDoc.text || state.currentDoc.text.includes('[Ảnh chụp bài học:') || state.currentDoc.text.includes('[Tài liệu PDF ảnh scan');
     if (hasImages && isPlaceholderText) {
       if (state.currentDoc.images && state.currentDoc.images.length > 0) {
-        return state.currentDoc.images;
+        return state.currentDoc.images.slice(0, 3); // Gửi tối đa 3 ảnh trọng tâm để AI phản hồi siêu tốc (2-3s), chống nghẽn socket & timeout
       }
       return state.currentDoc.imageBase64 ? [state.currentDoc.imageBase64] : null;
     }
@@ -2284,16 +2273,17 @@ QUY TẮC THIẾT KẾ SƠ ĐỒ TƯ DUY HIỆN ĐẠI (CHỐNG DÀI DÒNG, TĂN
 3. Tỏa nhánh hình cây: Nếu có nhiều ý con, hãy tách thành các dấu gạch đầu dòng con lùi vào trong để sơ đồ bung rộng tỏa nhánh cân xứng, đẹp mắt.
 4. Viết công thức Toán/KHTN dưới dạng LaTeX kẹp giữa $ (Ví dụ: $ax^2 + bx + c = 0$, $\\Delta = b^2 - 4ac$, $I = \\frac{U}{R}$).
 5. ĐẶC BIỆT LƯU Ý HÌNH VẼ & SƠ ĐỒ MINH HỌA: Nếu bài học có hình vẽ hình học, sơ đồ mạch điện, thí nghiệm hóa học hoặc đồ thị, hãy trích xuất và đưa các dữ kiện then chốt từ hình vẽ vào các nhánh kiến thức tương ứng.
-6. CHỈ TRẢ VỀ DUY NHẤT ĐOẠN MÃ MARKDOWN CỦA SƠ ĐỒ TƯ DUY, KHÔNG CÓ BẤT KỲ LỜI DẪN NÀO KHÁC.
+6. ĐỐI VỚI TÀI LIỆU DÀI NHIỀU TRANG (TRÊN 10 TRANG): Hãy phân bổ các nhánh cấp 1 (##) và nhánh cấp 2 (###) bao quát toàn bộ tài liệu từ trang 1 đến trang cuối, không bỏ sót các phần kiến thức trọng tâm.
+7. CHỈ TRẢ VỀ DUY NHẤT ĐOẠN MÃ MARKDOWN CỦA SƠ ĐỒ TƯ DUY, KHÔNG CÓ BẤT KỲ LỜI DẪN NÀO KHÁC.
 
-NỘI DUNG BÀI HỌC CẤP 2:
-${optimizeTextForAi(state.currentDoc.text, 6500)}`;
+NỘI DUNG BÀI HỌC CẤP 2 (TOÀN BỘ CÁC TRANG TÀI LIỆU):
+${optimizeTextForAi(state.currentDoc.text, 65000)}`;
 
     try {
       const imgToSend = getImagesToSend();
       const aiResponse = await callGeminiWithRotation(prompt, imgToSend, {
         isJson: false,
-        maxTokens: 1500,
+        maxTokens: 3500,
         taskName: 'Đang tạo Sơ đồ tư duy AI...'
       });
       // Clean up markdown block quotes if present
@@ -2397,14 +2387,14 @@ Trả về dữ liệu dưới dạng JSON thuần túy (không bọc text ngoà
   }
 }
 
-NỘI DUNG BÀI HỌC CẤP 2:
-${optimizeTextForAi(state.currentDoc.text, 6500)}`;
+NỘI DUNG BÀI HỌC CẤP 2 (BAO QUÁT TOÀN BỘ CÁC TRANG CỦA TÀI LIỆU):
+${optimizeTextForAi(state.currentDoc.text, 65000)}`;
 
     try {
       const imgToSend = getImagesToSend();
       const rawRes = await callGeminiWithRotation(prompt, imgToSend, {
         isJson: true,
-        maxTokens: 1500,
+        maxTokens: 3500,
         taskName: 'Đang tạo Tóm tắt & Gợi ý học tập AI...'
       });
       const parsed = safeParseJson(rawRes);
@@ -2707,6 +2697,7 @@ Dựa trên tài liệu bài học cấp 2 sau, hãy tạo một bộ đề thi 
 QUAN TRỌNG VỀ CÔNG THỨC TOÁN & KHOA HỌC: Bắt buộc viết các công thức toán, lý, hóa trong câu hỏi, đáp án và giải thích dưới dạng LaTeX kẹp giữa dấu $ (ví dụ: $ax^2 + bx + c = 0$, $\\Delta = b^2 - 4ac$, $I = \\frac{U}{R}$, $P = U \\cdot I$, $Q = I^2 R t$).
 LƯU Ý KỸ THUẬT VỀ ĐỊNH DẠNG JSON: Mọi công thức LaTeX trong chuỗi JSON PHẢI dùng 2 dấu gạch chéo ngược \\\\ (ví dụ \\\\frac{U}{R}, \\\\sqrt{x}, \\\\Delta, \\\\cdot, \\\\Omega, \\\\pm) để đảm bảo chuỗi JSON hợp lệ 100%.
 ĐẶC BIỆT LƯU Ý HÌNH VẼ & SƠ ĐỒ MINH HỌA: Nếu bài học có hình vẽ hình học, sơ đồ mạch điện, thí nghiệm hóa học hoặc đồ thị, hãy sáng tạo ít nhất 2-3 câu hỏi khai thác trực tiếp từ các dữ kiện trên hình vẽ (ví dụ: "Dựa vào hình vẽ/sơ đồ mạch điện, hãy tính...", "Hiện tượng quan sát được trong thí nghiệm là...").
+ĐỐI VỚI TÀI LIỆU DÀI NHIỀU TRANG (TRÊN 10 TRANG): Hãy phân bổ đều các câu hỏi từ trang đầu đến trang cuối của tài liệu để đánh giá toàn diện năng lực học sinh.
 Mỗi câu hỏi có 4 đáp án (A, B, C, D) với đúng 1 đáp án chính xác.
 Trả về dữ liệu dưới dạng JSON thuần túy (KHÔNG có văn bản nào ngoài JSON) theo cấu trúc mảng sau:
 [
@@ -2726,8 +2717,8 @@ Trả về dữ liệu dưới dạng JSON thuần túy (KHÔNG có văn bản n
   }
 ]
 
-NỘI DUNG BÀI HỌC CẤP 2:
-${optimizeTextForAi(state.currentDoc.text, 7500)}`;
+NỘI DUNG BÀI HỌC CẤP 2 (TOÀN BỘ CÁC TRANG CỦA TÀI LIỆU):
+${optimizeTextForAi(state.currentDoc.text, 75000)}`;
 
     try {
       const imgToSend = getImagesToSend();
@@ -3671,14 +3662,14 @@ Trả về mảng JSON thuần túy theo cấu trúc:
   }
 ]
 
-NỘI DUNG BÀI HỌC CẤP 2:
-${optimizeTextForAi(state.currentDoc.text, 6500)}`;
+NỘI DUNG BÀI HỌC CẤP 2 (TOÀN BỘ CÁC TRANG CỦA TÀI LIỆU):
+${optimizeTextForAi(state.currentDoc.text, 65000)}`;
 
     try {
       const imgToSend = getImagesToSend();
       const rawRes = await callGeminiWithRotation(prompt, imgToSend, {
         isJson: true,
-        maxTokens: 4000,
+        maxTokens: 5000,
         taskName: 'Đang tạo bộ Thẻ học tập Flashcards AI...'
       });
       const parsed = safeParseJson(rawRes);

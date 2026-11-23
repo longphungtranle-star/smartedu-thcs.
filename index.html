@@ -51,7 +51,7 @@
   <!-- Google Firebase Firestore Cloud Database SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-  <script src="firebase_config.js?v=20261123_99"></script>
+  <script src="firebase_config.js?v=20261123_107"></script>
   
   <!-- Early Safety Handlers: đảm bảo 100% các nút auth/admin hoạt động tức thì từ mili-giây đầu tiên -->
   <script>
@@ -166,10 +166,6 @@
 
         <!-- Action Buttons for Mobile & Tablet (< lg) -->
         <div class="flex items-center gap-1 sm:gap-1.5 lg:hidden shrink-0">
-          <button id="btn-quick-guide-mobile" onclick="window.toggleUserGuide && window.toggleUserGuide()" class="hidden sm:flex px-1.5 sm:px-2 py-1 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Xem hướng dẫn sử dụng nhanh">
-            <i class="fa-solid fa-circle-question text-indigo-600 text-xs"></i>
-            <span class="text-[11px]">HD</span>
-          </button>
           <button id="btn-install-pwa-mobile" class="hidden px-1.5 sm:px-2 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg items-center gap-1 shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Cài ứng dụng SmartEdu lên màn hình chính điện thoại">
             <i class="fa-solid fa-download text-indigo-600 text-xs"></i>
             <span class="hidden sm:inline text-[11px]">Cài</span>
@@ -219,12 +215,6 @@
         <button id="btn-install-pwa" class="hidden lg:flex px-2 sm:px-2.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg items-center gap-1 transition-all shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Cài đặt SmartEdu lên màn hình chính máy tính">
           <i class="fa-solid fa-mobile-screen-button text-indigo-600 text-xs"></i>
           <span>Cài ứng dụng</span>
-        </button>
-
-        <!-- Desktop-only Guide Button (>= lg) -->
-        <button id="btn-quick-guide" onclick="window.toggleUserGuide && window.toggleUserGuide()" class="hidden lg:flex px-2.5 sm:px-3 py-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg items-center gap-1.5 transition-all shadow-xs shrink-0 cursor-pointer active:scale-95 whitespace-nowrap" title="Xem hướng dẫn sử dụng nhanh">
-          <i class="fa-solid fa-circle-question text-indigo-600 text-xs sm:text-sm"></i>
-          <span>Hướng dẫn</span>
         </button>
 
         <!-- Desktop-only Share QR Code Button (>= lg) -->
@@ -2343,6 +2333,6 @@
   </footer>
 
   <!-- Main App Script -->
-  <script src="app.js?v=20261123_99"></script>
+  <script src="app.js?v=20261123_107"></script>
 </body>
 </html>
