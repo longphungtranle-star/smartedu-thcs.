@@ -5165,8 +5165,31 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
       if (dom.beamEmptyState) dom.beamEmptyState.classList.remove('hidden');
     }
 
-    // Reset tài liệu tải lên tạm thời
-    state.currentDoc = { title: '', text: '', type: 'text', imageBase64: null, images: [] };
+    // Reset toàn bộ tài liệu đã nạp ở khung input của phiên làm việc trước
+    state.uploadedFiles = [];
+    state.currentDoc = { title: '', text: '', type: 'text', imageBase64: null, images: [], wordCount: 0 };
+    if (dom.uploadedFilesContainer) dom.uploadedFilesContainer.classList.add('hidden');
+    if (dom.uploadedFilesItems) dom.uploadedFilesItems.innerHTML = '';
+    if (dom.uploadedFilesCount) dom.uploadedFilesCount.textContent = '0';
+    if (dom.docPreviewCard) dom.docPreviewCard.classList.add('hidden');
+    if (dom.btnOcrImage) dom.btnOcrImage.classList.add('hidden');
+    if (dom.rawTextInput) dom.rawTextInput.value = '';
+    if (dom.extractedTextArea) dom.extractedTextArea.value = '';
+    if (dom.fileInput) dom.fileInput.value = '';
+    if (dom.cameraInput) dom.cameraInput.value = '';
+    const addMoreF1 = document.getElementById('btn-add-more-files-input');
+    if (addMoreF1) addMoreF1.value = '';
+    const addMoreC1 = document.getElementById('btn-add-more-camera-input');
+    if (addMoreC1) addMoreC1.value = '';
+
+    // Dừng âm thanh và bộ đếm thời gian
+    stopAllSpeech();
+    if (state.quizTimerInterval) {
+      clearInterval(state.quizTimerInterval);
+      state.quizTimerInterval = null;
+    }
+    state.quizUserAnswers = {};
+    state.quizSubmitted = false;
 
     // Cập nhật lại danh sách Thư viện trong DOM chuẩn xác theo tài khoản này
     renderMindmapLibrary();
@@ -5188,7 +5211,33 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     state.summaryData = null;
     state.quizData = [];
     state.beamData = [];
-    state.currentDoc = { title: '', text: '', type: 'text', imageBase64: null, images: [] };
+    state.currentDoc = { title: '', text: '', type: 'text', imageBase64: null, images: [], wordCount: 0 };
+    state.uploadedFiles = [];
+
+    // Xóa sạch toàn bộ tài liệu đã nạp ở khung input
+    if (dom.uploadedFilesContainer) dom.uploadedFilesContainer.classList.add('hidden');
+    if (dom.uploadedFilesItems) dom.uploadedFilesItems.innerHTML = '';
+    if (dom.uploadedFilesCount) dom.uploadedFilesCount.textContent = '0';
+    if (dom.docPreviewCard) dom.docPreviewCard.classList.add('hidden');
+    if (dom.btnOcrImage) dom.btnOcrImage.classList.add('hidden');
+    if (dom.rawTextInput) dom.rawTextInput.value = '';
+    if (dom.extractedTextArea) dom.extractedTextArea.value = '';
+    if (dom.markdownInput) dom.markdownInput.value = '';
+    if (dom.fileInput) dom.fileInput.value = '';
+    if (dom.cameraInput) dom.cameraInput.value = '';
+    const addMoreF2 = document.getElementById('btn-add-more-files-input');
+    if (addMoreF2) addMoreF2.value = '';
+    const addMoreC2 = document.getElementById('btn-add-more-camera-input');
+    if (addMoreC2) addMoreC2.value = '';
+
+    // Dừng âm thanh và bộ đếm thời gian
+    stopAllSpeech();
+    if (state.quizTimerInterval) {
+      clearInterval(state.quizTimerInterval);
+      state.quizTimerInterval = null;
+    }
+    state.quizUserAnswers = {};
+    state.quizSubmitted = false;
 
     // Tab 1: Sơ đồ tư duy
     state.markmapInstance = null;
@@ -5203,6 +5252,11 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     if (dom.sectionTakeaways) dom.sectionTakeaways.classList.add('hidden');
     if (dom.sectionTerms) dom.sectionTerms.classList.add('hidden');
     if (dom.sectionStrategies) dom.sectionStrategies.classList.add('hidden');
+    if (dom.listTakeaways) dom.listTakeaways.innerHTML = '';
+    if (dom.tableTermsBody) dom.tableTermsBody.innerHTML = '';
+    if (dom.feynmanText) dom.feynmanText.textContent = '';
+    if (dom.mnemonicsText) dom.mnemonicsText.textContent = '';
+    if (dom.spacedList) dom.spacedList.innerHTML = '';
     if (summaryLibraryList) summaryLibraryList.innerHTML = '';
     if (summaryLibraryEmpty) summaryLibraryEmpty.classList.remove('hidden');
     updateSavedSummariesCount();
@@ -5212,9 +5266,13 @@ ${optimizeTextForAi(state.currentDoc.text, 6500)}`;
     if (dom.quizResultCard) dom.quizResultCard.classList.add('hidden');
     if (dom.quizSubmitBar) dom.quizSubmitBar.classList.add('hidden');
     if (dom.quizEmptyState) dom.quizEmptyState.classList.remove('hidden');
+    if (dom.quizQuestionsList) dom.quizQuestionsList.innerHTML = '';
 
     // Tab 4: Thẻ lật
-    if (dom.beamCardsGrid) dom.beamCardsGrid.classList.add('hidden');
+    if (dom.beamCardsGrid) {
+      dom.beamCardsGrid.classList.add('hidden');
+      dom.beamCardsGrid.innerHTML = '';
+    }
     if (dom.beamEmptyState) dom.beamEmptyState.classList.remove('hidden');
     if (beamsLibraryList) beamsLibraryList.innerHTML = '';
     if (beamsLibraryEmpty) beamsLibraryEmpty.classList.remove('hidden');

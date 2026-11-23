@@ -9,7 +9,8 @@ const ASSETS_TO_CACHE = [
   './manifest.json',
   './icon.svg',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './firebase_config.js'
 ];
 
 // Cài đặt Service Worker và lưu đệm tài nguyên
