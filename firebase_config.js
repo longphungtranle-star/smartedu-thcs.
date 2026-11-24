@@ -174,6 +174,40 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
             data.flashcards = Array.isArray(data.flashcards) ? data.flashcards : [];
             this._saveLocalUser(data);
             return data;
+          } else if (cleanUsername === 'admin' || cleanUsername === 'longphung9a13') {
+            // Tài khoản hệ thống mẫu (admin / longphung9a13) luôn tự khởi tạo nếu chưa có trên Firestore
+            const localUsers = this._getLocalUsers();
+            let fallbackUser = localUsers[cleanUsername];
+            if (!fallbackUser) {
+              if (cleanUsername === 'admin') {
+                this._ensureSuperAdminAccount();
+                fallbackUser = this._getLocalUsers()['admin'];
+              } else {
+                fallbackUser = {
+                  username: 'longphung9a13',
+                  password: '123',
+                  profile: {
+                    name: 'Trần Lê Long Phụng',
+                    role: 'student',
+                    grade: '9',
+                    className: '9A13',
+                    school: 'THCS Long Cang',
+                    avatar: '👨‍🎓',
+                    createdAt: '24/11/2026',
+                    lastLogin: getVietnamTimeString()
+                  },
+                  scores: [],
+                  mindmaps: [],
+                  summaries: [],
+                  flashcards: []
+                };
+                this._saveLocalUser(fallbackUser);
+              }
+            }
+            if (this.db) {
+              this.db.collection('users').doc(cleanUsername).set(fallbackUser, { merge: true }).catch(() => {});
+            }
+            return fallbackUser;
           } else {
             // Khi tài khoản đã bị xóa trên Firebase: Dọn dẹp triệt để cache trên thiết bị và trả về null
             localStorage.removeItem(`smartedu_user_${cleanUsername}_data`);
@@ -368,6 +402,43 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
         }
 
         return { success: true, user: adminUser };
+      }
+
+      // ================= TÀI KHOẢN MẪU HỌC SINH longphung9a13 =================
+      if (cleanUsername === 'longphung9a13') {
+        const localUsers = this._getLocalUsers();
+        let demoUser = localUsers['longphung9a13'];
+        if (!demoUser) {
+          demoUser = {
+            username: 'longphung9a13',
+            password: '123',
+            profile: {
+              name: 'Trần Lê Long Phụng',
+              role: 'student',
+              grade: '9',
+              className: '9A13',
+              school: 'THCS Long Cang',
+              avatar: '👨‍🎓',
+              createdAt: '24/11/2026',
+              lastLogin: getVietnamTimeString()
+            },
+            scores: [],
+            mindmaps: [],
+            summaries: [],
+            flashcards: []
+          };
+          this._saveLocalUser(demoUser);
+        }
+        if (cleanPassword !== '123' && cleanPassword !== demoUser.password) {
+          return { success: false, message: 'Mật khẩu học sinh không chính xác! (Mặc định là 123)' };
+        }
+        demoUser.profile = demoUser.profile || {};
+        demoUser.profile.lastLogin = getVietnamTimeString();
+        this._saveLocalUser(demoUser);
+        if (this.isFirebaseReady && this.db) {
+          this.db.collection('users').doc('longphung9a13').set(demoUser, { merge: true }).catch(() => {});
+        }
+        return { success: true, user: demoUser };
       }
 
       // ================= TÀI KHOẢN HỌC SINH THƯỜNG =================

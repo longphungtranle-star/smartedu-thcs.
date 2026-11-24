@@ -6160,26 +6160,49 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
 
   // TRỤ CỘT 3: LƯU ĐIỂM SỐ & THEO DÕI TIẾN BỘ KHẢO THÍ TRÊN WEB
   async function recordQuizScoreToAccount(scoreData) {
-    if (!state.currentUser) {
-      if (modalAuthGate) modalAuthGate.classList.remove('hidden');
-      return;
-    }
-
-    if (!state.currentUser.scores) state.currentUser.scores = [];
     const detectedSubject = detectSubjectFromTitle(scoreData.title);
+    const scoreVal = typeof scoreData.score === 'number' ? scoreData.score : (parseFloat(scoreData.score) || 0);
 
     const newRecord = {
       id: Date.now(),
       date: new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
       title: scoreData.title || 'Bài tập khảo thí',
       subject: detectedSubject,
-      score: parseFloat(scoreData.score) || 0,
+      score: scoreVal,
       correctTotal: scoreData.correctTotal || 0,
       totalQ: scoreData.totalQ || 10,
       percentage: scoreData.percentage || 0,
       tierBreakdown: scoreData.tierBreakdown || null
     };
 
+    // Khi người dùng làm bài ở chế độ Khách (chưa đăng nhập): Lưu an toàn vào bộ nhớ máy để không bao giờ mất điểm
+    if (!state.currentUser) {
+      try {
+        let guestScores = [];
+        try {
+          guestScores = JSON.parse(localStorage.getItem('smartedu_guest_scores') || '[]');
+        } catch (e) { guestScores = []; }
+        guestScores.unshift(newRecord);
+        if (guestScores.length > 50) guestScores.length = 50;
+        localStorage.setItem('smartedu_guest_scores', JSON.stringify(guestScores));
+        showToast(`Đã lưu ${scoreVal.toFixed(1)} điểm bài thi vào thiết bị này!`, 'success');
+
+        if (dom.quizResultSummary) {
+          dom.quizResultSummary.innerHTML = `
+            <span>Làm đúng <strong>${scoreData.correctTotal}/${scoreData.totalQ}</strong> câu (${scoreData.percentage}%)</span>
+            <div class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 rounded-full text-xs text-emerald-900 font-bold">
+              <span>👨‍🎓</span>
+              <span>Điểm số đã được ghi nhận! Bấm nút <strong>"Xem Tiến Độ"</strong> bên dưới để xem bảng điểm.</span>
+            </div>
+          `;
+        }
+      } catch (err) {
+        console.warn('Lỗi lưu điểm khách:', err);
+      }
+      return;
+    }
+
+    if (!state.currentUser.scores) state.currentUser.scores = [];
     state.currentUser.scores.unshift(newRecord);
     if (state.currentUser.scores.length > 100) state.currentUser.scores.length = 100;
 
@@ -6187,14 +6210,15 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
     updateHeaderAccountUI();
 
     const p = state.currentUser.profile || {};
-    showToast(`Đã lưu ${scoreData.score.toFixed(1)} điểm vào tài khoản Web của ${p.name}!`, 'success');
+    const displayName = p.name || state.currentUser.username;
+    showToast(`Đã lưu ${scoreVal.toFixed(1)} điểm vào tài khoản Web của ${displayName}!`, 'success');
 
     if (dom.quizResultSummary) {
       dom.quizResultSummary.innerHTML = `
         <span>Làm đúng <strong>${scoreData.correctTotal}/${scoreData.totalQ}</strong> câu (${scoreData.percentage}%)</span>
         <div class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 border border-indigo-200 rounded-full text-xs text-indigo-900 font-bold">
           <span>${p.avatar || '👨‍🎓'}</span>
-          <span>Điểm số đã được lưu lên Web vào tài khoản <strong>${p.name}</strong></span>
+          <span>Điểm số đã được lưu lên Web vào tài khoản <strong>${displayName}</strong></span>
         </div>
       `;
     }
@@ -6568,17 +6592,56 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
 
   // Render toàn bộ giao diện Tab "Tiến độ học tập & Bảng điểm"
   function renderAccountProgressUI(filterSubject = 'all') {
-    const user = state.currentUser;
-    if (!user) return;
-    const p = user.profile || {};
+    let user = state.currentUser;
+    let isGuest = false;
 
-    if (modalUserAvatarLarge) modalUserAvatarLarge.textContent = p.avatar || '👨‍🎓';
-    if (modalUserFullname) modalUserFullname.textContent = p.name || user.username;
-    if (modalUserGradeBadge) modalUserGradeBadge.textContent = `Khối ${p.grade || '9'}`;
+    if (!user) {
+      isGuest = true;
+      let guestScores = [];
+      try {
+        guestScores = JSON.parse(localStorage.getItem('smartedu_guest_scores') || '[]');
+      } catch (e) { guestScores = []; }
+
+      user = {
+        username: 'khach',
+        profile: {
+          name: 'Học Sinh (Khách trải nghiệm)',
+          avatar: '👨‍🎓',
+          grade: '9',
+          className: '9A',
+          school: 'Chế độ thiết bị này'
+        },
+        scores: guestScores
+      };
+    }
+
+    const p = user.profile || {};
+    const isAdmin = (user.username === 'admin');
+
+    const guestBanner = document.getElementById('acc-guest-banner');
+    if (guestBanner) {
+      if (isGuest) guestBanner.classList.remove('hidden');
+      else guestBanner.classList.add('hidden');
+    }
+
+    if (modalUserAvatarLarge) modalUserAvatarLarge.textContent = isAdmin ? '👑' : (p.avatar || '👨‍🎓');
+    if (modalUserFullname) modalUserFullname.textContent = isAdmin ? 'Super Admin' : (p.name || user.username);
+    if (modalUserGradeBadge) {
+      modalUserGradeBadge.textContent = isAdmin ? 'Quản trị' : (isGuest ? 'Khách' : `Khối ${p.grade || '9'}`);
+      modalUserGradeBadge.className = isAdmin 
+        ? 'px-2 py-0.5 text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-300 rounded-full shrink-0'
+        : 'px-2 py-0.5 text-[10px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full shrink-0';
+    }
     if (modalUserSchoolClass) {
-      const cls = p.className ? `Lớp ${p.className}` : `Khối ${p.grade || '9'}`;
-      const sch = p.school ? p.school : 'Trường THCS';
-      modalUserSchoolClass.textContent = `${cls} • ${sch} (Tài khoản: ${user.username})`;
+      if (isAdmin) {
+        modalUserSchoolClass.textContent = `Ban Giám Hiệu • SmartEdu THCS (Tài khoản: admin)`;
+      } else if (isGuest) {
+        modalUserSchoolClass.textContent = `Lịch sử thi lưu trên máy này • Đăng nhập để đồng bộ Đám mây`;
+      } else {
+        const cls = p.className ? `Lớp ${p.className}` : `Khối ${p.grade || '9'}`;
+        const sch = p.school ? p.school : 'Trường THCS';
+        modalUserSchoolClass.textContent = `${cls} • ${sch} (Tài khoản: ${user.username})`;
+      }
     }
 
     const scores = user.scores || [];
@@ -6687,23 +6750,15 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
 
   // Mở Modal Hồ Sơ Cá Nhân & Bảng Theo Dõi Tiến Độ
   function openUserAccountModal(tab = 'progress') {
-    if (!state.currentUser) {
-      showToast('Vui lòng đăng nhập để xem tiến độ và lịch sử làm bài thi!', 'info');
-      if (modalAuthGate) {
-        modalAuthGate.style.display = 'flex';
-        modalAuthGate.classList.remove('hidden');
-        modalAuthGate.classList.add('flex');
-        window.switchAuthTab && window.switchAuthTab('login');
-      }
-      return;
-    }
     try {
       renderAccountProgressUI();
     } catch (err) {
       console.warn('Lỗi render tiến độ:', err);
     }
     try {
-      fillCurrentProfileForm();
+      if (state.currentUser) {
+        fillCurrentProfileForm();
+      }
     } catch (err) {}
     switchAccountModalTab(tab);
     if (modalUserAccount) {
@@ -6721,6 +6776,16 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
       modalUserAccount.classList.remove('flex');
     }
   }
+
+  window.showAuthGateFromModal = function() {
+    closeUserAccountModal();
+    if (modalAuthGate) {
+      modalAuthGate.style.display = 'flex';
+      modalAuthGate.classList.remove('hidden');
+      modalAuthGate.classList.add('flex');
+      window.switchAuthTab && window.switchAuthTab('login');
+    }
+  };
 
   function switchAccountModalTab(tab) {
     if (tab === 'progress') {
@@ -6930,6 +6995,8 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
   if (btnUserAccountMobile) btnUserAccountMobile.addEventListener('click', () => openUserAccountModal('progress'));
   if (btnUserAccountDesktop) btnUserAccountDesktop.addEventListener('click', () => openUserAccountModal('progress'));
   if (btnQuizHistory) btnQuizHistory.addEventListener('click', () => openUserAccountModal('progress'));
+  const btnViewQuizResultHistory = document.getElementById('btn-view-quiz-result-history');
+  if (btnViewQuizResultHistory) btnViewQuizResultHistory.addEventListener('click', () => openUserAccountModal('progress'));
   if (btnCloseUserAccount) btnCloseUserAccount.addEventListener('click', closeUserAccountModal);
   if (btnDoneUserAccount) btnDoneUserAccount.addEventListener('click', closeUserAccountModal);
   if (modalUserAccount) {
@@ -7099,7 +7166,6 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
     let totalFlashcards = 0;
 
     cachedAllAdminUsers.forEach(u => {
-      if (isAdminSampleUser(u)) return;
       const validMm = (u.mindmaps || []).filter(mm => !isAdminSampleItem(mm));
       const validSm = (u.summaries || []).filter(sm => !isAdminSampleItem(sm));
       const validSc = (u.scores || []).filter(sc => !isAdminSampleItem(sc));
@@ -7238,15 +7304,15 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
     
     let allMindmaps = [];
     cachedAllAdminUsers.forEach(u => {
-      if (isAdminSampleUser(u)) return;
       if (u.mindmaps && Array.isArray(u.mindmaps)) {
         u.mindmaps.forEach(mm => {
           if (isAdminSampleItem(mm)) return;
+          const isAdmin = (u.username === 'admin');
           allMindmaps.push({
             ...mm,
             authorUsername: u.username,
-            authorName: u.profile?.name || u.username,
-            authorClass: u.profile?.className || `Khối ${u.profile?.grade || 9}`
+            authorName: isAdmin ? '👑 Quản trị viên (admin)' : (u.profile?.name || u.username),
+            authorClass: isAdmin ? 'Ban Giám Hiệu' : (u.profile?.className || `Khối ${u.profile?.grade || 9}`)
           });
         });
       }
@@ -7311,15 +7377,15 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
 
     let allSummaries = [];
     cachedAllAdminUsers.forEach(u => {
-      if (isAdminSampleUser(u)) return;
       if (u.summaries && Array.isArray(u.summaries)) {
         u.summaries.forEach(sm => {
           if (isAdminSampleItem(sm)) return;
+          const isAdmin = (u.username === 'admin');
           allSummaries.push({
             ...sm,
             authorUsername: u.username,
-            authorName: u.profile?.name || u.username,
-            authorClass: u.profile?.className || `Khối ${u.profile?.grade || 9}`
+            authorName: isAdmin ? '👑 Quản trị viên (admin)' : (u.profile?.name || u.username),
+            authorClass: isAdmin ? 'Ban Giám Hiệu' : (u.profile?.className || `Khối ${u.profile?.grade || 9}`)
           });
         });
       }
@@ -7385,15 +7451,15 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
 
     let allScores = [];
     cachedAllAdminUsers.forEach(u => {
-      if (isAdminSampleUser(u)) return;
       if (u.scores && Array.isArray(u.scores)) {
         u.scores.forEach(sc => {
           if (isAdminSampleItem(sc)) return;
+          const isAdmin = (u.username === 'admin');
           allScores.push({
             ...sc,
             studentUsername: u.username,
-            studentName: u.profile?.name || u.username,
-            studentClass: u.profile?.className || `Khối ${u.profile?.grade || 9}`,
+            studentName: isAdmin ? '👑 Quản trị viên (admin)' : (u.profile?.name || u.username),
+            studentClass: isAdmin ? 'Ban Giám Hiệu' : (u.profile?.className ? 'Lớp ' + u.profile.className : `Khối ${u.profile?.grade || 9}`),
             studentSchool: u.profile?.school || 'THCS Long Cang'
           });
         });
@@ -7486,15 +7552,15 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
 
     let allFlashcards = [];
     cachedAllAdminUsers.forEach(u => {
-      if (isAdminSampleUser(u)) return;
       if (u.flashcards && Array.isArray(u.flashcards)) {
         u.flashcards.forEach(fc => {
           if (isAdminSampleItem(fc)) return;
+          const isAdmin = (u.username === 'admin');
           allFlashcards.push({
             ...fc,
             authorUsername: u.username,
-            authorName: u.profile?.name || u.username,
-            authorClass: u.profile?.className || `Khối ${u.profile?.grade || 9}`
+            authorName: isAdmin ? '👑 Quản trị viên (admin)' : (u.profile?.name || u.username),
+            authorClass: isAdmin ? 'Ban Giám Hiệu' : (u.profile?.className || `Khối ${u.profile?.grade || 9}`)
           });
         });
       }

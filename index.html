@@ -51,7 +51,7 @@
   <!-- Google Firebase Firestore Cloud Database SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-  <script src="firebase_config.js?v=20261124_108"></script>
+  <script src="firebase_config.js?v=20261124_110"></script>
   
   <!-- Early Safety Handlers: đảm bảo 100% các nút auth/admin hoạt động tức thì từ mili-giây đầu tiên -->
   <script>
@@ -822,10 +822,10 @@
             </button>
 
             <!-- Quiz History & Progress Button -->
-            <button id="btn-quiz-history" onclick="window.openUserAccountModal && window.openUserAccountModal('progress')" class="px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95" title="Xem tiến độ và lịch sử làm bài thi">
+            <button id="btn-quiz-history" type="button" onclick="window.openUserAccountModal && window.openUserAccountModal('progress')" class="px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95 touch-manipulation" title="Xem tiến độ và lịch sử làm bài thi">
               <i class="fa-solid fa-chart-line text-emerald-600"></i>
               <span class="hidden sm:inline">Tiến độ & Lịch sử</span>
-              <span class="sm:hidden">Lịch sử</span>
+              <span class="sm:hidden font-bold text-indigo-700">Lịch sử</span>
             </button>
           </div>
         </div>
@@ -933,11 +933,15 @@
               </div>
             </div>
 
-            <div class="flex items-center justify-center gap-3 pt-2">
-              <button id="btn-retry-quiz" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold">
+            <div class="pt-3 flex flex-col sm:flex-row items-center justify-center gap-2.5">
+              <button id="btn-view-quiz-result-history" type="button" onclick="window.openUserAccountModal && window.openUserAccountModal('progress')" class="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-600 hover:from-emerald-700 hover:to-indigo-700 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all active:scale-95 touch-manipulation">
+                <i class="fa-solid fa-chart-line text-sm"></i>
+                <span>Xem Tiến Độ & Bảng Điểm Đã Lưu</span>
+              </button>
+              <button id="btn-retry-quiz" class="w-full sm:w-auto px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer">
                 Làm lại đề này
               </button>
-              <button id="btn-new-quiz" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold">
+              <button id="btn-new-quiz" class="w-full sm:w-auto px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-semibold cursor-pointer">
                 Tạo đề mới khác
               </button>
             </div>
@@ -1304,7 +1308,7 @@
   </div>
 
   <!-- ================= MODAL: USER ACCOUNT & LEARNING PROGRESS ================= -->
-  <div id="modal-user-account" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
+  <div id="modal-user-account" class="hidden fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 touch-manipulation overflow-y-auto">
     <div class="bg-white rounded-2xl max-w-3xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 flex flex-col gap-3.5 max-h-[92vh] overflow-hidden">
       
       <!-- Modal Header: Student Info & Actions -->
@@ -1350,6 +1354,17 @@
         <!-- ================= PANE 1: TIẾN ĐỘ HỌC TẬP ================= -->
         <div id="pane-account-progress" class="space-y-3.5">
           
+          <!-- Banner Khách trải nghiệm -->
+          <div id="acc-guest-banner" class="hidden p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-2xs">
+            <div class="flex items-center gap-2">
+              <span class="text-base">💡</span>
+              <span>Bạn đang xem ở <strong>Chế độ Khách (Thiết bị này)</strong>. Hãy đăng nhập để lưu điểm vĩnh viễn lên Đám mây!</span>
+            </div>
+            <button type="button" onclick="window.showAuthGateFromModal && window.showAuthGateFromModal()" class="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shrink-0 cursor-pointer shadow-xs active:scale-95">
+              Đăng nhập / Đăng ký
+            </button>
+          </div>
+
           <!-- Stats Overview Grid -->
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             <div class="bg-gradient-to-br from-slate-50 to-indigo-50/40 border border-slate-200/80 rounded-xl p-3 text-center shadow-2xs">
@@ -2349,6 +2364,6 @@
   </footer>
 
   <!-- Main App Script -->
-  <script src="app.js?v=20261124_108"></script>
+  <script src="app.js?v=20261124_110"></script>
 </body>
 </html>
