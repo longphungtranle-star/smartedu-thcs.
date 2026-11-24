@@ -5194,7 +5194,15 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
     }
     if (window.SmartEduCloud && window.SmartEduCloud.subscribeUser && user.username !== 'admin') {
       state.activeUserUnsubscribe = window.SmartEduCloud.subscribeUser(user.username, (freshUser) => {
-        if (!freshUser || !state.currentUser || state.currentUser.username !== freshUser.username) return;
+        if (!freshUser) {
+          console.warn('⚠️ Tài khoản này vừa bị Quản trị viên xóa khỏi Cloud:', user.username);
+          showToast('Tài khoản của bạn đã bị Quản trị viên xóa khỏi hệ thống!', 'error');
+          if (typeof window.logoutUser === 'function') {
+            window.logoutUser();
+          }
+          return;
+        }
+        if (!state.currentUser || state.currentUser.username !== freshUser.username) return;
         state.currentUser.scores = freshUser.scores || [];
         state.currentUser.mindmaps = freshUser.mindmaps || [];
         state.currentUser.summaries = freshUser.summaries || [];
@@ -5428,10 +5436,22 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
             applyUserSession(freshUser);
             console.log('☁️ Đã đồng bộ bài học & sơ đồ mới nhất từ Firebase cho:', cleanUsername);
             return;
+          } else if (cleanUsername !== 'admin') {
+            console.warn('⚠️ Tài khoản này không còn tồn tại trên máy chủ đám mây, tự động đăng xuất:', cleanUsername);
+            localStorage.removeItem('smartedu_active_cloud_username');
+            resetUIForGuest();
+            if (modalAuthGate) {
+              modalAuthGate.style.display = 'flex';
+              modalAuthGate.classList.remove('hidden');
+              modalAuthGate.classList.add('flex');
+              window.switchAuthTab && window.switchAuthTab('login');
+            }
+            showToast('Tài khoản của bạn đã bị Quản trị viên xóa khỏi hệ thống!', 'warning');
+            return;
           }
         } catch (e) {}
       }
-      if (existingUser) return;
+      if (existingUser && cleanUsername === 'admin') return;
     }
 
     // Nếu chưa có phiên đăng nhập -> Xóa dữ liệu tạm và hiển thị Khung Đăng Nhập
@@ -6375,8 +6395,8 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
         accTrendComment.textContent = '🌟 Khởi đầu xuất sắc';
         accTrendComment.className = 'text-[11px] font-bold text-indigo-600';
       } else {
-        const firstScore = chronological[0].score;
-        const lastScore = chronological[chronological.length - 1].score;
+        const firstScore = parseFloat(chronological[0].score) || 0;
+        const lastScore = parseFloat(chronological[chronological.length - 1].score) || 0;
         const diff = lastScore - firstScore;
         if (diff > 0.5) {
           accTrendComment.textContent = `📈 Tiến bộ vượt bậc (+${diff.toFixed(1)}đ)`;
@@ -6392,7 +6412,7 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
     }
 
     if (chronological.length === 1) {
-      const s = chronological[0].score;
+      const s = parseFloat(chronological[0].score) || 0;
       accChartContainer.innerHTML = `
         <div class="flex flex-col items-center justify-center text-center p-3">
           <span class="text-xs text-slate-500">Bài thi đầu tiên: <strong>${chronological[0].title}</strong></span>
@@ -6416,9 +6436,10 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
     const chartH = height - paddingTop - paddingBottom;
 
     const points = chronological.map((item, idx) => {
+      const sVal = parseFloat(item.score) || 0;
       const x = paddingLeft + (idx / (chronological.length - 1)) * chartW;
-      const y = paddingTop + chartH - ((item.score / 10) * chartH);
-      return { x, y, score: item.score, title: item.title, date: item.date };
+      const y = paddingTop + chartH - ((sVal / 10) * chartH);
+      return { x, y, score: sVal, title: item.title, date: item.date };
     });
 
     const pathD = points.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
@@ -6664,21 +6685,41 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
     renderAvatarPicker(p.avatar || '👨‍🎓');
   }
 
-  // Mở Modal Hồ Sơ Cá Nhân (chỉ nạp dữ liệu của người dùng hiện tại)
+  // Mở Modal Hồ Sơ Cá Nhân & Bảng Theo Dõi Tiến Độ
   function openUserAccountModal(tab = 'progress') {
     if (!state.currentUser) {
-      if (modalAuthGate) modalAuthGate.classList.remove('hidden');
+      showToast('Vui lòng đăng nhập để xem tiến độ và lịch sử làm bài thi!', 'info');
+      if (modalAuthGate) {
+        modalAuthGate.style.display = 'flex';
+        modalAuthGate.classList.remove('hidden');
+        modalAuthGate.classList.add('flex');
+        window.switchAuthTab && window.switchAuthTab('login');
+      }
       return;
     }
-    renderAccountProgressUI();
-    fillCurrentProfileForm();
+    try {
+      renderAccountProgressUI();
+    } catch (err) {
+      console.warn('Lỗi render tiến độ:', err);
+    }
+    try {
+      fillCurrentProfileForm();
+    } catch (err) {}
     switchAccountModalTab(tab);
-    if (modalUserAccount) modalUserAccount.classList.remove('hidden');
+    if (modalUserAccount) {
+      modalUserAccount.style.display = 'flex';
+      modalUserAccount.classList.remove('hidden');
+      modalUserAccount.classList.add('flex');
+    }
   }
 
   // Đóng Modal Hồ Sơ Cá Nhân
   function closeUserAccountModal() {
-    if (modalUserAccount) modalUserAccount.classList.add('hidden');
+    if (modalUserAccount) {
+      modalUserAccount.style.display = 'none';
+      modalUserAccount.classList.add('hidden');
+      modalUserAccount.classList.remove('flex');
+    }
   }
 
   function switchAccountModalTab(tab) {
@@ -6689,8 +6730,14 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
       if (tabBtnAccountManage) {
         tabBtnAccountManage.className = 'account-tab-btn px-3 py-2 text-slate-500 hover:text-slate-800 border-b-2 border-transparent flex items-center gap-1.5 cursor-pointer font-bold';
       }
-      if (paneAccountProgress) paneAccountProgress.classList.remove('hidden');
-      if (paneAccountManage) paneAccountManage.classList.add('hidden');
+      if (paneAccountProgress) {
+        paneAccountProgress.style.display = 'block';
+        paneAccountProgress.classList.remove('hidden');
+      }
+      if (paneAccountManage) {
+        paneAccountManage.style.display = 'none';
+        paneAccountManage.classList.add('hidden');
+      }
     } else {
       if (tabBtnAccountManage) {
         tabBtnAccountManage.className = 'account-tab-btn active px-3 py-2 text-indigo-600 border-b-2 border-indigo-600 flex items-center gap-1.5 cursor-pointer font-bold';
@@ -6698,8 +6745,14 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
       if (tabBtnAccountProgress) {
         tabBtnAccountProgress.className = 'account-tab-btn px-3 py-2 text-slate-500 hover:text-slate-800 border-b-2 border-transparent flex items-center gap-1.5 cursor-pointer font-bold';
       }
-      if (paneAccountManage) paneAccountManage.classList.remove('hidden');
-      if (paneAccountProgress) paneAccountProgress.classList.add('hidden');
+      if (paneAccountManage) {
+        paneAccountManage.style.display = 'block';
+        paneAccountManage.classList.remove('hidden');
+      }
+      if (paneAccountProgress) {
+        paneAccountProgress.style.display = 'none';
+        paneAccountProgress.classList.add('hidden');
+      }
     }
   }
 
@@ -6887,6 +6940,8 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
 
   // Expose các hàm ra window & aliases an toàn
   window.openUserAccountModal = openUserAccountModal;
+  window.closeUserAccountModal = closeUserAccountModal;
+  window.switchAccountModalTab = switchAccountModalTab;
   window.recordQuizScoreToAccount = recordQuizScoreToAccount;
   window.renderMindmap = renderMindmap;
   window.renderMarkmap = renderMindmap;
@@ -7623,13 +7678,19 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
     const newPass = prompt(`Nhập mật khẩu mới cho tài khoản @${username}:`, '123');
     if (!newPass || !newPass.trim()) return;
 
+    const target = cachedAllAdminUsers.find(u => u.username === username);
+    if (target) {
+      target.password = newPass.trim();
+      renderCurrentAdminTab();
+    }
+
     if (window.SmartEduCloud) {
       const res = await window.SmartEduCloud.adminResetPassword(username, newPass.trim());
       if (res.success) {
         showToast(res.message, 'success');
-        await loadSuperAdminData();
       } else {
         showToast(res.message, 'error');
+        await loadSuperAdminData();
       }
     }
   };
@@ -7640,13 +7701,19 @@ ${optimizeTextForAi(state.currentDoc.text, 65000)}`;
 Thầy cô có chắc chắn muốn xóa tài khoản học sinh "${fullname}" (@${username}) cùng toàn bộ sơ đồ, bài tóm tắt và điểm số của em này?`);
     if (!confirmDel) return;
 
+    // 1. Tự động cập nhật giao diện ngay lập tức trong 0s (không cần refresh trang)
+    cachedAllAdminUsers = cachedAllAdminUsers.filter(u => u.username !== username);
+    updateAdminStats();
+    renderCurrentAdminTab();
+
+    // 2. Gửi lệnh xóa lên Firebase Cloud
     if (window.SmartEduCloud) {
       const res = await window.SmartEduCloud.adminDeleteUser(username);
       if (res.success) {
         showToast(res.message, 'success');
-        await loadSuperAdminData();
       } else {
         showToast(res.message, 'error');
+        await loadSuperAdminData();
       }
     }
   };
@@ -7657,26 +7724,45 @@ Thầy cô có chắc chắn muốn xóa tài khoản học sinh "${fullname}" (
     const confirmDel = confirm(`Thầy cô có chắc chắn muốn xóa ${typeLabel} này?`);
     if (!confirmDel) return;
 
+    // 1. Tự động cập nhật giao diện ngay lập tức trong 0s (không cần refresh trang)
+    const strId = String(postId);
+    const target = cachedAllAdminUsers.find(u => u.username === username);
+    if (target) {
+      if (postType === 'score' && target.scores) {
+        target.scores = target.scores.filter(sc => String(sc.id) !== strId);
+      } else if (postType === 'mindmap' && target.mindmaps) {
+        target.mindmaps = target.mindmaps.filter(m => String(m.id) !== strId);
+      } else if (postType === 'summary' && target.summaries) {
+        target.summaries = target.summaries.filter(s => String(s.id) !== strId);
+      } else if (postType === 'flashcard' && target.flashcards) {
+        target.flashcards = target.flashcards.filter(f => String(f.id) !== strId);
+      }
+      updateAdminStats();
+      renderCurrentAdminTab();
+    }
+
+    if (state.currentUser && state.currentUser.username === username) {
+      if (postType === 'score' && state.currentUser.scores) {
+        state.currentUser.scores = state.currentUser.scores.filter(sc => String(sc.id) !== strId);
+      } else if (postType === 'mindmap' && state.currentUser.mindmaps) {
+        state.currentUser.mindmaps = state.currentUser.mindmaps.filter(m => String(m.id) !== strId);
+      } else if (postType === 'summary' && state.currentUser.summaries) {
+        state.currentUser.summaries = state.currentUser.summaries.filter(s => String(s.id) !== strId);
+      } else if (postType === 'flashcard' && state.currentUser.flashcards) {
+        state.currentUser.flashcards = state.currentUser.flashcards.filter(f => String(f.id) !== strId);
+      }
+      updateHeaderAccountUI();
+      renderAccountProgressUI();
+    }
+
+    // 2. Gửi lệnh xóa lên Firebase Cloud
     if (window.SmartEduCloud) {
       const res = await window.SmartEduCloud.adminDeleteUserPost(username, postType, postId);
       if (res.success) {
         showToast(res.message, 'success');
-        if (state.currentUser && state.currentUser.username === username) {
-          if (postType === 'score' && state.currentUser.scores) {
-            state.currentUser.scores = state.currentUser.scores.filter(sc => String(sc.id) !== String(postId));
-          } else if (postType === 'mindmap' && state.currentUser.mindmaps) {
-            state.currentUser.mindmaps = state.currentUser.mindmaps.filter(m => String(m.id) !== String(postId));
-          } else if (postType === 'summary' && state.currentUser.summaries) {
-            state.currentUser.summaries = state.currentUser.summaries.filter(s => String(s.id) !== String(postId));
-          } else if (postType === 'flashcard' && state.currentUser.flashcards) {
-            state.currentUser.flashcards = state.currentUser.flashcards.filter(f => String(f.id) !== String(postId));
-          }
-          updateHeaderAccountUI();
-          renderAccountProgressUI();
-        }
-        await loadSuperAdminData();
       } else {
         showToast(res.message, 'error');
+        await loadSuperAdminData();
       }
     }
   };

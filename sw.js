@@ -1,5 +1,5 @@
 // sw.js - Service Worker cho SmartEdu THCS (Hỗ trợ PWA & Bộ nhớ đệm Ngoại tuyến)
-const CACHE_NAME = 'smartedu-thcs-v31-turbo-recognition';
+const CACHE_NAME = 'smartedu-thcs-v32-instant-sync-fix';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

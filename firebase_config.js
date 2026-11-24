@@ -174,6 +174,18 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
             data.flashcards = Array.isArray(data.flashcards) ? data.flashcards : [];
             this._saveLocalUser(data);
             return data;
+          } else {
+            // Khi tài khoản đã bị xóa trên Firebase: Dọn dẹp triệt để cache trên thiết bị và trả về null
+            localStorage.removeItem(`smartedu_user_${cleanUsername}_data`);
+            const localUsers = this._getLocalUsers();
+            if (localUsers[cleanUsername]) {
+              delete localUsers[cleanUsername];
+              this._setLocalUsers(localUsers);
+            }
+            if (localStorage.getItem('smartedu_active_cloud_username') === cleanUsername) {
+              localStorage.removeItem('smartedu_active_cloud_username');
+            }
+            return null;
           }
         } catch (e) {
           console.warn('⚠️ Lỗi nạp dữ liệu Firebase cho ' + cleanUsername + ', dùng cache:', e);
@@ -224,6 +236,18 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
             data.flashcards = Array.isArray(data.flashcards) ? data.flashcards : [];
             this._saveLocalUser(data);
             if (typeof callback === 'function') callback(data);
+          } else {
+            // Khi tài khoản bị Admin xóa trên Firestore trong thời gian thực:
+            localStorage.removeItem(`smartedu_user_${cleanUsername}_data`);
+            const localUsers = this._getLocalUsers();
+            if (localUsers[cleanUsername]) {
+              delete localUsers[cleanUsername];
+              this._setLocalUsers(localUsers);
+            }
+            if (localStorage.getItem('smartedu_active_cloud_username') === cleanUsername) {
+              localStorage.removeItem('smartedu_active_cloud_username');
+            }
+            if (typeof callback === 'function') callback(null);
           }
         }, (err) => {
           console.warn('Real-time listener error cho @' + cleanUsername + ':', err);
@@ -352,13 +376,18 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
           const docRef = this.db.collection('users').doc(cleanUsername);
           const doc = await docRef.get();
           if (!doc.exists) {
-            // Kiểm tra local cache dự phòng
+            // Khi Firebase hoạt động và tài khoản không tồn tại trên Cloud:
+            // Tài khoản đã bị Admin xóa hoặc chưa từng đăng ký. Dọn dẹp cache cục bộ và từ chối đăng nhập dứt khoát!
+            localStorage.removeItem(`smartedu_user_${cleanUsername}_data`);
             const localUsers = this._getLocalUsers();
-            const localUser = localUsers[cleanUsername];
-            if (localUser && localUser.password === cleanPassword) {
-              return { success: true, user: localUser };
+            if (localUsers[cleanUsername]) {
+              delete localUsers[cleanUsername];
+              this._setLocalUsers(localUsers);
             }
-            return { success: false, message: 'Tên tài khoản không tồn tại trên hệ thống Web!' };
+            if (localStorage.getItem('smartedu_active_cloud_username') === cleanUsername) {
+              localStorage.removeItem('smartedu_active_cloud_username');
+            }
+            return { success: false, message: 'Tài khoản không tồn tại hoặc đã bị Quản trị viên xóa khỏi hệ thống!' };
           }
           const userData = doc.data();
           if (userData.password && userData.password !== cleanPassword) {
@@ -481,6 +510,10 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
       const localUsers = this._getLocalUsers();
       delete localUsers[cleanUsername];
       this._setLocalUsers(localUsers);
+      localStorage.removeItem(`smartedu_user_${cleanUsername}_data`);
+      if (localStorage.getItem('smartedu_active_cloud_username') === cleanUsername) {
+        localStorage.removeItem('smartedu_active_cloud_username');
+      }
 
       if (this.isFirebaseReady && this.db) {
         try {
